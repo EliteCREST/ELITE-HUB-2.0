@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="app.css?v=stage1-2">
+  <link rel="stylesheet" href="app.css?v=stage1-3">
 
   <style>body { opacity: 0; }</style>
 </head>
@@ -18,6 +18,7 @@
 
   <div class="app-root">
 
+    <!-- ═══ SIDEBAR (desktop only, ≥768px) ═══ -->
     <aside id="sidebar" class="app-sidebar" aria-label="Primary navigation">
       <div class="app-sidebar-brand">
         <div class="app-sidebar-brand-logo">ECS</div>
@@ -26,17 +27,212 @@
           <div class="app-sidebar-brand-sub">2.0</div>
         </div>
       </div>
-      <div class="app-sidebar-placeholder">Navigation arrives in Stage 1.3</div>
+
+      <div class="nav-section">
+        <a class="nav-item" data-nav="/home" href="#/home">
+          <span class="nav-item-icon">🏠</span>
+          <span class="nav-item-label">Home</span>
+        </a>
+        <a class="nav-item" data-nav="/inbox" href="#/inbox">
+          <span class="nav-item-icon">📬</span>
+          <span class="nav-item-label">Inbox</span>
+          <span class="nav-item-badge" id="sb-inbox-badge" style="display:none;">0</span>
+        </a>
+        <a class="nav-item" data-nav="/workspace" href="#/workspace">
+          <span class="nav-item-icon">✓</span>
+          <span class="nav-item-label">My Workspace</span>
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-label">Operations</div>
+        <a class="nav-item" data-nav="/contractors" href="#/contractors">
+          <span class="nav-item-icon">👷</span>
+          <span class="nav-item-label">Contractors</span>
+        </a>
+        <a class="nav-item" data-nav="/legal" href="#/legal">
+          <span class="nav-item-icon">⚖️</span>
+          <span class="nav-item-label">Legal</span>
+        </a>
+
+        <!-- Regions expandable group -->
+        <div class="nav-item nav-expander" id="nav-regions-expander">
+          <span class="nav-item-icon">📍</span>
+          <span class="nav-item-label">Regions</span>
+          <span class="nav-expander-chevron">▶</span>
+        </div>
+        <div class="nav-sub nav-collapsed" id="nav-regions-sub">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <div class="nav-section" id="nav-admin-section" style="display:none;">
+        <div class="nav-section-label">Admin</div>
+        <a class="nav-item" data-nav="/admin" href="#/admin">
+          <span class="nav-item-icon">⚙️</span>
+          <span class="nav-item-label">Settings</span>
+        </a>
+        <a class="nav-item" data-nav="/admin/users" href="#/admin/users">
+          <span class="nav-item-icon">👥</span>
+          <span class="nav-item-label">Users</span>
+        </a>
+      </div>
     </aside>
 
+
+    <!-- ═══ HEADER ═══ -->
     <header id="header" class="app-header" aria-label="Page header">
-      <div class="app-header-placeholder">Header chrome arrives in Stage 1.3</div>
+      <div class="header-breadcrumb" id="breadcrumb"></div>
+
+      <div class="header-right">
+        <div class="search-bar header-search">
+          <span class="search-bar-icon">🔍</span>
+          <input type="text" id="global-search" class="search-bar-input" placeholder="Search…" aria-label="Search">
+          <span class="search-bar-hint">/</span>
+        </div>
+
+        <div class="header-user-switcher" id="user-switcher" aria-label="User switcher">
+          <!-- Avatars populated by JS -->
+        </div>
+
+        <button class="header-bell" id="header-bell" type="button" aria-label="Notifications">
+          🔔
+          <span class="header-bell-count" id="bell-count" style="display:none;">0</span>
+        </button>
+
+        <button class="header-avatar-btn" id="header-avatar-btn" type="button" aria-label="Account menu">
+          <span class="avatar-chip" id="header-avatar">?</span>
+          <span class="header-avatar-btn-name" id="header-avatar-name">—</span>
+        </button>
+
+        <div class="popover header-menu" id="header-menu">
+          <div class="header-menu-user">
+            <div class="header-menu-name" id="menu-name">—</div>
+            <div class="header-menu-role" id="menu-role">—</div>
+          </div>
+          <a class="popover-item" href="#/workspace">
+            <span>✓</span> <span>My Workspace</span>
+          </a>
+          <a class="popover-item" href="#/admin" id="menu-admin" style="display:none;">
+            <span>⚙️</span> <span>Admin</span>
+          </a>
+          <div class="popover-divider"></div>
+          <div class="popover-item" onclick="showShortcutsHelp()">
+            <span>⌨</span> <span>Keyboard shortcuts</span>
+          </div>
+          <div class="popover-item" onclick="signOut()">
+            <span>🚪</span> <span>Sign out</span>
+          </div>
+        </div>
+      </div>
     </header>
 
+
+    <!-- ═══ MAIN ═══ -->
     <main id="main" class="app-main" role="main" aria-live="polite">
       <!-- Router renders routes here -->
     </main>
 
+  </div>
+
+
+  <!-- ═══ MOBILE BOTTOM TAB BAR ═══ -->
+  <nav class="tabbar" aria-label="Mobile navigation">
+    <a class="tabbar-item" data-nav="/home" href="#/home">
+      <span class="tabbar-item-icon">🏠</span>
+      <span>Home</span>
+    </a>
+    <a class="tabbar-item" data-nav="/inbox" href="#/inbox">
+      <span class="tabbar-item-icon">📬</span>
+      <span>Inbox</span>
+    </a>
+    <a class="tabbar-item" data-nav="/workspace" href="#/workspace">
+      <span class="tabbar-item-icon">✓</span>
+      <span>Tasks</span>
+    </a>
+    <a class="tabbar-item" data-nav="/regions" href="javascript:openRegionSheet()">
+      <span class="tabbar-item-icon">📍</span>
+      <span>Regions</span>
+    </a>
+    <a class="tabbar-item" href="javascript:openMoreSheet()">
+      <span class="tabbar-item-icon">⋯</span>
+      <span>More</span>
+    </a>
+  </nav>
+
+
+  <!-- ═══ MOBILE "MORE" SHEET ═══ -->
+  <div class="sheet-backdrop" id="more-sheet" onclick="if(event.target===this)closeMoreSheet()">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">More</div>
+      <a class="sheet-item" href="#/contractors" onclick="closeMoreSheet()">
+        <span class="sheet-item-icon">👷</span> Contractors
+      </a>
+      <a class="sheet-item" href="#/legal" onclick="closeMoreSheet()">
+        <span class="sheet-item-icon">⚖️</span> Legal
+      </a>
+      <a class="sheet-item" href="#/admin" onclick="closeMoreSheet()" id="sheet-admin" style="display:none;">
+        <span class="sheet-item-icon">⚙️</span> Admin
+      </a>
+      <a class="sheet-item" href="javascript:showShortcutsHelp();closeMoreSheet()">
+        <span class="sheet-item-icon">⌨</span> Keyboard shortcuts
+      </a>
+      <a class="sheet-item" href="javascript:signOut()">
+        <span class="sheet-item-icon">🚪</span> Sign out
+      </a>
+    </div>
+  </div>
+
+
+  <!-- ═══ MOBILE "REGIONS" SHEET ═══ -->
+  <div class="sheet-backdrop" id="region-sheet" onclick="if(event.target===this)closeRegionSheet()">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Regions</div>
+      <div id="region-sheet-items"></div>
+    </div>
+  </div>
+
+
+  <!-- ═══ KEYBOARD SHORTCUTS HELP MODAL ═══ -->
+  <div id="shortcuts-modal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">⌨ Keyboard Shortcuts</div>
+        <button class="modal-close" onclick="closeModal('shortcuts-modal')">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="kbd-help">
+          <div class="kbd-help-label">Go to Home</div>
+          <div class="kbd-keys"><span class="kbd">G</span><span class="kbd">H</span></div>
+
+          <div class="kbd-help-label">Go to Inbox</div>
+          <div class="kbd-keys"><span class="kbd">G</span><span class="kbd">I</span></div>
+
+          <div class="kbd-help-label">Go to Workspace</div>
+          <div class="kbd-keys"><span class="kbd">G</span><span class="kbd">W</span></div>
+
+          <div class="kbd-help-label">Go to Regions</div>
+          <div class="kbd-keys"><span class="kbd">G</span><span class="kbd">R</span></div>
+
+          <div class="kbd-help-label">Go to Admin</div>
+          <div class="kbd-keys"><span class="kbd">G</span><span class="kbd">A</span></div>
+
+          <div class="kbd-help-label">Focus search</div>
+          <div class="kbd-keys"><span class="kbd">/</span></div>
+
+          <div class="kbd-help-label">Close modal / clear search</div>
+          <div class="kbd-keys"><span class="kbd">Esc</span></div>
+
+          <div class="kbd-help-label">Show this help</div>
+          <div class="kbd-keys"><span class="kbd">?</span></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeModal('shortcuts-modal')">Got it</button>
+      </div>
+    </div>
   </div>
 
   <div id="toast-container" class="toast-container"></div>
@@ -44,8 +240,8 @@
 
   <script>
   /* ═══════════════════════════════════════════════════════════════════
-     Elite Hub 2.0 — Stage 1.2
-     Router + component helpers + placeholder views
+     Elite Hub 2.0 — Stage 1.3
+     Navigation chrome: sidebar, header, tab bar, keyboard shortcuts
      ═══════════════════════════════════════════════════════════════════ */
 
 
@@ -59,6 +255,57 @@
       .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
   function escapeAttr(s) { return escapeHtml(s); }
+
+
+  /* ─── Config ─────────────────────────────────────────────────── */
+  const REGIONS = [
+    { code: 'cle', name: 'Cleveland' },
+    { code: 'phx', name: 'Phoenix' },
+    { code: 'abq', name: 'Albuquerque' },
+    { code: 'msp', name: 'Minneapolis' },
+    { code: 'stl', name: 'St. Louis' },
+    { code: 'chi', name: 'Chicago' },
+    { code: 'ind', name: 'Indianapolis' },
+    { code: 'pit', name: 'Pittsburgh' },
+    { code: 'mil', name: 'Milwaukee' },
+  ];
+
+  // Stub user — real login arrives in Stage 2.5
+  const STUB_USERS = [
+    { username: 'angel',   name: 'Angel',   initials: 'A', color: 'var(--blue)' },
+    { username: 'sam',     name: 'Sam',     initials: 'S', color: 'var(--slate-600)' },
+    { username: 'sara',    name: 'Sara',    initials: 'S', color: 'var(--green)' },
+    { username: 'emma',    name: 'Emma',    initials: 'E', color: 'var(--amber)' },
+    { username: 'carlynn', name: 'Carlynn', initials: 'C', color: 'var(--red)' },
+    { username: 'jaida',   name: 'Jaida',   initials: 'J', color: 'var(--slate-800)' },
+  ];
+
+
+  /* ─── Session — Stage 2.5 will wire real login ──────────────── */
+  function getSession() {
+    try { return JSON.parse(localStorage.getItem('elite_session') || 'null'); }
+    catch { return null; }
+  }
+
+  function getCurrentUser() {
+    const sess = getSession();
+    if (sess && sess.user && sess.user.username) {
+      const lower = String(sess.user.username).toLowerCase();
+      const stub = STUB_USERS.find(u => u.username === lower);
+      return stub || { username: lower, name: sess.user.name || lower, initials: (sess.user.name||lower)[0].toUpperCase(), color: 'var(--blue)' };
+    }
+    // Stage 1.3 fallback — pretend it's Angel so we can see the chrome
+    return { ...STUB_USERS[0], isStub: true };
+  }
+
+  function isPrivileged(user) {
+    return ['angel','sam','sara','emma','carlynn','jaida'].includes(user.username);
+  }
+
+  function signOut() {
+    localStorage.removeItem('elite_session');
+    showToast('Signed out (Stage 2.5 will redirect to login)', 'default');
+  }
 
 
   /* ─── Toast ────────────────────────────────────────────────────── */
@@ -90,9 +337,6 @@
   function openModal(id)  { const el = document.getElementById(id); if (el) el.classList.add('open'); }
   function closeModal(id) { const el = document.getElementById(id); if (el) el.classList.remove('open'); }
 
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') $$('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
-  });
   document.addEventListener('click', (e) => {
     if (e.target.classList && e.target.classList.contains('modal-backdrop')) {
       e.target.classList.remove('open');
@@ -105,6 +349,26 @@
     if (!container) return;
     container.innerHTML = Array.from({ length: lines },
       () => `<div class="skeleton skeleton-line"></div>`).join('');
+  }
+
+
+  /* ─── Mobile sheets ────────────────────────────────────────── */
+  function openMoreSheet()   { $('#more-sheet').classList.add('open'); }
+  function closeMoreSheet()  { $('#more-sheet').classList.remove('open'); }
+  function openRegionSheet() {
+    // Populate first
+    $('#region-sheet-items').innerHTML = REGIONS.map(r =>
+      `<a class="sheet-item" href="#/region/${r.code}" onclick="closeRegionSheet()">
+         <span class="sheet-item-icon">📍</span> ${escapeHtml(r.name)}
+       </a>`
+    ).join('');
+    $('#region-sheet').classList.add('open');
+  }
+  function closeRegionSheet(){ $('#region-sheet').classList.remove('open'); }
+
+  function showShortcutsHelp() {
+    closeAllMenus();
+    openModal('shortcuts-modal');
   }
 
 
@@ -134,19 +398,26 @@
       if (match) {
         const params = {};
         r.keys.forEach((k, i) => params[k] = decodeURIComponent(match[i + 1]));
-        renderView(r, params);
+        renderView(r, params, path);
         return;
       }
     }
     render404(path);
   }
 
-  function renderView(r, params) {
+  function renderView(r, params, path) {
     const main = $('#main');
     const result = r.handler(params);
     if (typeof result === 'string') main.innerHTML = result;
     document.title = r.meta.title ? `${r.meta.title} · Elite Hub` : 'Elite Hub';
     window.scrollTo(0, 0);
+
+    // Update nav highlighting
+    updateActiveNav(path, r.meta);
+    // Update breadcrumb
+    renderBreadcrumb(r.meta, params, path);
+    // Close any open menus
+    closeAllMenus();
   }
 
   function render404(path) {
@@ -160,13 +431,221 @@
         </div>
       </div>
     `;
+    updateActiveNav('');
+    renderBreadcrumb({ title: 'Not Found' }, {}, path);
   }
 
   window.addEventListener('hashchange', resolveRoute);
 
 
   /* ═══════════════════════════════════════════════════════════════
-     PLACEHOLDER VIEWS — stub for routes to be built in later stages
+     NAVIGATION RENDERING
+     ═══════════════════════════════════════════════════════════════ */
+
+  function updateActiveNav(path, meta) {
+    // Sidebar + tab bar — both use data-nav attribute
+    $$('[data-nav]').forEach(el => {
+      const navPath = el.dataset.nav;
+      // Exact match OR current path starts with data-nav + '/' for nested routes
+      const isActive = path === navPath
+                    || (navPath !== '/home' && path.startsWith(navPath + '/'))
+                    || (navPath === '/regions' && path.startsWith('/region/'));
+      el.classList.toggle('active', isActive);
+    });
+
+    // Expand Regions group if on a region page
+    const regionExpander = $('#nav-regions-expander');
+    if (regionExpander && path.startsWith('/region/')) {
+      regionExpander.classList.add('open');
+    }
+  }
+
+  function renderBreadcrumb(meta, params, path) {
+    const bc = $('#breadcrumb');
+    if (!bc) return;
+
+    const parts = [];
+    parts.push({ label: 'Home', href: '#/home', current: path === '/home' });
+
+    if (path.startsWith('/region/')) {
+      parts.push({ label: 'Regions', href: '#/home' });
+      const region = REGIONS.find(r => r.code === params.code);
+      parts.push({ label: region ? region.name : params.code.toUpperCase(), current: true });
+    } else if (path.startsWith('/admin/')) {
+      parts.push({ label: 'Admin', href: '#/admin' });
+      parts.push({ label: meta.title || 'Detail', current: true });
+    } else if (path !== '/home' && meta.title) {
+      parts.push({ label: meta.title, current: true });
+    }
+
+    bc.innerHTML = parts.map((p, i) => {
+      const sep = i > 0 ? `<span class="breadcrumb-sep">›</span>` : '';
+      const el = p.current
+        ? `<span class="breadcrumb-item current">${escapeHtml(p.label)}</span>`
+        : `<a class="breadcrumb-item" href="${p.href || '#'}">${escapeHtml(p.label)}</a>`;
+      return sep + el;
+    }).join('');
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     HEADER / SIDEBAR POPULATION
+     ═══════════════════════════════════════════════════════════════ */
+
+  function renderUserSwitcher() {
+    const wrap = $('#user-switcher');
+    if (!wrap) return;
+    const current = getCurrentUser();
+    wrap.innerHTML = STUB_USERS.map(u => {
+      const isCurrent = u.username === current.username;
+      return `
+        <a class="avatar-chip ${isCurrent ? 'current' : ''}"
+           data-tooltip="${escapeAttr(u.name)}${isCurrent ? ' (You)' : ''}"
+           href="#/workspace"
+           style="background:${u.color};">${u.initials}</a>
+      `;
+    }).join('');
+  }
+
+  function renderAccountMenu() {
+    const current = getCurrentUser();
+    const avatar = $('#header-avatar');
+    const name = $('#header-avatar-name');
+    const menuName = $('#menu-name');
+    const menuRole = $('#menu-role');
+
+    avatar.textContent = current.initials;
+    avatar.style.background = current.color;
+    name.textContent = current.name;
+    menuName.textContent = current.name;
+    menuRole.textContent = current.isStub
+      ? 'Stub session (Stage 2.5 adds real login)'
+      : (isPrivileged(current) ? 'Compliance team' : 'Team member');
+
+    // Show admin entry in menu for privileged users
+    if (isPrivileged(current)) {
+      $('#menu-admin').style.display = '';
+      $('#nav-admin-section').style.display = '';
+      const sheetAdmin = $('#sheet-admin');
+      if (sheetAdmin) sheetAdmin.style.display = '';
+    }
+  }
+
+  function renderRegionsSubnav() {
+    const wrap = $('#nav-regions-sub');
+    if (!wrap) return;
+    wrap.innerHTML = REGIONS.map(r =>
+      `<a class="nav-sub-item" data-nav="/region/${r.code}" href="#/region/${r.code}">${escapeHtml(r.name)}</a>`
+    ).join('');
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     INTERACTIVE ELEMENTS
+     ═══════════════════════════════════════════════════════════════ */
+
+  function closeAllMenus() {
+    $$('.popover.open').forEach(p => p.classList.remove('open'));
+  }
+
+  // Regions nav expander
+  document.addEventListener('click', (e) => {
+    const expander = e.target.closest('#nav-regions-expander');
+    if (expander) {
+      expander.classList.toggle('open');
+    }
+  });
+
+  // Account menu toggle
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#header-avatar-btn');
+    const menu = $('#header-menu');
+    if (btn) {
+      e.stopPropagation();
+      menu.classList.toggle('open');
+      return;
+    }
+    // Close menu if click outside
+    if (menu && !e.target.closest('.popover')) {
+      menu.classList.remove('open');
+    }
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     KEYBOARD SHORTCUTS
+     ═══════════════════════════════════════════════════════════════ */
+
+  let gPressed = false;
+  let gTimer = null;
+
+  document.addEventListener('keydown', (e) => {
+    // Ignore when typing in inputs
+    const tag = (e.target.tagName || '').toUpperCase();
+    const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable;
+
+    // Escape always closes modals + clears gPressed
+    if (e.key === 'Escape') {
+      $$('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+      $$('.sheet-backdrop.open').forEach(s => s.classList.remove('open'));
+      closeAllMenus();
+      if (isTyping && e.target.id === 'global-search') {
+        e.target.value = '';
+        e.target.blur();
+      }
+      gPressed = false;
+      return;
+    }
+
+    if (isTyping) return;
+
+    // "/" focuses search
+    if (e.key === '/' && !gPressed) {
+      e.preventDefault();
+      const s = $('#global-search');
+      if (s) s.focus();
+      return;
+    }
+
+    // "?" opens shortcuts help
+    if (e.key === '?' && !gPressed) {
+      e.preventDefault();
+      showShortcutsHelp();
+      return;
+    }
+
+    // "g" starts a go-to sequence (wait for next key)
+    if (e.key === 'g' && !gPressed) {
+      gPressed = true;
+      if (gTimer) clearTimeout(gTimer);
+      gTimer = setTimeout(() => { gPressed = false; }, 1200);
+      return;
+    }
+
+    // Second key of a go-to sequence
+    if (gPressed) {
+      gPressed = false;
+      if (gTimer) { clearTimeout(gTimer); gTimer = null; }
+      const k = e.key.toLowerCase();
+      const map = {
+        h: '#/home',
+        i: '#/inbox',
+        w: '#/workspace',
+        r: '#/region/cle',   // default to Cleveland
+        a: '#/admin',
+        c: '#/contractors',
+        l: '#/legal',
+      };
+      if (map[k]) {
+        e.preventDefault();
+        location.hash = map[k];
+      }
+    }
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     PLACEHOLDER VIEWS
      ═══════════════════════════════════════════════════════════════ */
 
   function placeholder(title, badge, desc, features) {
@@ -180,128 +659,67 @@
         <div class="view-placeholder">
           <div class="view-placeholder-badge">${escapeHtml(badge)}</div>
           <div style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:var(--sp-3);">Coming soon</div>
-          <div style="text-align:left;max-width:420px;margin:0 auto;">
-            ${featList}
-          </div>
+          <div style="text-align:left;max-width:420px;margin:0 auto;">${featList}</div>
         </div>
       </div>
     `;
   }
 
 
-  /* ─── HOME — showcase + route tester ───────────────────────── */
+  /* ─── HOME ──────────────────────────────────────────────────── */
   route('/home', () => {
+    const user = getCurrentUser();
     return `
       <div class="view">
-        <h1 class="view-title">Elite Hub 2.0 — Stage 1.2 Shipped</h1>
-        <p class="view-sub">Router + component library live. Click around to test navigation.</p>
+        <h1 class="view-title">Welcome${user.isStub ? ' (stub session)' : ', ' + escapeHtml(user.name.split(' ')[0])}</h1>
+        <p class="view-sub">Stage 1.3 shipped — navigation chrome is live. Try the sidebar, breadcrumbs, avatar menu, and keyboard shortcuts.</p>
 
         <div class="view-section">
           <div class="card">
             <div class="card-header">
               <div>
-                <div class="card-title">Component library loaded</div>
-                <div class="card-sub">Stage 1.2 — all reusable UI pieces are ready</div>
+                <div class="card-title">Try the navigation</div>
+                <div class="card-sub">Click items in the sidebar, click an avatar chip, press <span class="kbd" style="font-size:10px;">?</span> for shortcuts</div>
               </div>
-              <span class="badge badge-green">READY</span>
+              <span class="badge badge-green">STAGE 1.3</span>
             </div>
 
             <div style="display:grid;gap:var(--sp-5);">
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Keyboard shortcuts to try</div>
+                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);font-size:13px;">
+                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">H</span>&nbsp;Home</div>
+                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">I</span>&nbsp;Inbox</div>
+                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">W</span>&nbsp;Workspace</div>
+                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">R</span>&nbsp;Regions</div>
+                  <div><span class="kbd">/</span>&nbsp;Search</div>
+                  <div><span class="kbd">?</span>&nbsp;Help</div>
+                </div>
+              </div>
 
               <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Buttons</div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Test routes</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-2);">
+                  <a class="btn btn-secondary" href="#/inbox">📬 Inbox</a>
+                  <a class="btn btn-secondary" href="#/workspace">✓ Workspace</a>
+                  <a class="btn btn-secondary" href="#/region/cle">📍 Cleveland</a>
+                  <a class="btn btn-secondary" href="#/region/stl">📍 St. Louis</a>
+                  <a class="btn btn-secondary" href="#/contractors">👷 Contractors</a>
+                  <a class="btn btn-secondary" href="#/legal">⚖️ Legal</a>
+                  <a class="btn btn-secondary" href="#/admin">⚙️ Admin</a>
+                  <a class="btn btn-secondary" href="#/nonexistent">404 test</a>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">UI elements</div>
                 <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
-                  <button class="btn btn-primary">Primary</button>
-                  <button class="btn btn-secondary">Secondary</button>
-                  <button class="btn btn-blue">Blue</button>
-                  <button class="btn btn-danger">Danger</button>
-                  <button class="btn btn-ghost">Ghost</button>
-                  <button class="btn btn-secondary btn-sm">Small</button>
-                </div>
-              </div>
-
-              <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Filter Pills</div>
-                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
-                  <span class="pill active">New <span class="pill-count">12</span></span>
-                  <span class="pill">Needs Follow-Up <span class="pill-count">3</span></span>
-                  <span class="pill">Reviewed <span class="pill-count">8</span></span>
-                  <span class="pill">Resolved <span class="pill-count">47</span></span>
-                  <span class="pill">Archived <span class="pill-count">92</span></span>
-                </div>
-              </div>
-
-              <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">KPI Tiles</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-3);">
-                  <div class="kpi-tile kpi-amber"><div><div class="kpi-tile-label">Due Today</div></div><div class="kpi-tile-value">3</div></div>
-                  <div class="kpi-tile kpi-red"><div><div class="kpi-tile-label">Overdue</div></div><div class="kpi-tile-value">1</div></div>
-                  <div class="kpi-tile kpi-blue"><div><div class="kpi-tile-label">In Review</div></div><div class="kpi-tile-value">12</div></div>
-                  <div class="kpi-tile kpi-green"><div><div class="kpi-tile-label">Resolved</div></div><div class="kpi-tile-value">47</div></div>
-                </div>
-              </div>
-
-              <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Avatar Chips</div>
-                <div style="display:flex;gap:var(--sp-2);">
-                  <span class="avatar-chip current" data-tooltip="Angel (You)">A</span>
-                  <span class="avatar-chip" data-tooltip="Sam">S</span>
-                  <span class="avatar-chip" data-tooltip="Sara" style="background:var(--green);">S</span>
-                  <span class="avatar-chip" data-tooltip="Emma" style="background:var(--amber);">E</span>
-                  <span class="avatar-chip" data-tooltip="Carlynn" style="background:var(--red);">C</span>
-                  <span class="avatar-chip" data-tooltip="Jaida" style="background:var(--slate-600);">J</span>
-                </div>
-              </div>
-
-              <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Try it</div>
-                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
-                  <button class="btn btn-primary" onclick="showToast('Saved successfully','success')">Toast — success</button>
-                  <button class="btn btn-secondary" onclick="showToast('Something went wrong','error')">Toast — error</button>
-                  <button class="btn btn-blue" onclick="openModal('demo-modal')">Open modal</button>
+                  <button class="btn btn-primary" onclick="showToast('Saved','success')">Toast</button>
+                  <button class="btn btn-secondary" onclick="showShortcutsHelp()">Show shortcuts</button>
                 </div>
               </div>
 
             </div>
-          </div>
-        </div>
-
-        <div class="view-section">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Try the router</div>
-                <div class="card-sub">Every route below is a placeholder until its stage builds it</div>
-              </div>
-            </div>
-            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-2);">
-              <a class="btn btn-secondary" href="#/inbox">Inbox</a>
-              <a class="btn btn-secondary" href="#/workspace">My Workspace</a>
-              <a class="btn btn-secondary" href="#/region/cle">Region: Cleveland</a>
-              <a class="btn btn-secondary" href="#/region/stl">Region: St. Louis</a>
-              <a class="btn btn-secondary" href="#/contractors">Contractors</a>
-              <a class="btn btn-secondary" href="#/legal">Legal</a>
-              <a class="btn btn-secondary" href="#/admin">Admin</a>
-              <a class="btn btn-secondary" href="#/admin/users">Admin: Users</a>
-              <a class="btn btn-secondary" href="#/nonexistent">404 test</a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="demo-modal" class="modal-backdrop">
-        <div class="modal">
-          <div class="modal-header">
-            <div class="modal-title">Demo Modal</div>
-            <button class="modal-close" onclick="closeModal('demo-modal')">×</button>
-          </div>
-          <div class="modal-body">
-            <p style="margin-bottom:var(--sp-3);">This is what modals look like in Elite Hub 2.0.</p>
-            <p style="color:var(--slate-500);font-size:13px;">Press Esc or click outside to close.</p>
-          </div>
-          <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('demo-modal')">Cancel</button>
-            <button class="btn btn-primary" onclick="closeModal('demo-modal');showToast('Saved','success')">Save</button>
           </div>
         </div>
       </div>
@@ -309,7 +727,7 @@
   }, { title: 'Home' });
 
 
-  /* ─── Placeholder routes ────────────────────────────────────── */
+  /* ─── Placeholders ────────────────────────────────────────── */
   route('/inbox', () => placeholder('Compliance Inbox', 'Stage 4',
     'Central workflow — review notifications, contractor notifications, team activity.',
     [
@@ -333,16 +751,19 @@
     ]
   ), { title: 'Workspace' });
 
-  route('/region/:code', ({ code }) => placeholder(`Region: ${code.toUpperCase()}`, 'Stage 6',
-    'Single regional hub view, driven by the region code from the URL.',
-    [
-      'Region header with health score + trend',
-      'Sub-nav: Compliance · Fleet · Legal · Reviews · Documents · Activity',
-      'Region activity feed (REGION_CHAT)',
-      'Region switcher dropdown',
-      `Currently viewing: ${code}`,
-    ]
-  ), { title: 'Region' });
+  route('/region/:code', ({ code }) => {
+    const region = REGIONS.find(r => r.code === code.toLowerCase());
+    return placeholder(`Region: ${region ? region.name : code.toUpperCase()}`, 'Stage 6',
+      'Single regional hub view, driven by the region code from the URL.',
+      [
+        'Region header with health score + trend',
+        'Sub-nav: Compliance · Fleet · Legal · Reviews · Documents · Activity',
+        'Region activity feed (REGION_CHAT)',
+        'Region switcher dropdown',
+        `Currently viewing: ${region ? region.name : code.toUpperCase()}`,
+      ]
+    );
+  }, { title: 'Region' });
 
   route('/contractors', () => placeholder('Contractors', 'Stage 4',
     'Cross-region contractor view — GL/WC expirations, clearance workflow.',
@@ -384,23 +805,28 @@
 
 
   /* ═══════════════════════════════════════════════════════════════
+     SERVICE WORKER REGISTRATION
+     ═══════════════════════════════════════════════════════════════ */
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('app-sw.js').then(
+        () => console.log('[Elite Hub 2.0] SW registered'),
+        (err) => console.log('[Elite Hub 2.0] SW registration failed:', err)
+      );
+    });
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
      BOOTSTRAP
      ═══════════════════════════════════════════════════════════════ */
 
   document.body.style.opacity = '1';
 
-  (function stage1_2_bootstrap() {
-    const sess = (() => {
-      try { return JSON.parse(localStorage.getItem('elite_session') || 'null'); }
-      catch { return null; }
-    })();
-    if (sess && sess.user) {
-      console.log('[Elite Hub 2.0] Session:', sess.user.username);
-    } else {
-      console.log('[Elite Hub 2.0] No session (login redirect arrives in Stage 2.5)');
-    }
-  })();
-
+  renderUserSwitcher();
+  renderAccountMenu();
+  renderRegionsSubnav();
   resolveRoute();
   </script>
 
