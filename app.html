@@ -6,27 +6,19 @@
   <meta name="theme-color" content="#0F172A">
   <title>Elite Hub</title>
 
-  <!-- Inter font — locked typography for 2.0 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="app.css?v=stage1-1">
+  <link rel="stylesheet" href="app.css?v=stage1-2">
 
-  <!-- Prevent flash of unstyled content while CSS loads -->
   <style>body { opacity: 0; }</style>
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════════════════════
-       App shell — three regions (sidebar, header, main)
-       All regions are placeholders in Stage 1.1.
-       Navigation chrome arrives in Stage 1.3.
-       ═══════════════════════════════════════════════════════════════ -->
-
   <div class="app-root">
+
     <aside id="sidebar" class="app-sidebar" aria-label="Primary navigation">
-      <!-- Stage 1.3 will populate this -->
       <div class="app-sidebar-brand">
         <div class="app-sidebar-brand-logo">ECS</div>
         <div class="app-sidebar-brand-text">
@@ -38,45 +30,378 @@
     </aside>
 
     <header id="header" class="app-header" aria-label="Page header">
-      <!-- Stage 1.3 will populate this -->
       <div class="app-header-placeholder">Header chrome arrives in Stage 1.3</div>
     </header>
 
     <main id="main" class="app-main" role="main" aria-live="polite">
-      <div class="stage-status">
-        <div class="stage-status-icon">🚧</div>
-        <div class="stage-status-title">Elite Hub 2.0</div>
-        <div class="stage-status-sub">Stage 1.1 — Foundations shipped</div>
-        <div class="stage-status-details">
-          The shell, design tokens, and typography are in place.<br>
-          Next: Stage 1.2 adds the router and component library.<br>
-          After that: Stage 1.3 adds full navigation chrome.
-        </div>
-      </div>
+      <!-- Router renders routes here -->
     </main>
+
   </div>
 
+  <div id="toast-container" class="toast-container"></div>
+
+
   <script>
+  /* ═══════════════════════════════════════════════════════════════════
+     Elite Hub 2.0 — Stage 1.2
+     Router + component helpers + placeholder views
+     ═══════════════════════════════════════════════════════════════════ */
+
+
+  /* ─── Global helpers ──────────────────────────────────────────── */
+  const $  = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function escapeAttr(s) { return escapeHtml(s); }
+
+
+  /* ─── Toast ────────────────────────────────────────────────────── */
+  function showToast(msg, type = 'default', opts = {}) {
+    const container = $('#toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    const typeClass = type === 'success' ? 'toast-success'
+                    : type === 'error'   ? 'toast-error'
+                    : type === 'amber'   ? 'toast-amber' : '';
+    toast.className = `toast ${typeClass}`;
+    let html = `<span>${escapeHtml(msg)}</span>`;
+    if (opts.action && typeof opts.action.onClick === 'function') {
+      html += `<button class="toast-action">${escapeHtml(opts.action.label || 'Undo')}</button>`;
+    }
+    toast.innerHTML = html;
+    if (opts.action) {
+      toast.querySelector('.toast-action').addEventListener('click', () => {
+        opts.action.onClick();
+        toast.remove();
+      });
+    }
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+  }
+
+
+  /* ─── Modal ────────────────────────────────────────────────────── */
+  function openModal(id)  { const el = document.getElementById(id); if (el) el.classList.add('open'); }
+  function closeModal(id) { const el = document.getElementById(id); if (el) el.classList.remove('open'); }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') $$('.modal-backdrop.open').forEach(m => m.classList.remove('open'));
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target.classList && e.target.classList.contains('modal-backdrop')) {
+      e.target.classList.remove('open');
+    }
+  });
+
+
+  /* ─── Skeleton ────────────────────────────────────────────────── */
+  function showSkeleton(container, lines = 3) {
+    if (!container) return;
+    container.innerHTML = Array.from({ length: lines },
+      () => `<div class="skeleton skeleton-line"></div>`).join('');
+  }
+
+
   /* ═══════════════════════════════════════════════════════════════
-     Stage 1.1 bootstrap — minimal
+     ROUTER — hash-based with parameter extraction
      ═══════════════════════════════════════════════════════════════ */
 
-  // Reveal body once CSS is loaded (avoids FOUC)
+  const routes = [];
+
+  function route(pattern, handler, meta = {}) {
+    const keys = [];
+    const regexStr = pattern.replace(/:([^/]+)/g, (_, k) => {
+      keys.push(k);
+      return '([^/]+)';
+    });
+    const re = new RegExp('^' + regexStr + '/?$');
+    routes.push({ pattern, re, keys, handler, meta });
+  }
+
+  function resolveRoute() {
+    let path = (location.hash || '#/home').replace(/^#/, '');
+    if (!path.startsWith('/')) path = '/' + path;
+    if (path === '/') path = '/home';
+
+    for (const r of routes) {
+      const match = path.match(r.re);
+      if (match) {
+        const params = {};
+        r.keys.forEach((k, i) => params[k] = decodeURIComponent(match[i + 1]));
+        renderView(r, params);
+        return;
+      }
+    }
+    render404(path);
+  }
+
+  function renderView(r, params) {
+    const main = $('#main');
+    const result = r.handler(params);
+    if (typeof result === 'string') main.innerHTML = result;
+    document.title = r.meta.title ? `${r.meta.title} · Elite Hub` : 'Elite Hub';
+    window.scrollTo(0, 0);
+  }
+
+  function render404(path) {
+    $('#main').innerHTML = `
+      <div class="view">
+        <div class="empty-state">
+          <div class="empty-state-icon">🧭</div>
+          <div class="empty-state-title">Page not found</div>
+          <div class="empty-state-sub">No route matches <code>${escapeHtml(path)}</code></div>
+          <a class="btn btn-primary" href="#/home">Go Home</a>
+        </div>
+      </div>
+    `;
+  }
+
+  window.addEventListener('hashchange', resolveRoute);
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     PLACEHOLDER VIEWS — stub for routes to be built in later stages
+     ═══════════════════════════════════════════════════════════════ */
+
+  function placeholder(title, badge, desc, features) {
+    const featList = (features || [])
+      .map(f => `<div style="padding:4px 0;color:var(--slate-600);font-size:13px;">• ${escapeHtml(f)}</div>`)
+      .join('');
+    return `
+      <div class="view">
+        <h1 class="view-title">${escapeHtml(title)}</h1>
+        <p class="view-sub">${escapeHtml(desc || '')}</p>
+        <div class="view-placeholder">
+          <div class="view-placeholder-badge">${escapeHtml(badge)}</div>
+          <div style="font-size:15px;font-weight:600;color:var(--navy);margin-bottom:var(--sp-3);">Coming soon</div>
+          <div style="text-align:left;max-width:420px;margin:0 auto;">
+            ${featList}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+
+  /* ─── HOME — showcase + route tester ───────────────────────── */
+  route('/home', () => {
+    return `
+      <div class="view">
+        <h1 class="view-title">Elite Hub 2.0 — Stage 1.2 Shipped</h1>
+        <p class="view-sub">Router + component library live. Click around to test navigation.</p>
+
+        <div class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Component library loaded</div>
+                <div class="card-sub">Stage 1.2 — all reusable UI pieces are ready</div>
+              </div>
+              <span class="badge badge-green">READY</span>
+            </div>
+
+            <div style="display:grid;gap:var(--sp-5);">
+
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Buttons</div>
+                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
+                  <button class="btn btn-primary">Primary</button>
+                  <button class="btn btn-secondary">Secondary</button>
+                  <button class="btn btn-blue">Blue</button>
+                  <button class="btn btn-danger">Danger</button>
+                  <button class="btn btn-ghost">Ghost</button>
+                  <button class="btn btn-secondary btn-sm">Small</button>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Filter Pills</div>
+                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
+                  <span class="pill active">New <span class="pill-count">12</span></span>
+                  <span class="pill">Needs Follow-Up <span class="pill-count">3</span></span>
+                  <span class="pill">Reviewed <span class="pill-count">8</span></span>
+                  <span class="pill">Resolved <span class="pill-count">47</span></span>
+                  <span class="pill">Archived <span class="pill-count">92</span></span>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">KPI Tiles</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-3);">
+                  <div class="kpi-tile kpi-amber"><div><div class="kpi-tile-label">Due Today</div></div><div class="kpi-tile-value">3</div></div>
+                  <div class="kpi-tile kpi-red"><div><div class="kpi-tile-label">Overdue</div></div><div class="kpi-tile-value">1</div></div>
+                  <div class="kpi-tile kpi-blue"><div><div class="kpi-tile-label">In Review</div></div><div class="kpi-tile-value">12</div></div>
+                  <div class="kpi-tile kpi-green"><div><div class="kpi-tile-label">Resolved</div></div><div class="kpi-tile-value">47</div></div>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Avatar Chips</div>
+                <div style="display:flex;gap:var(--sp-2);">
+                  <span class="avatar-chip current" data-tooltip="Angel (You)">A</span>
+                  <span class="avatar-chip" data-tooltip="Sam">S</span>
+                  <span class="avatar-chip" data-tooltip="Sara" style="background:var(--green);">S</span>
+                  <span class="avatar-chip" data-tooltip="Emma" style="background:var(--amber);">E</span>
+                  <span class="avatar-chip" data-tooltip="Carlynn" style="background:var(--red);">C</span>
+                  <span class="avatar-chip" data-tooltip="Jaida" style="background:var(--slate-600);">J</span>
+                </div>
+              </div>
+
+              <div>
+                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Try it</div>
+                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
+                  <button class="btn btn-primary" onclick="showToast('Saved successfully','success')">Toast — success</button>
+                  <button class="btn btn-secondary" onclick="showToast('Something went wrong','error')">Toast — error</button>
+                  <button class="btn btn-blue" onclick="openModal('demo-modal')">Open modal</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <div class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Try the router</div>
+                <div class="card-sub">Every route below is a placeholder until its stage builds it</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-2);">
+              <a class="btn btn-secondary" href="#/inbox">Inbox</a>
+              <a class="btn btn-secondary" href="#/workspace">My Workspace</a>
+              <a class="btn btn-secondary" href="#/region/cle">Region: Cleveland</a>
+              <a class="btn btn-secondary" href="#/region/stl">Region: St. Louis</a>
+              <a class="btn btn-secondary" href="#/contractors">Contractors</a>
+              <a class="btn btn-secondary" href="#/legal">Legal</a>
+              <a class="btn btn-secondary" href="#/admin">Admin</a>
+              <a class="btn btn-secondary" href="#/admin/users">Admin: Users</a>
+              <a class="btn btn-secondary" href="#/nonexistent">404 test</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="demo-modal" class="modal-backdrop">
+        <div class="modal">
+          <div class="modal-header">
+            <div class="modal-title">Demo Modal</div>
+            <button class="modal-close" onclick="closeModal('demo-modal')">×</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom:var(--sp-3);">This is what modals look like in Elite Hub 2.0.</p>
+            <p style="color:var(--slate-500);font-size:13px;">Press Esc or click outside to close.</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('demo-modal')">Cancel</button>
+            <button class="btn btn-primary" onclick="closeModal('demo-modal');showToast('Saved','success')">Save</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }, { title: 'Home' });
+
+
+  /* ─── Placeholder routes ────────────────────────────────────── */
+  route('/inbox', () => placeholder('Compliance Inbox', 'Stage 4',
+    'Central workflow — review notifications, contractor notifications, team activity.',
+    [
+      'KPI strip with clickable filter tiles',
+      'Grouped review cards (one per reviewId)',
+      'Inline expand with reply composer',
+      'Keyboard shortcuts (j/k, r, e, #)',
+      'Activity timeline sidebar',
+      '8-step contractor workflow',
+    ]
+  ), { title: 'Inbox' });
+
+  route('/workspace', () => placeholder('My Workspace', 'Stage 5',
+    'Personal tasks, contacts, links, and scratchpad — same view for every user.',
+    [
+      'KPI strip (Due Today, Overdue, Compliance Queue, Legal)',
+      'Slash-command quick-add (/tomorrow, /high, /p:elite)',
+      'Project tagging with per-user custom lists',
+      'Saved views and smart sorting',
+      'Configurable tools row (per-user)',
+    ]
+  ), { title: 'Workspace' });
+
+  route('/region/:code', ({ code }) => placeholder(`Region: ${code.toUpperCase()}`, 'Stage 6',
+    'Single regional hub view, driven by the region code from the URL.',
+    [
+      'Region header with health score + trend',
+      'Sub-nav: Compliance · Fleet · Legal · Reviews · Documents · Activity',
+      'Region activity feed (REGION_CHAT)',
+      'Region switcher dropdown',
+      `Currently viewing: ${code}`,
+    ]
+  ), { title: 'Region' });
+
+  route('/contractors', () => placeholder('Contractors', 'Stage 4',
+    'Cross-region contractor view — GL/WC expirations, clearance workflow.',
+    [
+      'Search and filter across all regions',
+      'GL/WC expiry alerts',
+      '8-step clearance workflow tracker',
+      'Bulk operations',
+    ]
+  ), { title: 'Contractors' });
+
+  route('/legal', () => placeholder('Legal', 'Stage 6',
+    'Legal cases across all regions.',
+    ['Case list with assignee and status', 'Per-region filter', 'Quick note entry']
+  ), { title: 'Legal' });
+
+  route('/admin', () => placeholder('Admin', 'Stage 7',
+    'System administration landing.',
+    [
+      'Users management',
+      'Scoring rules editor',
+      'Project defaults',
+      'Audit log',
+      'System health dashboard',
+    ]
+  ), { title: 'Admin' });
+
+  route('/admin/users', () => placeholder('Admin · Users', 'Stage 7',
+    'Manage user accounts and permissions.',
+    [
+      'Add/edit/deactivate users',
+      'Role templates',
+      'Permission checkboxes (granular)',
+      'Assigned regions',
+      'Tools configuration',
+      'Audit log integration',
+    ]
+  ), { title: 'Users' });
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     BOOTSTRAP
+     ═══════════════════════════════════════════════════════════════ */
+
   document.body.style.opacity = '1';
 
-  // Session check — will redirect to login.html in Stage 2.5
-  // For now, just log whether a session exists
-  (function stage1_1_bootstrap() {
+  (function stage1_2_bootstrap() {
     const sess = (() => {
       try { return JSON.parse(localStorage.getItem('elite_session') || 'null'); }
       catch { return null; }
     })();
     if (sess && sess.user) {
-      console.log('[Elite Hub 2.0] Existing session detected:', sess.user.username);
+      console.log('[Elite Hub 2.0] Session:', sess.user.username);
     } else {
-      console.log('[Elite Hub 2.0] No session (will redirect in Stage 2.5)');
+      console.log('[Elite Hub 2.0] No session (login redirect arrives in Stage 2.5)');
     }
   })();
+
+  resolveRoute();
   </script>
 
 </body>
