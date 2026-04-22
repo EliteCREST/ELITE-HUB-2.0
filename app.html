@@ -50,6 +50,14 @@
           <span class="nav-item-icon">👷</span>
           <span class="nav-item-label">Contractors</span>
         </a>
+        <a class="nav-item" data-nav="/fleet" href="#/fleet">
+          <span class="nav-item-icon">🚚</span>
+          <span class="nav-item-label">Fleet</span>
+        </a>
+        <a class="nav-item" data-nav="/reviews" href="#/reviews">
+          <span class="nav-item-icon">⭐</span>
+          <span class="nav-item-label">Reviews</span>
+        </a>
         <a class="nav-item" data-nav="/legal" href="#/legal">
           <span class="nav-item-icon">⚖️</span>
           <span class="nav-item-label">Legal</span>
@@ -168,6 +176,12 @@
       <div class="sheet-title">More</div>
       <a class="sheet-item" href="#/contractors" onclick="closeMoreSheet()">
         <span class="sheet-item-icon">👷</span> Contractors
+      </a>
+      <a class="sheet-item" href="#/fleet" onclick="closeMoreSheet()">
+        <span class="sheet-item-icon">🚚</span> Fleet
+      </a>
+      <a class="sheet-item" href="#/reviews" onclick="closeMoreSheet()">
+        <span class="sheet-item-icon">⭐</span> Reviews
       </a>
       <a class="sheet-item" href="#/legal" onclick="closeMoreSheet()">
         <span class="sheet-item-icon">⚖️</span> Legal
@@ -705,6 +719,8 @@
                   <a class="btn btn-secondary" href="#/region/cle">📍 Cleveland</a>
                   <a class="btn btn-secondary" href="#/region/stl">📍 St. Louis</a>
                   <a class="btn btn-secondary" href="#/contractors">👷 Contractors</a>
+                  <a class="btn btn-secondary" href="#/fleet">🚚 Fleet</a>
+                  <a class="btn btn-secondary" href="#/reviews">⭐ Reviews</a>
                   <a class="btn btn-secondary" href="#/legal">⚖️ Legal</a>
                   <a class="btn btn-secondary" href="#/admin">⚙️ Admin</a>
                   <a class="btn btn-secondary" href="#/nonexistent">404 test</a>
@@ -774,6 +790,28 @@
       'Bulk operations',
     ]
   ), { title: 'Contractors' });
+
+  route('/fleet', () => placeholder('Fleet', 'Stage 6',
+    'Cross-region fleet view — vehicles, maintenance, driver compliance, scoring.',
+    [
+      'All vehicles across 9 regions with region filter',
+      'Maintenance status and upcoming service',
+      'Driver compliance tracking (licenses, DOT)',
+      'Fleet Scoring Engine (300-850 per region)',
+      'Export to CSV',
+    ]
+  ), { title: 'Fleet' });
+
+  route('/reviews', () => placeholder('Reviews', 'Stage 6',
+    'Cross-region review view — customer reviews, ratings, response tracking.',
+    [
+      'All reviews across 9 regions with region filter',
+      'Star rating distribution and trends',
+      'Response status (replied, needs response)',
+      'Link to original review on source platform',
+      'Submit for compliance review (feeds the Inbox)',
+    ]
+  ), { title: 'Reviews' });
 
   route('/legal', () => placeholder('Legal', 'Stage 6',
     'Legal cases across all regions.',
