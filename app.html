@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#0F172A">
+  <title>Elite Hub</title>
+
+  <!-- Inter font — locked typography for 2.0 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="app.css?v=stage1-1">
+
+  <!-- Prevent flash of unstyled content while CSS loads -->
+  <style>body { opacity: 0; }</style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════════
+       App shell — three regions (sidebar, header, main)
+       All regions are placeholders in Stage 1.1.
+       Navigation chrome arrives in Stage 1.3.
+       ═══════════════════════════════════════════════════════════════ -->
+
+  <div class="app-root">
+    <aside id="sidebar" class="app-sidebar" aria-label="Primary navigation">
+      <!-- Stage 1.3 will populate this -->
+      <div class="app-sidebar-brand">
+        <div class="app-sidebar-brand-logo">ECS</div>
+        <div class="app-sidebar-brand-text">
+          <div class="app-sidebar-brand-name">Elite Hub</div>
+          <div class="app-sidebar-brand-sub">2.0</div>
+        </div>
+      </div>
+      <div class="app-sidebar-placeholder">Navigation arrives in Stage 1.3</div>
+    </aside>
+
+    <header id="header" class="app-header" aria-label="Page header">
+      <!-- Stage 1.3 will populate this -->
+      <div class="app-header-placeholder">Header chrome arrives in Stage 1.3</div>
+    </header>
+
+    <main id="main" class="app-main" role="main" aria-live="polite">
+      <div class="stage-status">
+        <div class="stage-status-icon">🚧</div>
+        <div class="stage-status-title">Elite Hub 2.0</div>
+        <div class="stage-status-sub">Stage 1.1 — Foundations shipped</div>
+        <div class="stage-status-details">
+          The shell, design tokens, and typography are in place.<br>
+          Next: Stage 1.2 adds the router and component library.<br>
+          After that: Stage 1.3 adds full navigation chrome.
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+  /* ═══════════════════════════════════════════════════════════════
+     Stage 1.1 bootstrap — minimal
+     ═══════════════════════════════════════════════════════════════ */
+
+  // Reveal body once CSS is loaded (avoids FOUC)
+  document.body.style.opacity = '1';
+
+  // Session check — will redirect to login.html in Stage 2.5
+  // For now, just log whether a session exists
+  (function stage1_1_bootstrap() {
+    const sess = (() => {
+      try { return JSON.parse(localStorage.getItem('elite_session') || 'null'); }
+      catch { return null; }
+    })();
+    if (sess && sess.user) {
+      console.log('[Elite Hub 2.0] Existing session detected:', sess.user.username);
+    } else {
+      console.log('[Elite Hub 2.0] No session (will redirect in Stage 2.5)');
+    }
+  })();
+  </script>
+
+</body>
+</html>
