@@ -259,6 +259,32 @@
      ═══════════════════════════════════════════════════════════════════ */
 
 
+  /* ─── Backend config (Stage 2.2) ──────────────────────────── */
+  const BACKEND = {
+    // Elite Hub 2.0 backend — separate Apps Script project
+    url:  'https://script.google.com/macros/s/AKfycbw4ithOR-VTRkMMcV2LGKb_QozPPro6c83TdwESDbfirP388IVyPuzQ7nDUroRQ2jEx/exec',
+    // API key — Stage 2.5 will replace with real session tokens
+    key:  'eh2-stg2-c7f4a9b2e8d6',
+  };
+
+  /* ─── api() — all backend calls go through this ───────────── */
+  async function api(params, method = 'GET', body = null) {
+    const qs = new URLSearchParams({ key: BACKEND.key, ...(params || {}) }).toString();
+    const url = `${BACKEND.url}?${qs}`;
+    const opts = { method, redirect: 'follow' };
+    if (method === 'POST' && body) {
+      opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
+      opts.body = JSON.stringify({ key: BACKEND.key, ...body });
+    }
+    try {
+      const res = await fetch(url, opts);
+      return await res.json();
+    } catch (err) {
+      console.error('[api] request failed:', err);
+      return { error: err.message || 'Network error' };
+    }
+  }
+
   /* ─── Global helpers ──────────────────────────────────────────── */
   const $  = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -432,6 +458,10 @@
     renderBreadcrumb(r.meta, params, path);
     // Close any open menus
     closeAllMenus();
+    // Optional post-render hook (for auto-loading data on specific routes)
+    if (typeof r.meta.onAfterRender === 'function') {
+      try { r.meta.onAfterRender(params); } catch (e) { console.error('onAfterRender failed:', e); }
+    }
   }
 
   function render404(path) {
@@ -686,7 +716,30 @@
     return `
       <div class="view">
         <h1 class="view-title">Welcome${user.isStub ? ' (stub session)' : ', ' + escapeHtml(user.name.split(' ')[0])}</h1>
-        <p class="view-sub">Stage 1.3 shipped — navigation chrome is live. Try the sidebar, breadcrumbs, avatar menu, and keyboard shortcuts.</p>
+        <p class="view-sub">Stage 2.2 shipped — backend is live and wired to the new sheets.</p>
+
+        <!-- Backend connectivity test -->
+        <div class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Backend connection</div>
+                <div class="card-sub">Live status of your new Elite Hub 2.0 backend</div>
+              </div>
+              <span class="badge" id="backend-status-badge">CHECKING…</span>
+            </div>
+            <div id="backend-status-details" style="font-size:13px;color:var(--slate-600);">
+              <div class="skeleton skeleton-text"></div>
+              <div class="skeleton skeleton-text" style="width:60%;"></div>
+            </div>
+            <div style="margin-top:var(--sp-4);display:flex;gap:var(--sp-2);flex-wrap:wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="testBackend('ping')">Ping</button>
+              <button class="btn btn-secondary btn-sm" onclick="testBackend('users')">Load users</button>
+              <button class="btn btn-secondary btn-sm" onclick="testBackend('regions')">Load regions</button>
+              <button class="btn btn-secondary btn-sm" onclick="testBackend('project_defaults')">Load projects</button>
+            </div>
+          </div>
+        </div>
 
         <div class="view-section">
           <div class="card">
@@ -695,7 +748,7 @@
                 <div class="card-title">Try the navigation</div>
                 <div class="card-sub">Click items in the sidebar, click an avatar chip, press <span class="kbd" style="font-size:10px;">?</span> for shortcuts</div>
               </div>
-              <span class="badge badge-green">STAGE 1.3</span>
+              <span class="badge badge-green">STAGE 2.2</span>
             </div>
 
             <div style="display:grid;gap:var(--sp-5);">
@@ -740,7 +793,7 @@
         </div>
       </div>
     `;
-  }, { title: 'Home' });
+  }, { title: 'Home', onAfterRender: () => autoCheckBackend() });
 
 
   /* ─── Placeholders ────────────────────────────────────────── */
@@ -843,6 +896,67 @@
 
 
   /* ═══════════════════════════════════════════════════════════════
+     BACKEND TEST (Stage 2.2) — verifies connectivity from home page
+     ═══════════════════════════════════════════════════════════════ */
+
+  async function testBackend(resource) {
+    const badge = $('#backend-status-badge');
+    const details = $('#backend-status-details');
+    if (!badge || !details) return;
+
+    badge.className = 'badge';
+    badge.textContent = 'CHECKING…';
+    details.innerHTML = `<div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text" style="width:60%;"></div>`;
+
+    const startedAt = performance.now();
+    const result = await api({ resource: resource });
+    const elapsedMs = Math.round(performance.now() - startedAt);
+
+    if (result && result.error) {
+      badge.className = 'badge badge-red';
+      badge.textContent = 'ERROR';
+      details.innerHTML = `
+        <div style="color:var(--red);font-weight:600;">✗ ${escapeHtml(result.error)}</div>
+        <div style="color:var(--slate-500);font-size:12px;margin-top:var(--sp-2);">Resource: <code>${escapeHtml(resource)}</code> · Took ${elapsedMs}ms</div>
+      `;
+      return;
+    }
+
+    badge.className = 'badge badge-green';
+    badge.textContent = 'ONLINE';
+
+    // Summarize the payload
+    let summary = '';
+    if (resource === 'ping') {
+      summary = `✓ Backend v${escapeHtml(result.version || '?')} responding · Server time: ${escapeHtml(result.time || '?')}`;
+    } else if (resource === 'users' && result.users) {
+      summary = `✓ Loaded <strong>${result.users.length}</strong> users: ${result.users.map(u => escapeHtml(u.display_name || u.username)).join(', ')}`;
+    } else if (resource === 'regions' && result.regions) {
+      summary = `✓ Loaded <strong>${result.regions.length}</strong> regions: ${result.regions.map(r => escapeHtml(r.abbr || r.code)).join(', ')}`;
+    } else if (resource === 'project_defaults' && result.projects) {
+      summary = `✓ Loaded <strong>${result.projects.length}</strong> projects: ${result.projects.slice(0, 5).map(p => escapeHtml(p.name)).join(', ')}${result.projects.length > 5 ? ', …' : ''}`;
+    } else {
+      summary = `✓ Response: ${escapeHtml(JSON.stringify(result).slice(0, 200))}`;
+    }
+
+    details.innerHTML = `
+      <div>${summary}</div>
+      <div style="color:var(--slate-500);font-size:12px;margin-top:var(--sp-2);">
+        Resource: <code>${escapeHtml(resource)}</code> · Took ${elapsedMs}ms
+      </div>
+    `;
+  }
+
+  // Auto-ping when home view renders
+  function autoCheckBackend() {
+    // Only auto-check if we're on the home view AND status card is present
+    setTimeout(() => {
+      if ($('#backend-status-badge')) testBackend('ping');
+    }, 50);
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
      SERVICE WORKER REGISTRATION
      ═══════════════════════════════════════════════════════════════ */
 
@@ -866,6 +980,7 @@
   renderAccountMenu();
   renderRegionsSubnav();
   resolveRoute();
+  autoCheckBackend();
   </script>
 
 </body>
