@@ -3928,6 +3928,10 @@
     _currentContractor = res.contractor;
     panel.innerHTML = renderContractorPanel(_currentContractor);
     panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+
+    // Pre-warm the users cache so the Message modal opens instantly if clicked.
+    // Fire-and-forget — don't block the panel render on this.
+    api({ resource: 'users' }).catch(() => {});
   }
 
   function renderContractorPanelLoading(summary) {
@@ -5014,7 +5018,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.3';
+  const APP_VERSION = '2.1.4';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
