@@ -2651,8 +2651,8 @@ body.view-as-active .app-root {
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-2) var(--sp-3);
-  background: var(--white);
-  border: 1px solid var(--slate-200);
+  background: var(--navy);
+  border: 1px solid var(--navy);
   border-radius: var(--r-md);
   margin-bottom: var(--sp-4);
 }
@@ -2661,7 +2661,7 @@ body.view-as-active .app-root {
   font-weight: 700;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: var(--slate-500);
+  color: var(--slate-300);
   flex-shrink: 0;
 }
 .ws-pinned-chips {
@@ -2681,21 +2681,21 @@ body.view-as-active .app-root {
   align-items: center;
   gap: 6px;
   padding: 5px 10px;
-  background: var(--slate-50);
-  border: 1px solid var(--slate-200);
+  background: var(--slate-800);
+  border: 1px solid var(--slate-700);
   border-radius: var(--r-round);
   font-size: 12px;
   font-weight: 500;
-  color: var(--navy);
+  color: var(--white);
   text-decoration: none;
   white-space: nowrap;
   transition: background var(--t-fast), border-color var(--t-fast);
   max-width: 220px;
 }
 .ws-pinned-chip:hover {
-  background: var(--blue-pale);
+  background: var(--blue);
   border-color: var(--blue);
-  color: var(--blue);
+  color: var(--white);
 }
 .ws-pinned-chip-icon {
   font-size: 14px;
@@ -2709,7 +2709,7 @@ body.view-as-active .app-root {
 }
 .ws-pinned-empty {
   font-size: 12px;
-  color: var(--slate-500);
+  color: var(--slate-400);
   font-style: italic;
 }
 
