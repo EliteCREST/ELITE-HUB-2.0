@@ -3201,3 +3201,116 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   pointer-events: none;
 }
 .ctr-row-skeleton:hover { background: transparent; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 6.2 — CONTRACTOR EDIT FORM / NEW MODAL / DELETE
+   ═══════════════════════════════════════════════════════════════════ */
+
+.contractors-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--sp-3);
+}
+
+/* Edit panel variant */
+.ctr-panel-edit {
+  background: var(--white);
+}
+
+.ctr-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+@media (max-width: 640px) {
+  .ctr-edit-grid { grid-template-columns: 1fr; }
+}
+
+.ctr-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.ctr-edit-field-wide {
+  grid-column: 1 / -1;
+}
+
+.ctr-edit-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--slate-600);
+  letter-spacing: 0.3px;
+}
+
+.ctr-required {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.ctr-edit-input {
+  width: 100%;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--navy);
+  background: var(--white);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.ctr-edit-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.ctr-edit-input:disabled {
+  background: var(--slate-50);
+  cursor: not-allowed;
+}
+
+.ctr-edit-hint {
+  font-size: 10px;
+  color: var(--slate-500);
+  font-style: italic;
+}
+
+.ctr-edit-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 0;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--navy);
+}
+.ctr-edit-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--blue);
+}
+
+/* Danger zone */
+.ctr-panel-danger {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3);
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: var(--r-md);
+}
+.ctr-panel-danger .ctr-panel-section-title {
+  color: var(--red);
+}
+.ctr-delete-btn {
+  color: var(--red) !important;
+  border-color: #FECACA !important;
+  background: var(--white) !important;
+}
+.ctr-delete-btn:hover {
+  background: #FEE2E2 !important;
+  border-color: var(--red) !important;
+}

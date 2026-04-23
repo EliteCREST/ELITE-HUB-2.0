@@ -3618,6 +3618,8 @@
   }
 
   route('/contractors', () => {
+    const me = getLoggedInUser();
+    const canAdd = ['angel','sam','sara','emma','carlynn'].includes(me.username);
     return `
       <div class="view contractors-view">
         <div class="contractors-header">
@@ -3625,6 +3627,7 @@
             <h1 class="view-title">Contractors</h1>
             <p class="view-sub" id="contractors-sub">Loading…</p>
           </div>
+          ${canAdd ? `<button class="btn btn-primary" onclick="openNewContractorModal()">+ New Contractor</button>` : ''}
         </div>
         ${renderContractorsBody({})}
       </div>
@@ -4168,10 +4171,411 @@
     closeContractorPanel();
   }
 
+  /* ═══════════════════════════════════════════════════════════════
+     STAGE 6.2 — CONTRACTOR EDIT / NEW / DELETE
+     ═══════════════════════════════════════════════════════════════ */
+
   function openEditContractor() {
-    showToast('Full edit UI ships in Stage 6.2', 'default');
-    // TODO: inline edit mode with the full form. Notes already work; most field editing
-    // can happen via "Edit" mode in a future iteration.
+    if (!_currentContractor) return;
+    const panel = $('#contractor-panel');
+    if (!panel) return;
+    // Render same panel in EDIT mode
+    panel.innerHTML = renderContractorEditForm(_currentContractor, /* isNew */ false);
+    panel.onclick = (e) => { if (e.target === panel) cancelContractorEdit(); };
+    // Wire up same-as-GL toggle
+    wireSameAsGlToggle();
+  }
+
+  function cancelContractorEdit() {
+    if (_currentContractor) {
+      // Revert to view mode
+      const panel = $('#contractor-panel');
+      if (panel) {
+        panel.innerHTML = renderContractorPanel(_currentContractor);
+        panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+      }
+    } else {
+      closeContractorPanel();
+    }
+  }
+
+  /**
+   * Renders the edit form (used for both Edit and New Contractor flows).
+   * If isNew=true, shows a "Create Contractor" title and save button.
+   */
+  function renderContractorEditForm(c, isNew) {
+    c = c || {};  // new contractor = blank
+    const title = isNew ? 'New Contractor' : 'Edit Contractor';
+    const saveLabel = isNew ? 'Create Contractor' : 'Save changes';
+
+    // Pre-compute same_as_gl state — if WC insurance matches GL exactly AND there's a WC policy, suggest the flag
+    const sameAsGlHint = !isNew
+      && c.gl_insurance_co && c.wc_insurance_co
+      && c.gl_insurance_co === c.wc_insurance_co;
+
+    return `
+      <div class="ctr-panel ctr-panel-edit" onclick="event.stopPropagation()">
+        <form id="ctr-edit-form" onsubmit="event.preventDefault(); submitContractorEdit(${isNew});">
+          <div class="ctr-panel-header">
+            <div class="ctr-panel-header-main">
+              <h2 class="ctr-panel-title">${escapeHtml(title)}</h2>
+              <div class="ctr-panel-subtitle">${isNew ? 'Fill in required fields (*). Other fields optional.' : 'Editing: ' + escapeHtml(c.contractor_name || '')}</div>
+            </div>
+            <button class="ctr-panel-close" type="button" onclick="cancelContractorEdit()" title="Cancel">×</button>
+          </div>
+
+          <div class="ctr-panel-actions">
+            <button class="btn btn-primary btn-sm" type="submit" id="ctr-save-btn">${escapeHtml(saveLabel)}</button>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="cancelContractorEdit()">Cancel</button>
+          </div>
+
+          <input type="hidden" name="contractor_id" value="${escapeAttr(c.contractor_id || '')}">
+
+          <div class="ctr-panel-body">
+
+            <!-- Identity -->
+            <div class="ctr-panel-section">
+              <div class="ctr-panel-section-title">Identity</div>
+              <div class="ctr-edit-grid">
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-label">Contractor name <span class="ctr-required">*</span></label>
+                  <input type="text" class="ctr-edit-input" name="contractor_name" value="${escapeAttr(c.contractor_name || '')}" required maxlength="200">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">PAY ID</label>
+                  <input type="text" class="ctr-edit-input" name="pay_id" value="${escapeAttr(c.pay_id || '')}" maxlength="50">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Status</label>
+                  <select class="ctr-edit-input" name="status">
+                    ${['active','inactive','on_hold','pending'].map(s =>
+                      `<option value="${s}" ${c.status === s ? 'selected' : ''}>${s.replace('_',' ')}</option>`
+                    ).join('')}
+                  </select>
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Source</label>
+                  <input type="text" class="ctr-edit-input" name="from_source" value="${escapeAttr(c.from_source || '')}" maxlength="50" placeholder="e.g. Paylocity">
+                </div>
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-label">Blaze URL</label>
+                  <input type="url" class="ctr-edit-input" name="blaze_url" value="${escapeAttr(c.blaze_url || '')}" maxlength="500" placeholder="https://blaze-crm.com/...">
+                </div>
+              </div>
+            </div>
+
+            <!-- Regions & Trades -->
+            <div class="ctr-panel-section">
+              <div class="ctr-panel-section-title">Regions & Trades</div>
+              <div class="ctr-edit-grid">
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-label">Regions <span class="ctr-required">*</span></label>
+                  <input type="text" class="ctr-edit-input" name="regions_raw" value="${escapeAttr(c.regions_raw || '')}" required placeholder="e.g. CHI, STL, MKE">
+                  <div class="ctr-edit-hint">Comma-separated region codes (uppercased on save)</div>
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Will travel</label>
+                  <select class="ctr-edit-input" name="will_travel">
+                    <option value="" ${!c.will_travel ? 'selected' : ''}>—</option>
+                    <option value="Yes" ${c.will_travel === 'Yes' ? 'selected' : ''}>Yes</option>
+                    <option value="No" ${c.will_travel === 'No' ? 'selected' : ''}>No</option>
+                    <option value="Local only" ${c.will_travel === 'Local only' ? 'selected' : ''}>Local only</option>
+                  </select>
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Max distance</label>
+                  <input type="text" class="ctr-edit-input" name="max_distance" value="${escapeAttr(c.max_distance || '')}" placeholder="e.g. 50 miles">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Trade 1</label>
+                  <input type="text" class="ctr-edit-input" name="trade_1" value="${escapeAttr(c.trade_1 || '')}" maxlength="50">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Trade 2</label>
+                  <input type="text" class="ctr-edit-input" name="trade_2" value="${escapeAttr(c.trade_2 || '')}" maxlength="50">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Trade 3</label>
+                  <input type="text" class="ctr-edit-input" name="trade_3" value="${escapeAttr(c.trade_3 || '')}" maxlength="50">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Trade 4</label>
+                  <input type="text" class="ctr-edit-input" name="trade_4" value="${escapeAttr(c.trade_4 || '')}" maxlength="50">
+                </div>
+              </div>
+            </div>
+
+            <!-- Contact -->
+            <div class="ctr-panel-section">
+              <div class="ctr-panel-section-title">Contact</div>
+              <div class="ctr-edit-grid">
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Contact 1 (primary)</label>
+                  <input type="text" class="ctr-edit-input" name="contact_name_1" value="${escapeAttr(c.contact_name_1 || '')}" maxlength="120">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Contact 2 (secondary)</label>
+                  <input type="text" class="ctr-edit-input" name="contact_name_2" value="${escapeAttr(c.contact_name_2 || '')}" maxlength="120">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Supervisor</label>
+                  <input type="text" class="ctr-edit-input" name="supervisor" value="${escapeAttr(c.supervisor || '')}" maxlength="120">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Phone</label>
+                  <input type="tel" class="ctr-edit-input" name="phone" value="${escapeAttr(c.phone || '')}" maxlength="50">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Email</label>
+                  <input type="email" class="ctr-edit-input" name="email" value="${escapeAttr(c.email || '')}" maxlength="200">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Orders email</label>
+                  <input type="email" class="ctr-edit-input" name="orders_email" value="${escapeAttr(c.orders_email || '')}" maxlength="200">
+                </div>
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-label">Address</label>
+                  <input type="text" class="ctr-edit-input" name="address" value="${escapeAttr(c.address || '')}" maxlength="200">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">City</label>
+                  <input type="text" class="ctr-edit-input" name="city" value="${escapeAttr(c.city || '')}" maxlength="80">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">State</label>
+                  <input type="text" class="ctr-edit-input" name="state_code" value="${escapeAttr(c.state_code || '')}" maxlength="10">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">ZIP</label>
+                  <input type="text" class="ctr-edit-input" name="zip" value="${escapeAttr(c.zip || '')}" maxlength="20">
+                </div>
+              </div>
+            </div>
+
+            <!-- GL -->
+            <div class="ctr-panel-section">
+              <div class="ctr-panel-section-title">General Liability Insurance</div>
+              <div class="ctr-edit-grid">
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">GL Policy #</label>
+                  <input type="text" class="ctr-edit-input" name="gl_policy" value="${escapeAttr(c.gl_policy || '')}" maxlength="80">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">GL Expiry (YYYY-MM-DD)</label>
+                  <input type="date" class="ctr-edit-input" name="gl_expiry" value="${escapeAttr(c.gl_expiry || '')}">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance company</label>
+                  <input type="text" class="ctr-edit-input" name="gl_insurance_co" value="${escapeAttr(c.gl_insurance_co || '')}" maxlength="150">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance contact</label>
+                  <input type="text" class="ctr-edit-input" name="gl_ins_contact" value="${escapeAttr(c.gl_ins_contact || '')}" maxlength="120">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance phone</label>
+                  <input type="tel" class="ctr-edit-input" name="gl_ins_phone" value="${escapeAttr(c.gl_ins_phone || '')}" maxlength="50">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance email</label>
+                  <input type="email" class="ctr-edit-input" name="gl_ins_email" value="${escapeAttr(c.gl_ins_email || '')}" maxlength="200">
+                </div>
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-label">Coverage for</label>
+                  <input type="text" class="ctr-edit-input" name="gl_coverage_for" value="${escapeAttr(c.gl_coverage_for || '')}" maxlength="200">
+                </div>
+              </div>
+            </div>
+
+            <!-- WC -->
+            <div class="ctr-panel-section">
+              <div class="ctr-panel-section-title">Workers Comp Insurance</div>
+              <div class="ctr-edit-grid">
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-checkbox">
+                    <input type="checkbox" name="wc_exempt" id="ctr-wc-exempt" ${c.wc_exempt ? 'checked' : ''}>
+                    <span>This contractor is WC-exempt</span>
+                  </label>
+                </div>
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-checkbox">
+                    <input type="checkbox" name="same_as_gl" id="ctr-same-as-gl" ${sameAsGlHint ? 'checked' : ''}>
+                    <span>Same insurance company as GL (auto-fill WC insurance fields)</span>
+                  </label>
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">WC Policy #</label>
+                  <input type="text" class="ctr-edit-input" name="wc_policy" value="${escapeAttr(c.wc_policy || '')}" maxlength="80">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">WC Expiry (YYYY-MM-DD)</label>
+                  <input type="date" class="ctr-edit-input" name="wc_expiry" value="${escapeAttr(c.wc_expiry || '')}">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance company</label>
+                  <input type="text" class="ctr-edit-input ctr-wc-ins-field" name="wc_insurance_co" value="${escapeAttr(c.wc_insurance_co || '')}" maxlength="150">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance contact</label>
+                  <input type="text" class="ctr-edit-input ctr-wc-ins-field" name="wc_ins_contact" value="${escapeAttr(c.wc_ins_contact || '')}" maxlength="120">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance phone</label>
+                  <input type="tel" class="ctr-edit-input ctr-wc-ins-field" name="wc_ins_phone" value="${escapeAttr(c.wc_ins_phone || '')}" maxlength="50">
+                </div>
+                <div class="ctr-edit-field">
+                  <label class="ctr-edit-label">Insurance email</label>
+                  <input type="email" class="ctr-edit-input ctr-wc-ins-field" name="wc_ins_email" value="${escapeAttr(c.wc_ins_email || '')}" maxlength="200">
+                </div>
+                <div class="ctr-edit-field ctr-edit-field-wide">
+                  <label class="ctr-edit-label">Coverage for</label>
+                  <input type="text" class="ctr-edit-input" name="wc_coverage_for" value="${escapeAttr(c.wc_coverage_for || '')}" maxlength="200">
+                </div>
+              </div>
+            </div>
+
+            <!-- Delete section (edit only, not for new) -->
+            ${!isNew ? `
+              <div class="ctr-panel-section ctr-panel-danger">
+                <div class="ctr-panel-section-title">Danger zone</div>
+                <div class="ctr-panel-note">Deleting a contractor removes all their data including notes and history. This cannot be undone.</div>
+                <button type="button" class="btn btn-secondary btn-sm ctr-delete-btn" onclick="confirmDeleteContractor()">🗑 Delete contractor</button>
+              </div>
+            ` : ''}
+
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
+  function wireSameAsGlToggle() {
+    const cb = $('#ctr-same-as-gl');
+    if (!cb) return;
+    const apply = () => {
+      const wcFields = $$('.ctr-wc-ins-field');
+      wcFields.forEach(f => {
+        f.disabled = cb.checked;
+        f.style.opacity = cb.checked ? '0.5' : '1';
+      });
+    };
+    cb.addEventListener('change', apply);
+    apply();
+  }
+
+  async function submitContractorEdit(isNew) {
+    const form = $('#ctr-edit-form');
+    if (!form) return;
+
+    const saveBtn = $('#ctr-save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+
+    // Collect all form values
+    const data = {};
+    const fd = new FormData(form);
+    for (const [key, value] of fd.entries()) {
+      data[key] = value;
+    }
+    // Checkboxes
+    data.wc_exempt  = form.querySelector('[name="wc_exempt"]').checked;
+    data.same_as_gl = form.querySelector('[name="same_as_gl"]').checked;
+
+    // Validate regions
+    if (!data.regions_raw || !data.regions_raw.trim()) {
+      showToast('Regions are required.', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = isNew ? 'Create Contractor' : 'Save changes';
+      return;
+    }
+
+    const res = await api({}, 'POST', {
+      action: 'savecontractor',
+      contractor: data,
+    });
+
+    saveBtn.disabled = false;
+    saveBtn.textContent = isNew ? 'Create Contractor' : 'Save changes';
+
+    if (res.error) {
+      showToast('Save failed: ' + res.error, 'error');
+      return;
+    }
+
+    // Invalidate local cache entries so the list reloads fresh
+    if (typeof _apiCache !== 'undefined') {
+      const keysToRemove = [];
+      _apiCache.forEach((_, key) => {
+        if (key.indexOf('resource=contractors') >= 0 || key.indexOf('resource=contractor&') >= 0 || key.indexOf('resource=contractor') === key.length - 'resource=contractor'.length) {
+          keysToRemove.push(key);
+        }
+      });
+      keysToRemove.forEach(k => _apiCache.delete(k));
+    }
+
+    showToast(isNew ? 'Contractor created' : 'Changes saved', 'success');
+
+    // Reload the list AND the detail panel
+    await loadContractorsTable({});
+    // Fetch fresh full record and show it
+    const fresh = await api({ resource: 'contractor', id: res.contractor_id });
+    if (fresh.contractor) {
+      _currentContractor = fresh.contractor;
+      const panel = $('#contractor-panel');
+      if (panel) {
+        panel.innerHTML = renderContractorPanel(_currentContractor);
+        panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+      }
+    }
+  }
+
+  async function confirmDeleteContractor() {
+    if (!_currentContractor) return;
+    const name = _currentContractor.contractor_name;
+    if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
+    // Double confirm for destructive action
+    const typed = prompt(`Type "DELETE" (all caps) to confirm deletion of ${name}:`);
+    if (typed !== 'DELETE') { showToast('Deletion cancelled', 'default'); return; }
+
+    const res = await api({}, 'POST', {
+      action: 'deletecontractor',
+      contractor_id: _currentContractor.contractor_id,
+    });
+
+    if (res.error) { showToast('Delete failed: ' + res.error, 'error'); return; }
+
+    // Invalidate cache and reload list
+    if (typeof _apiCache !== 'undefined') {
+      const keysToRemove = [];
+      _apiCache.forEach((_, key) => {
+        if (key.indexOf('resource=contractors') >= 0) keysToRemove.push(key);
+      });
+      keysToRemove.forEach(k => _apiCache.delete(k));
+    }
+
+    showToast(`Deleted ${name}`, 'success');
+    closeContractorPanel();
+    await loadContractorsTable({});
+  }
+
+  function openNewContractorModal() {
+    _currentContractor = null;
+    let panel = $('#contractor-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'contractor-panel';
+      panel.className = 'ctr-panel-backdrop';
+      document.body.appendChild(panel);
+    }
+    panel.innerHTML = renderContractorEditForm({}, /* isNew */ true);
+    panel.classList.add('open');
+    panel.onclick = (e) => { if (e.target === panel) cancelContractorEdit(); };
+    wireSameAsGlToggle();
+    // Focus name field
+    setTimeout(() => {
+      const first = $('[name="contractor_name"]');
+      if (first) first.focus();
+    }, 100);
   }
 
   route('/fleet', () => placeholder('Fleet', 'Stage 6',
