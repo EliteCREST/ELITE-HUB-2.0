@@ -3829,16 +3829,9 @@
   let _currentContractor = null;
 
   async function openContractorDetail(contractorId) {
-    // Look up from cache (faster than re-fetch) — fall back to fetch if missing
-    let c = _contractorsCache.find(x => x.contractor_id === contractorId);
-    if (!c) {
-      const res = await api({ resource: 'contractor', id: contractorId });
-      if (res.error) { showToast(res.error, 'error'); return; }
-      c = res.contractor;
-    }
-    _currentContractor = c;
-
-    // Build and show panel
+    // Show panel with a loading state immediately, then fetch full detail.
+    // The cached list item only has summary fields (_list_view=true), we need
+    // the full 42-field record for the detail view.
     let panel = $('#contractor-panel');
     if (!panel) {
       panel = document.createElement('div');
@@ -3846,11 +3839,56 @@
       panel.className = 'ctr-panel-backdrop';
       document.body.appendChild(panel);
     }
-    panel.innerHTML = renderContractorPanel(c);
-    panel.classList.add('open');
 
-    // Click outside to close
+    // Use the cached list summary to prefill the header immediately (snappy)
+    const summary = _contractorsAll.find(x => x.contractor_id === contractorId);
+    panel.innerHTML = renderContractorPanelLoading(summary);
+    panel.classList.add('open');
     panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+
+    // Fetch full record
+    const res = await api({ resource: 'contractor', id: contractorId });
+    // User may have closed the panel while request was in flight
+    if (!$('#contractor-panel') || !panel.classList.contains('open')) return;
+
+    if (res.error) {
+      showToast(res.error, 'error');
+      closeContractorPanel();
+      return;
+    }
+    _currentContractor = res.contractor;
+    panel.innerHTML = renderContractorPanel(_currentContractor);
+    panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+  }
+
+  function renderContractorPanelLoading(summary) {
+    const name = summary ? summary.contractor_name : 'Loading…';
+    const payId = summary ? (summary.pay_id || '—') : '—';
+    return `
+      <div class="ctr-panel" onclick="event.stopPropagation()">
+        <div class="ctr-panel-header">
+          <div class="ctr-panel-header-main">
+            <h2 class="ctr-panel-title">${escapeHtml(name)}</h2>
+            <div class="ctr-panel-subtitle">PAY ID ${escapeHtml(payId)}</div>
+          </div>
+          <button class="ctr-panel-close" onclick="closeContractorPanel()" title="Close">×</button>
+        </div>
+        <div class="ctr-panel-body">
+          <div class="ctr-panel-section">
+            <div class="skeleton skeleton-line" style="height:14px;width:30%;margin-bottom:10px;"></div>
+            <div class="skeleton skeleton-line" style="height:60px;width:100%;margin-bottom:10px;"></div>
+          </div>
+          <div class="ctr-panel-section">
+            <div class="skeleton skeleton-line" style="height:14px;width:20%;margin-bottom:10px;"></div>
+            <div class="skeleton skeleton-line" style="height:60px;width:100%;margin-bottom:10px;"></div>
+          </div>
+          <div class="ctr-panel-section">
+            <div class="skeleton skeleton-line" style="height:14px;width:40%;margin-bottom:10px;"></div>
+            <div class="skeleton skeleton-line" style="height:80px;width:100%;"></div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   function closeContractorPanel() {
