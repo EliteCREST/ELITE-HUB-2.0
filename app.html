@@ -501,6 +501,7 @@
   function clearSession() {
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(VIEWING_AS_KEY);
+    if (typeof _apiCache !== 'undefined') _apiCache.clear();
   }
 
   function getToken() {
@@ -521,10 +522,12 @@
     const team = TEAM_USERS.find(u => u.username === String(username).toLowerCase());
     if (!team) { clearViewingAs(); return; }
     localStorage.setItem(VIEWING_AS_KEY, JSON.stringify(team));
+    if (typeof _apiCache !== 'undefined') _apiCache.clear();
   }
 
   function clearViewingAs() {
     localStorage.removeItem(VIEWING_AS_KEY);
+    if (typeof _apiCache !== 'undefined') _apiCache.clear();
   }
 
   // Real logged-in user (ignores view-as)
@@ -616,6 +619,42 @@
     }
   });
 
+  // In-memory response cache. Key = request URL. Value = {data, timestamp}.
+  // This is what makes page-to-page navigation feel instant — we serve from
+  // this cache without fetching again if the response is younger than TTL.
+  const _apiCache = new Map();
+  const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
+
+  // Resources that should be cached on GET. Writes invalidate relevant caches.
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions'];
+
+  // Which resources to invalidate when an action happens
+  const INVALIDATE_MAP = {
+    savetask:              ['tasks','dashboard'],
+    deletetask:            ['tasks','dashboard'],
+    savewidget:            ['widgets'],
+    deletewidget:          ['widgets'],
+    savesubmission:        ['submissions','dashboard'],
+    updatesubmissionstatus:['submissions','dashboard'],
+    addreply:              ['submissions','submission','dashboard'],
+    savecontractor:        ['contractors','contractor'],
+    addcontractornote:     ['contractor'],
+    deletecontractornote:  ['contractor'],
+  };
+
+  function invalidateApiCache(resources) {
+    if (!resources || !resources.length) { _apiCache.clear(); return; }
+    const keysToDelete = [];
+    _apiCache.forEach((_, key) => {
+      resources.forEach(r => {
+        if (key.indexOf('resource=' + r + '&') >= 0 || key.indexOf('resource=' + r) === key.length - ('resource=' + r).length) {
+          keysToDelete.push(key);
+        }
+      });
+    });
+    keysToDelete.forEach(k => _apiCache.delete(k));
+  }
+
   async function api(params, method = 'GET', body = null) {
     const token = getToken();
     const viewing = getViewingAs();
@@ -639,6 +678,19 @@
       opts.body = JSON.stringify({ ...(token ? { token } : {}), ...body });
     }
 
+    const resourceName = String(mergedParams.resource || '').toLowerCase();
+    const cacheKey = url;
+    const isCacheable = method === 'GET' && CACHEABLE_RESOURCES.indexOf(resourceName) >= 0;
+
+    // CACHE HIT — serve instantly
+    if (isCacheable) {
+      const cached = _apiCache.get(cacheKey);
+      if (cached && (Date.now() - cached.timestamp) < API_CACHE_TTL_MS) {
+        _logTiming('api', method + ' ' + resourceName + ' (cache hit)', 0);
+        return cached.data;
+      }
+    }
+
     const callDetail = method + ' ' + (mergedParams.resource || (body && body.action) || '?');
     const t0 = performance.now();
     try {
@@ -655,6 +707,19 @@
         location.href = 'login.html?expired=1';
         return { error: 'Session expired' };
       }
+
+      // Cache successful GETs
+      if (isCacheable && !data.error) {
+        _apiCache.set(cacheKey, { data: data, timestamp: Date.now() });
+      }
+
+      // Invalidate cache entries affected by this write
+      if (method === 'POST' && body && body.action) {
+        const actionKey = String(body.action).toLowerCase();
+        const toInvalidate = INVALIDATE_MAP[actionKey];
+        if (toInvalidate) invalidateApiCache(toInvalidate);
+      }
+
       return data;
     } catch (err) {
       _logTiming('api', callDetail + ' FAILED: ' + err.message, performance.now() - t0);
