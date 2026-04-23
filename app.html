@@ -3412,29 +3412,529 @@
     renderContacts();
   }
 
-  route('/region/:code', ({ code }) => {
+  route('/region/:code', (params) => {
+    const code = params.code;
     const region = REGIONS.find(r => r.code === code.toLowerCase());
-    return placeholder(`Region: ${region ? region.name : code.toUpperCase()}`, 'Stage 6',
-      'Single regional hub view, driven by the region code from the URL.',
-      [
-        'Region header with health score + trend',
-        'Sub-nav: Compliance · Fleet · Legal · Reviews · Documents · Activity',
-        'Region activity feed (REGION_CHAT)',
-        'Region switcher dropdown',
-        `Currently viewing: ${region ? region.name : code.toUpperCase()}`,
-      ]
-    );
-  }, { title: 'Region' });
+    if (!region) return render404('/region/' + code);
+    const regionCode = region.code;
+    const regionName = region.name;
+    const tab = params.tab || 'overview';
 
-  route('/contractors', () => placeholder('Contractors', 'Stage 4',
-    'Cross-region contractor view — GL/WC expirations, clearance workflow.',
-    [
-      'Search and filter across all regions',
-      'GL/WC expiry alerts',
-      '8-step clearance workflow tracker',
-      'Bulk operations',
-    ]
-  ), { title: 'Contractors' });
+    const tabs = [
+      { key: 'overview',   label: 'Overview' },
+      { key: 'compliance', label: 'Compliance' },
+      { key: 'fleet',      label: 'Fleet' },
+      { key: 'reviews',    label: 'Reviews' },
+      { key: 'legal',      label: 'Legal' },
+    ];
+
+    return `
+      <div class="view region-view">
+        <div class="region-header">
+          <h1 class="view-title">${escapeHtml(regionName)}</h1>
+          <p class="view-sub">Region: ${regionCode.toUpperCase()}</p>
+        </div>
+
+        <div class="inbox-tabs">
+          ${tabs.map(t => `<a class="inbox-tab ${tab === t.key ? 'active' : ''}" href="#/region/${regionCode}?tab=${t.key}">
+            <span class="inbox-tab-label">${escapeHtml(t.label)}</span>
+          </a>`).join('')}
+        </div>
+
+        <div id="region-tab-body">
+          ${renderRegionTabBody(tab, regionCode)}
+        </div>
+      </div>
+    `;
+  }, {
+    title: 'Region',
+    onAfterRender: (params) => {
+      const tab = params.tab || 'overview';
+      if (tab === 'compliance') loadContractorsTable({ region: params.code.toUpperCase() });
+    }
+  });
+
+  function renderRegionTabBody(tab, regionCode) {
+    if (tab === 'compliance') {
+      return renderContractorsBody({ regionCode: regionCode });
+    }
+    // other tabs — placeholders until later stages
+    const labels = {
+      overview: 'Overview',
+      fleet:    'Fleet',
+      reviews:  'Reviews',
+      legal:    'Legal',
+    };
+    return `<div class="view-section">
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">${labels[tab] || tab}</div>
+        <div class="card-sub">Coming in a future stage.</div></div></div>
+      </div>
+    </div>`;
+  }
+
+  route('/contractors', () => {
+    return `
+      <div class="view contractors-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Contractors</h1>
+            <p class="view-sub" id="contractors-sub">Loading…</p>
+          </div>
+        </div>
+        ${renderContractorsBody({})}
+      </div>
+    `;
+  }, {
+    title: 'Contractors',
+    onAfterRender: () => loadContractorsTable({})
+  });
+
+  /**
+   * Returns the HTML for the contractors table section.
+   * Used both for the admin /contractors page AND for the region compliance tab.
+   * options.regionCode → pin to a single region
+   */
+  function renderContractorsBody(options) {
+    options = options || {};
+    const isRegionScoped = !!options.regionCode;
+    return `
+      <div class="contractors-toolbar">
+        <input type="text" id="ctr-search" class="ctr-filter-input" placeholder="Search by name, PAY ID, or contact…" oninput="debouncedLoadContractors()">
+        ${!isRegionScoped ? `
+          <select id="ctr-region" class="ctr-filter-select" onchange="loadContractorsTable({})">
+            <option value="">All regions</option>
+            ${REGIONS.map(r => `<option value="${r.code.toUpperCase()}">${escapeHtml(r.name)}</option>`).join('')}
+          </select>
+        ` : `<input type="hidden" id="ctr-region" value="${escapeAttr(options.regionCode.toUpperCase())}">`}
+        <select id="ctr-gl-status" class="ctr-filter-select" onchange="loadContractorsTable({})">
+          <option value="">All GL</option>
+          <option value="expired">Expired</option>
+          <option value="expiring_soon">Expiring soon</option>
+          <option value="ok">OK</option>
+          <option value="missing">Missing</option>
+        </select>
+        <select id="ctr-wc-status" class="ctr-filter-select" onchange="loadContractorsTable({})">
+          <option value="">All WC</option>
+          <option value="expired">Expired</option>
+          <option value="expiring_soon">Expiring soon</option>
+          <option value="ok">OK</option>
+          <option value="exempt">Exempt</option>
+          <option value="missing">Missing</option>
+        </select>
+      </div>
+
+      <div class="contractors-summary" id="contractors-summary"></div>
+
+      <div class="contractors-list-wrap">
+        <div class="contractors-list" id="contractors-list">
+          <div class="skeleton skeleton-line" style="height:44px;margin-bottom:6px;"></div>
+          <div class="skeleton skeleton-line" style="height:44px;margin-bottom:6px;"></div>
+          <div class="skeleton skeleton-line" style="height:44px;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     CONTRACTORS — list + detail panel (Stage 6.1b)
+     ═══════════════════════════════════════════════════════════════ */
+
+  let _contractorsCache = [];
+  let _contractorsThresholds = { gl_expiring_days: 30, wc_expiring_days: 30 };
+  let _contractorsLoadTimer = null;
+
+  function debouncedLoadContractors() {
+    if (_contractorsLoadTimer) clearTimeout(_contractorsLoadTimer);
+    _contractorsLoadTimer = setTimeout(() => loadContractorsTable({}), 250);
+  }
+
+  async function loadContractorsTable(overrides) {
+    overrides = overrides || {};
+    const listEl = $('#contractors-list');
+    if (!listEl) return;
+
+    const regionVal = overrides.region !== undefined ? overrides.region : ($('#ctr-region') ? $('#ctr-region').value : '');
+    const glStatus = $('#ctr-gl-status') ? $('#ctr-gl-status').value : '';
+    const wcStatus = $('#ctr-wc-status') ? $('#ctr-wc-status').value : '';
+    const search = $('#ctr-search') ? $('#ctr-search').value.trim() : '';
+
+    const params = { resource: 'contractors' };
+    if (regionVal)  params.region = regionVal;
+    if (glStatus)   params.gl_status = glStatus;
+    if (wcStatus)   params.wc_status = wcStatus;
+    if (search)     params.search = search;
+
+    const res = await api(params);
+    if (!$('#contractors-list')) return;  // navigated away
+
+    if (res.error) {
+      listEl.innerHTML = `<div class="card" style="border-color:var(--red);">
+        <div style="color:var(--red);font-weight:600;">⚠ ${escapeHtml(res.error)}</div>
+      </div>`;
+      return;
+    }
+
+    _contractorsCache = res.items || [];
+    _contractorsThresholds = res.thresholds || { gl_expiring_days: 30, wc_expiring_days: 30 };
+
+    renderContractorsSummary();
+    renderContractorsList(_contractorsCache);
+
+    const subEl = $('#contractors-sub');
+    if (subEl) {
+      const n = _contractorsCache.length;
+      subEl.textContent = n === 0
+        ? 'No contractors match these filters.'
+        : `${n} contractor${n === 1 ? '' : 's'} · sorted by soonest expiry`;
+    }
+  }
+
+  function renderContractorsSummary() {
+    const el = $('#contractors-summary');
+    if (!el) return;
+    const total = _contractorsCache.length;
+    if (total === 0) { el.innerHTML = ''; return; }
+    const glExpired = _contractorsCache.filter(c => c.gl_status === 'expired').length;
+    const glExpSoon = _contractorsCache.filter(c => c.gl_status === 'expiring_soon').length;
+    const wcExempt  = _contractorsCache.filter(c => c.wc_status === 'exempt').length;
+    const wcExpired = _contractorsCache.filter(c => c.wc_status === 'expired').length;
+    const wcExpSoon = _contractorsCache.filter(c => c.wc_status === 'expiring_soon').length;
+    el.innerHTML = `
+      <span class="ctr-summary-item"><strong>${total}</strong> total</span>
+      ${glExpired ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('gl_status','expired')">${glExpired} GL expired</a>` : ''}
+      ${glExpSoon ? `<a class="ctr-summary-item ctr-summary-amber"  href="javascript:filterByStatus('gl_status','expiring_soon')">${glExpSoon} GL expiring soon</a>` : ''}
+      ${wcExpired ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('wc_status','expired')">${wcExpired} WC expired</a>` : ''}
+      ${wcExpSoon ? `<a class="ctr-summary-item ctr-summary-amber"  href="javascript:filterByStatus('wc_status','expiring_soon')">${wcExpSoon} WC expiring soon</a>` : ''}
+      ${wcExempt  ? `<span class="ctr-summary-item">${wcExempt} WC exempt</span>` : ''}
+    `;
+  }
+
+  function filterByStatus(which, value) {
+    const el = $('#ctr-' + which.replace('_','-'));
+    if (!el) return;
+    el.value = value;
+    loadContractorsTable({});
+  }
+
+  function renderContractorsList(items) {
+    const listEl = $('#contractors-list');
+    if (!listEl) return;
+    if (items.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-title">No contractors match</div>
+        <div class="empty-state-sub">Try clearing filters or adjusting your search.</div>
+      </div>`;
+      return;
+    }
+
+    listEl.innerHTML = items.map(c => renderContractorRow(c)).join('');
+  }
+
+  function renderContractorRow(c) {
+    const regionChips = (c.regions || []).map(r => `<span class="pill" style="padding:1px 6px;font-size:10px;">${escapeHtml(r)}</span>`).join(' ');
+    const glPill = renderStatusPill('GL', c.gl_status, c.gl_expiry);
+    const wcPill = renderStatusPill('WC', c.wc_status, c.wc_expiry);
+
+    const headline = c.headline_expiry
+      ? `<span class="ctr-headline ctr-headline-${getExpiryUrgency(c.headline_expiry.date)}">${escapeHtml(c.headline_expiry.type)} ${escapeHtml(formatFriendlyDate(c.headline_expiry.date))}</span>`
+      : '<span class="ctr-headline-none">—</span>';
+
+    const lastUpdated = c.last_updated ? formatRelativeTime(c.last_updated) : '—';
+    const updatedBy = c.updated_by && c.updated_by !== 'migration' && c.updated_by !== 'system'
+      ? ` · ${escapeHtml(c.updated_by)}` : '';
+
+    return `
+      <div class="ctr-row" onclick="openContractorDetail('${escapeAttr(c.contractor_id)}')">
+        <div class="ctr-row-name">
+          <div class="ctr-row-name-text">${escapeHtml(c.contractor_name)}</div>
+          <div class="ctr-row-pay-id">PAY ID ${escapeHtml(c.pay_id || '—')}</div>
+        </div>
+        <div class="ctr-row-regions">${regionChips}</div>
+        <div class="ctr-row-gl">${glPill}</div>
+        <div class="ctr-row-wc">${wcPill}</div>
+        <div class="ctr-row-headline">${headline}</div>
+        <div class="ctr-row-updated">${escapeHtml(lastUpdated)}${updatedBy}</div>
+      </div>
+    `;
+  }
+
+  function renderStatusPill(kind, status, expiry) {
+    const labels = {
+      ok:            'OK',
+      expiring_soon: 'Expiring',
+      expired:       'Expired',
+      exempt:        'Exempt',
+      missing:       'Missing',
+    };
+    const label = labels[status] || status;
+    return `<span class="ctr-pill ctr-pill-${escapeAttr(status)}" title="${escapeAttr(kind + ' ' + label + (expiry ? ' · ' + formatFriendlyDate(expiry) : ''))}">
+      <span class="ctr-pill-dot"></span>${escapeHtml(label)}
+    </span>`;
+  }
+
+  function getExpiryUrgency(iso) {
+    if (!iso) return 'none';
+    const d = new Date(iso + 'T00:00:00');
+    if (isNaN(d)) return 'none';
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diff = Math.floor((d - today) / 86400000);
+    if (diff < 0) return 'expired';
+    if (diff <= 30) return 'soon';
+    return 'ok';
+  }
+
+
+  /* ─── Contractor detail panel ─────────────────────────────── */
+
+  let _currentContractor = null;
+
+  async function openContractorDetail(contractorId) {
+    // Look up from cache (faster than re-fetch) — fall back to fetch if missing
+    let c = _contractorsCache.find(x => x.contractor_id === contractorId);
+    if (!c) {
+      const res = await api({ resource: 'contractor', id: contractorId });
+      if (res.error) { showToast(res.error, 'error'); return; }
+      c = res.contractor;
+    }
+    _currentContractor = c;
+
+    // Build and show panel
+    let panel = $('#contractor-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'contractor-panel';
+      panel.className = 'ctr-panel-backdrop';
+      document.body.appendChild(panel);
+    }
+    panel.innerHTML = renderContractorPanel(c);
+    panel.classList.add('open');
+
+    // Click outside to close
+    panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+  }
+
+  function closeContractorPanel() {
+    const panel = $('#contractor-panel');
+    if (!panel) return;
+    panel.classList.remove('open');
+    _currentContractor = null;
+  }
+
+  function renderContractorPanel(c) {
+    const me = getLoggedInUser();
+    const isComplianceTeam = ['angel','sam','sara','emma','carlynn'].includes(me.username);
+    const canEdit = isComplianceTeam;
+
+    const regionChips = (c.regions || []).map(r => `<span class="pill" style="font-size:10px;">${escapeHtml(r)}</span>`).join(' ');
+    const tradesChips = [c.trade_1, c.trade_2, c.trade_3, c.trade_4]
+      .filter(Boolean).map(t => `<span class="pill" style="font-size:10px;">${escapeHtml(t)}</span>`).join(' ');
+
+    const notesHtml = (c.notes || []).length === 0
+      ? '<div class="ctr-panel-empty">No notes yet.</div>'
+      : c.notes.slice().reverse().map(n => `
+        <div class="ctr-note-item">
+          <div class="ctr-note-header">
+            <strong>${escapeHtml(n.author || 'unknown')}</strong>
+            <span class="ctr-note-time">${escapeHtml(formatRelativeTime(n.created_at))}</span>
+            ${canEdit ? `<button class="ctr-note-del" title="Delete" onclick="deleteContractorNote('${escapeAttr(n.id)}')">×</button>` : ''}
+          </div>
+          <div class="ctr-note-body">${escapeHtml(n.text).replace(/\n/g,'<br>')}</div>
+        </div>
+      `).join('');
+
+    const eventsHtml = (c.events || []).length === 0
+      ? '<div class="ctr-panel-empty">No events yet.</div>'
+      : c.events.slice().reverse().slice(0, 20).map(e => {
+        let desc = '';
+        if (e.type === 'created') desc = 'Contractor created';
+        else if (e.type === 'field_change') desc = `${e.label}: <em>${escapeHtml(e.old || '(blank)')}</em> → <strong>${escapeHtml(e.new || '(blank)')}</strong>`;
+        else desc = e.type;
+        return `<div class="ctr-event-item">
+          <span class="ctr-event-time">${escapeHtml(formatRelativeTime(e.created_at))}</span>
+          <span class="ctr-event-actor">${escapeHtml(e.actor || 'system')}</span>
+          <span class="ctr-event-desc">${desc}</span>
+        </div>`;
+      }).join('');
+
+    return `
+      <div class="ctr-panel" onclick="event.stopPropagation()">
+        <div class="ctr-panel-header">
+          <div class="ctr-panel-header-main">
+            <h2 class="ctr-panel-title">${escapeHtml(c.contractor_name)}</h2>
+            <div class="ctr-panel-subtitle">
+              PAY ID ${escapeHtml(c.pay_id || '—')}${c.from_source ? ' · ' + escapeHtml(c.from_source) : ''}${c.status ? ' · ' + escapeHtml(c.status) : ''}
+            </div>
+            <div class="ctr-panel-pills">
+              ${renderStatusPill('GL', c.gl_status, c.gl_expiry)}
+              ${renderStatusPill('WC', c.wc_status, c.wc_expiry)}
+              ${c.blaze_url ? `<a class="ctr-panel-link" href="${escapeAttr(c.blaze_url)}" target="_blank" rel="noopener">Blaze ↗</a>` : ''}
+            </div>
+          </div>
+          <button class="ctr-panel-close" onclick="closeContractorPanel()" title="Close">×</button>
+        </div>
+
+        <div class="ctr-panel-actions">
+          <button class="btn btn-primary btn-sm" onclick="contractorSendNote()">📬 Send note to compliance</button>
+          ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openEditContractor()">✎ Edit</button>` : ''}
+        </div>
+
+        <div class="ctr-panel-body">
+
+          <!-- Regions / Trades -->
+          <div class="ctr-panel-section">
+            <div class="ctr-panel-section-title">Regions & Trades</div>
+            <div class="ctr-panel-grid">
+              <div><div class="ctr-panel-label">Regions</div><div class="ctr-panel-value">${regionChips || '—'}</div></div>
+              <div><div class="ctr-panel-label">Trades</div><div class="ctr-panel-value">${tradesChips || '—'}</div></div>
+              <div><div class="ctr-panel-label">Will travel</div><div class="ctr-panel-value">${escapeHtml(c.will_travel || '—')}</div></div>
+              <div><div class="ctr-panel-label">Max distance</div><div class="ctr-panel-value">${escapeHtml(c.max_distance || '—')}</div></div>
+            </div>
+          </div>
+
+          <!-- Contact -->
+          <div class="ctr-panel-section">
+            <div class="ctr-panel-section-title">Contact</div>
+            <div class="ctr-panel-grid">
+              <div><div class="ctr-panel-label">Contact 1</div><div class="ctr-panel-value">${escapeHtml(c.contact_name_1 || '—')}</div></div>
+              <div><div class="ctr-panel-label">Contact 2</div><div class="ctr-panel-value">${escapeHtml(c.contact_name_2 || '—')}</div></div>
+              <div><div class="ctr-panel-label">Supervisor</div><div class="ctr-panel-value">${escapeHtml(c.supervisor || '—')}</div></div>
+              <div><div class="ctr-panel-label">Phone</div>${renderCopyable(c.phone)}</div>
+              <div><div class="ctr-panel-label">Email</div>${renderCopyable(c.email)}</div>
+              <div><div class="ctr-panel-label">Orders email</div>${renderCopyable(c.orders_email)}</div>
+            </div>
+            ${c.address ? `<div class="ctr-panel-address"><strong>Address:</strong> ${escapeHtml(c.address)}, ${escapeHtml(c.city || '')} ${escapeHtml(c.state_code || '')} ${escapeHtml(c.zip || '')}</div>` : ''}
+          </div>
+
+          <!-- GL -->
+          <div class="ctr-panel-section">
+            <div class="ctr-panel-section-title">General Liability</div>
+            <div class="ctr-panel-grid">
+              <div><div class="ctr-panel-label">Policy</div><div class="ctr-panel-value">${escapeHtml(c.gl_policy || '—')}</div></div>
+              <div><div class="ctr-panel-label">Expiry</div><div class="ctr-panel-value">${escapeHtml(c.gl_expiry ? formatFriendlyDate(c.gl_expiry) : '—')}</div></div>
+              <div><div class="ctr-panel-label">Insurance company</div><div class="ctr-panel-value">${escapeHtml(c.gl_insurance_co || '—')}</div></div>
+              <div><div class="ctr-panel-label">Insurance contact</div><div class="ctr-panel-value">${escapeHtml(c.gl_ins_contact || '—')}</div></div>
+              <div><div class="ctr-panel-label">Ins. phone</div>${renderCopyable(c.gl_ins_phone)}</div>
+              <div><div class="ctr-panel-label">Ins. email</div>${renderCopyable(c.gl_ins_email)}</div>
+              <div><div class="ctr-panel-label">Coverage for</div><div class="ctr-panel-value">${escapeHtml(c.gl_coverage_for || '—')}</div></div>
+            </div>
+          </div>
+
+          <!-- WC -->
+          <div class="ctr-panel-section">
+            <div class="ctr-panel-section-title">Workers Comp ${c.wc_exempt ? '<span class="pill" style="font-size:10px;background:var(--slate-200);">EXEMPT</span>' : ''}</div>
+            ${c.wc_exempt ? '<div class="ctr-panel-note">This contractor is marked WC-exempt. Policy fields may not apply.</div>' : ''}
+            <div class="ctr-panel-grid">
+              <div><div class="ctr-panel-label">Policy</div><div class="ctr-panel-value">${escapeHtml(c.wc_policy || '—')}</div></div>
+              <div><div class="ctr-panel-label">Expiry</div><div class="ctr-panel-value">${escapeHtml(c.wc_expiry ? formatFriendlyDate(c.wc_expiry) : '—')}</div></div>
+              <div><div class="ctr-panel-label">Insurance company</div><div class="ctr-panel-value">${escapeHtml(c.wc_insurance_co || '—')}</div></div>
+              <div><div class="ctr-panel-label">Insurance contact</div><div class="ctr-panel-value">${escapeHtml(c.wc_ins_contact || '—')}</div></div>
+              <div><div class="ctr-panel-label">Ins. phone</div>${renderCopyable(c.wc_ins_phone)}</div>
+              <div><div class="ctr-panel-label">Ins. email</div>${renderCopyable(c.wc_ins_email)}</div>
+              <div><div class="ctr-panel-label">Coverage for</div><div class="ctr-panel-value">${escapeHtml(c.wc_coverage_for || '—')}</div></div>
+            </div>
+          </div>
+
+          <!-- Notes -->
+          <div class="ctr-panel-section">
+            <div class="ctr-panel-section-title">Notes (${(c.notes || []).length})</div>
+            <div class="ctr-notes-add">
+              <textarea id="ctr-new-note" class="ctr-note-textarea" placeholder="Add a note… (Ctrl+Enter to save)" rows="2" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();addContractorNoteFromPanel();}"></textarea>
+              <button class="btn btn-primary btn-sm" onclick="addContractorNoteFromPanel()">Add note</button>
+            </div>
+            <div class="ctr-notes-list">${notesHtml}</div>
+          </div>
+
+          <!-- Events log -->
+          <div class="ctr-panel-section">
+            <div class="ctr-panel-section-title">Recent events</div>
+            <div class="ctr-events-list">${eventsHtml}</div>
+          </div>
+
+        </div>
+      </div>
+    `;
+  }
+
+  function renderCopyable(value) {
+    if (!value) return '<div class="ctr-panel-value">—</div>';
+    return `<div class="ctr-panel-value ctr-copyable" onclick="copyToClipboard('${escapeAttr(value)}')" title="Click to copy">
+      ${escapeHtml(value)} <span class="ctr-copy-icon">📋</span>
+    </div>`;
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Copied: ' + text.slice(0, 40), 'success');
+    } catch (e) {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); showToast('Copied', 'success'); }
+      catch { showToast('Copy failed', 'error'); }
+      document.body.removeChild(ta);
+    }
+  }
+
+  async function addContractorNoteFromPanel() {
+    if (!_currentContractor) return;
+    const ta = $('#ctr-new-note');
+    const text = ta.value.trim();
+    if (!text) { ta.focus(); return; }
+
+    const res = await api({}, 'POST', {
+      action: 'addcontractornote',
+      contractor_id: _currentContractor.id || _currentContractor.contractor_id,
+      text: text,
+    });
+    if (res.error) { showToast('Failed: ' + res.error, 'error'); return; }
+
+    // Append locally and re-render panel
+    _currentContractor.notes = _currentContractor.notes || [];
+    _currentContractor.notes.push(res.note);
+    ta.value = '';
+    const panel = $('#contractor-panel');
+    panel.innerHTML = renderContractorPanel(_currentContractor);
+    panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+    showToast('Note added', 'success');
+  }
+
+  async function deleteContractorNote(noteId) {
+    if (!_currentContractor) return;
+    if (!confirm('Delete this note?')) return;
+    const res = await api({}, 'POST', {
+      action: 'deletecontractornote',
+      contractor_id: _currentContractor.contractor_id,
+      note_id: noteId,
+    });
+    if (res.error) { showToast('Failed: ' + res.error, 'error'); return; }
+    _currentContractor.notes = (_currentContractor.notes || []).filter(n => n.id !== noteId);
+    const panel = $('#contractor-panel');
+    panel.innerHTML = renderContractorPanel(_currentContractor);
+    panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+  }
+
+  function contractorSendNote() {
+    if (!_currentContractor) return;
+    const c = _currentContractor;
+    // Pre-fill submission modal with compliance source + first region
+    const defaultRegion = (c.regions && c.regions[0]) ? c.regions[0].toLowerCase() : '';
+    openNewSubmissionModal({
+      source: 'compliance',
+      region: defaultRegion,
+      subject: 'Re: ' + c.contractor_name + ' (PAY ID ' + (c.pay_id || '—') + ')',
+      priority: 'med',
+    });
+    closeContractorPanel();
+  }
+
+  function openEditContractor() {
+    showToast('Full edit UI ships in Stage 6.2', 'default');
+    // TODO: inline edit mode with the full form. Notes already work; most field editing
+    // can happen via "Edit" mode in a future iteration.
+  }
 
   route('/fleet', () => placeholder('Fleet', 'Stage 6',
     'Cross-region fleet view — vehicles, maintenance, driver compliance, scoring.',
