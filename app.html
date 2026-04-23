@@ -3502,19 +3502,19 @@
       <div class="contractors-toolbar">
         <input type="text" id="ctr-search" class="ctr-filter-input" placeholder="Search by name, PAY ID, or contact…" oninput="debouncedLoadContractors()">
         ${!isRegionScoped ? `
-          <select id="ctr-region" class="ctr-filter-select" onchange="loadContractorsTable({})">
+          <select id="ctr-region" class="ctr-filter-select" onchange="applyContractorFilters()">
             <option value="">All regions</option>
             ${REGIONS.map(r => `<option value="${r.code.toUpperCase()}">${escapeHtml(r.name)}</option>`).join('')}
           </select>
         ` : `<input type="hidden" id="ctr-region" value="${escapeAttr(options.regionCode.toUpperCase())}">`}
-        <select id="ctr-gl-status" class="ctr-filter-select" onchange="loadContractorsTable({})">
+        <select id="ctr-gl-status" class="ctr-filter-select" onchange="applyContractorFilters()">
           <option value="">All GL</option>
           <option value="expired">Expired</option>
           <option value="expiring_soon">Expiring soon</option>
           <option value="ok">OK</option>
           <option value="missing">Missing</option>
         </select>
-        <select id="ctr-wc-status" class="ctr-filter-select" onchange="loadContractorsTable({})">
+        <select id="ctr-wc-status" class="ctr-filter-select" onchange="applyContractorFilters()">
           <option value="">All WC</option>
           <option value="expired">Expired</option>
           <option value="expiring_soon">Expiring soon</option>
@@ -3540,30 +3540,33 @@
      CONTRACTORS — list + detail panel (Stage 6.1b)
      ═══════════════════════════════════════════════════════════════ */
 
-  let _contractorsCache = [];
+  let _contractorsCache = [];              // filtered view (what's currently displayed)
+  let _contractorsAll = [];                 // everything fetched once
   let _contractorsThresholds = { gl_expiring_days: 30, wc_expiring_days: 30 };
   let _contractorsLoadTimer = null;
+  let _contractorsScopedRegion = null;      // when on a region page, fixed to that region
 
   function debouncedLoadContractors() {
     if (_contractorsLoadTimer) clearTimeout(_contractorsLoadTimer);
-    _contractorsLoadTimer = setTimeout(() => loadContractorsTable({}), 250);
+    _contractorsLoadTimer = setTimeout(() => applyContractorFilters(), 80);
   }
 
+  /**
+   * Fetch all contractors ONCE (scoped to region if on a region page),
+   * then subsequent filter/search changes are client-side — instant.
+   */
   async function loadContractorsTable(overrides) {
     overrides = overrides || {};
     const listEl = $('#contractors-list');
     if (!listEl) return;
 
-    const regionVal = overrides.region !== undefined ? overrides.region : ($('#ctr-region') ? $('#ctr-region').value : '');
-    const glStatus = $('#ctr-gl-status') ? $('#ctr-gl-status').value : '';
-    const wcStatus = $('#ctr-wc-status') ? $('#ctr-wc-status').value : '';
-    const search = $('#ctr-search') ? $('#ctr-search').value.trim() : '';
+    // First call sets the region scope (admin page = null, region page = pinned)
+    if (overrides.region !== undefined) {
+      _contractorsScopedRegion = overrides.region || null;
+    }
 
     const params = { resource: 'contractors' };
-    if (regionVal)  params.region = regionVal;
-    if (glStatus)   params.gl_status = glStatus;
-    if (wcStatus)   params.wc_status = wcStatus;
-    if (search)     params.search = search;
+    if (_contractorsScopedRegion) params.region = _contractorsScopedRegion;
 
     const res = await api(params);
     if (!$('#contractors-list')) return;  // navigated away
@@ -3575,37 +3578,76 @@
       return;
     }
 
-    _contractorsCache = res.items || [];
+    _contractorsAll = res.items || [];
     _contractorsThresholds = res.thresholds || { gl_expiring_days: 30, wc_expiring_days: 30 };
 
+    applyContractorFilters();
+  }
+
+  /**
+   * Apply current filter/search state to _contractorsAll — instant, no API call.
+   */
+  function applyContractorFilters() {
+    const regionVal = $('#ctr-region') ? ($('#ctr-region').value || '') : '';
+    const glStatus  = $('#ctr-gl-status') ? $('#ctr-gl-status').value : '';
+    const wcStatus  = $('#ctr-wc-status') ? $('#ctr-wc-status').value : '';
+    const search    = $('#ctr-search') ? $('#ctr-search').value.trim().toLowerCase() : '';
+
+    let filtered = _contractorsAll.slice();
+
+    // If we're on the admin page (not region-scoped), the region dropdown further filters
+    if (!_contractorsScopedRegion && regionVal) {
+      const rc = regionVal.toUpperCase();
+      filtered = filtered.filter(c => (c.regions || []).indexOf(rc) >= 0);
+    }
+    if (glStatus) filtered = filtered.filter(c => c.gl_status === glStatus);
+    if (wcStatus) filtered = filtered.filter(c => c.wc_status === wcStatus);
+    if (search) {
+      filtered = filtered.filter(c =>
+        c.contractor_name.toLowerCase().includes(search) ||
+        (c.pay_id || '').toLowerCase().includes(search) ||
+        (c.contact_name_1 || '').toLowerCase().includes(search) ||
+        (c.contact_name_2 || '').toLowerCase().includes(search) ||
+        (c.email || '').toLowerCase().includes(search)
+      );
+    }
+
+    _contractorsCache = filtered;
+
     renderContractorsSummary();
-    renderContractorsList(_contractorsCache);
+    renderContractorsList(filtered);
 
     const subEl = $('#contractors-sub');
     if (subEl) {
-      const n = _contractorsCache.length;
-      subEl.textContent = n === 0
-        ? 'No contractors match these filters.'
-        : `${n} contractor${n === 1 ? '' : 's'} · sorted by soonest expiry`;
+      const n = filtered.length;
+      const total = _contractorsAll.length;
+      subEl.textContent = n === total
+        ? `${total} contractor${total === 1 ? '' : 's'} · sorted by soonest expiry`
+        : `${n} of ${total} · sorted by soonest expiry`;
     }
   }
 
   function renderContractorsSummary() {
     const el = $('#contractors-summary');
     if (!el) return;
-    const total = _contractorsCache.length;
+    const source = _contractorsAll;
+    const total = source.length;
     if (total === 0) { el.innerHTML = ''; return; }
-    const glExpired = _contractorsCache.filter(c => c.gl_status === 'expired').length;
-    const glExpSoon = _contractorsCache.filter(c => c.gl_status === 'expiring_soon').length;
-    const wcExempt  = _contractorsCache.filter(c => c.wc_status === 'exempt').length;
-    const wcExpired = _contractorsCache.filter(c => c.wc_status === 'expired').length;
-    const wcExpSoon = _contractorsCache.filter(c => c.wc_status === 'expiring_soon').length;
+    const glExpired = source.filter(c => c.gl_status === 'expired').length;
+    const glExpSoon = source.filter(c => c.gl_status === 'expiring_soon').length;
+    const glMissing = source.filter(c => c.gl_status === 'missing').length;
+    const wcExempt  = source.filter(c => c.wc_status === 'exempt').length;
+    const wcExpired = source.filter(c => c.wc_status === 'expired').length;
+    const wcExpSoon = source.filter(c => c.wc_status === 'expiring_soon').length;
+    const wcMissing = source.filter(c => c.wc_status === 'missing').length;
     el.innerHTML = `
       <span class="ctr-summary-item"><strong>${total}</strong> total</span>
       ${glExpired ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('gl_status','expired')">${glExpired} GL expired</a>` : ''}
       ${glExpSoon ? `<a class="ctr-summary-item ctr-summary-amber"  href="javascript:filterByStatus('gl_status','expiring_soon')">${glExpSoon} GL expiring soon</a>` : ''}
+      ${glMissing ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('gl_status','missing')">${glMissing} GL missing</a>` : ''}
       ${wcExpired ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('wc_status','expired')">${wcExpired} WC expired</a>` : ''}
       ${wcExpSoon ? `<a class="ctr-summary-item ctr-summary-amber"  href="javascript:filterByStatus('wc_status','expiring_soon')">${wcExpSoon} WC expiring soon</a>` : ''}
+      ${wcMissing ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('wc_status','missing')">${wcMissing} WC missing</a>` : ''}
       ${wcExempt  ? `<span class="ctr-summary-item">${wcExempt} WC exempt</span>` : ''}
     `;
   }
@@ -3614,7 +3656,7 @@
     const el = $('#ctr-' + which.replace('_','-'));
     if (!el) return;
     el.value = value;
-    loadContractorsTable({});
+    applyContractorFilters();
   }
 
   function renderContractorsList(items) {
