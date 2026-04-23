@@ -548,14 +548,27 @@
   }
 
   function resolveRoute() {
-    let path = (location.hash || '#/home').replace(/^#/, '');
+    let hash = (location.hash || '#/home').replace(/^#/, '');
+    // Split path and query string
+    let queryParams = {};
+    const qIdx = hash.indexOf('?');
+    if (qIdx >= 0) {
+      const queryStr = hash.slice(qIdx + 1);
+      hash = hash.slice(0, qIdx);
+      queryStr.split('&').forEach(pair => {
+        if (!pair) return;
+        const [k, v] = pair.split('=');
+        queryParams[decodeURIComponent(k || '')] = decodeURIComponent(v || '');
+      });
+    }
+    let path = hash;
     if (!path.startsWith('/')) path = '/' + path;
     if (path === '/') path = '/home';
 
     for (const r of routes) {
       const match = path.match(r.re);
       if (match) {
-        const params = {};
+        const params = { ...queryParams };
         r.keys.forEach((k, i) => params[k] = decodeURIComponent(match[i + 1]));
         renderView(r, params, path);
         return;
@@ -981,17 +994,283 @@
 
 
   /* ─── Placeholders ────────────────────────────────────────── */
-  route('/inbox', () => placeholder('Compliance Inbox', 'Stage 4',
-    'Central workflow — review notifications, contractor notifications, team activity.',
+  route('/inbox', (params) => {
+    // params includes: scope, source, region, priority (all optional via ?scope=xxx etc.)
+    const me = getLoggedInUser();
+    const isCompliance = isPrivileged(me);
+
+    // Default scope based on role
+    const scope = params.scope || 'inbox';
+
+    const complianceTabs = [
+      { key: 'inbox',     label: 'Inbox',     icon: '📬' },
+      { key: 'pool',      label: 'Pool',      icon: '🗂' },
+      { key: 'assigned',  label: 'Assigned',  icon: '✓' },
+      { key: 'sent',      label: 'Sent',      icon: '📤' },
+      { key: 'resolved',  label: 'Resolved',  icon: '✓' },
+    ];
+    const fieldTabs = [
+      { key: 'inbox',     label: 'From compliance', icon: '📬' },
+      { key: 'sent',      label: 'My submissions',  icon: '📤' },
+      { key: 'resolved',  label: 'Resolved',        icon: '✓' },
+    ];
+    const tabs = isCompliance ? complianceTabs : fieldTabs;
+
+    // Build URL for a tab with current filters preserved
+    const buildTabHref = (tabKey) => {
+      const p = { ...params, scope: tabKey };
+      const qs = Object.entries(p)
+        .filter(([k, v]) => v && k !== 'scope' || k === 'scope')
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&');
+      return '#/inbox?' + qs;
+    };
+
+    const tabsHtml = tabs.map(t => {
+      const isActive = t.key === scope;
+      return `<a class="inbox-tab ${isActive ? 'active' : ''}" href="${buildTabHref(t.key)}" data-scope="${t.key}">
+        <span class="inbox-tab-icon">${t.icon}</span>
+        <span class="inbox-tab-label">${escapeHtml(t.label)}</span>
+        <span class="inbox-tab-count" id="inbox-count-${t.key}">—</span>
+      </a>`;
+    }).join('');
+
+    // Filter chips row
+    const sourceValue   = params.source   || '';
+    const regionValue   = params.region   || '';
+    const priorityValue = params.priority || '';
+
+    return `
+      <div class="view inbox-view">
+        <div class="inbox-header">
+          <div>
+            <h1 class="view-title">Inbox</h1>
+            <p class="view-sub" id="inbox-sub">Loading…</p>
+          </div>
+          <button class="btn btn-primary" onclick="showToast('New-submission modal ships in Stage 4.3','default')">+ New submission</button>
+        </div>
+
+        <div class="inbox-tabs" id="inbox-tabs">
+          ${tabsHtml}
+        </div>
+
+        <div class="inbox-filters">
+          <div class="inbox-filter">
+            <label>Source</label>
+            <select class="inbox-filter-select" id="filter-source">
+              <option value="" ${sourceValue === '' ? 'selected' : ''}>All</option>
+              <option value="fleet"      ${sourceValue === 'fleet'      ? 'selected' : ''}>🚚 Fleet</option>
+              <option value="legal"      ${sourceValue === 'legal'      ? 'selected' : ''}>⚖️ Legal</option>
+              <option value="reviews"    ${sourceValue === 'reviews'    ? 'selected' : ''}>⭐ Reviews</option>
+              <option value="compliance" ${sourceValue === 'compliance' ? 'selected' : ''}>👷 Compliance</option>
+              <option value="general"    ${sourceValue === 'general'    ? 'selected' : ''}>💬 General</option>
+            </select>
+          </div>
+          <div class="inbox-filter">
+            <label>Region</label>
+            <select class="inbox-filter-select" id="filter-region">
+              <option value="" ${regionValue === '' ? 'selected' : ''}>All regions</option>
+              ${REGIONS.map(r => `<option value="${r.code}" ${regionValue === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="inbox-filter">
+            <label>Priority</label>
+            <select class="inbox-filter-select" id="filter-priority">
+              <option value=""     ${priorityValue === ''     ? 'selected' : ''}>All</option>
+              <option value="high" ${priorityValue === 'high' ? 'selected' : ''}>High</option>
+              <option value="med"  ${priorityValue === 'med'  ? 'selected' : ''}>Medium</option>
+              <option value="low"  ${priorityValue === 'low'  ? 'selected' : ''}>Low</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="inbox-list" id="inbox-list">
+          <div class="skeleton skeleton-line" style="height:52px;margin-bottom:6px;"></div>
+          <div class="skeleton skeleton-line" style="height:52px;margin-bottom:6px;"></div>
+          <div class="skeleton skeleton-line" style="height:52px;margin-bottom:6px;"></div>
+        </div>
+
+        <div class="inbox-error" id="inbox-error" style="display:none;"></div>
+      </div>
+    `;
+  }, {
+    title: 'Inbox',
+    onAfterRender: (params) => loadInbox(params || {})
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     INBOX LOADER (Stage 4.1)
+     ═══════════════════════════════════════════════════════════════ */
+
+  async function loadInbox(params) {
+    const scope = params.scope || 'inbox';
+    const listEl = $('#inbox-list');
+    const errEl  = $('#inbox-error');
+    const subEl  = $('#inbox-sub');
+    if (!listEl) return;
+
+    // Wire up filter change handlers (only once per render)
+    const wireFilter = (id, paramName) => {
+      const el = $('#' + id);
+      if (!el) return;
+      el.onchange = () => {
+        const p = { ...params };
+        if (el.value) p[paramName] = el.value;
+        else delete p[paramName];
+        const qs = Object.entries(p)
+          .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+          .join('&');
+        location.hash = '#/inbox?' + qs;
+      };
+    };
+    wireFilter('filter-source', 'source');
+    wireFilter('filter-region', 'region');
+    wireFilter('filter-priority', 'priority');
+
+    // Fetch the scoped list
+    const res = await api({ resource: 'submissions', scope: scope });
+    if (!listEl) return;  // user navigated away
+
+    if (res.error) {
+      listEl.innerHTML = '';
+      errEl.style.display = '';
+      errEl.innerHTML = `<div class="card" style="border-color:var(--red);">
+        <div style="color:var(--red);font-weight:600;">⚠ ${escapeHtml(res.error)}</div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:var(--sp-2);" onclick="loadInbox(${JSON.stringify(params).replace(/"/g,'&quot;')})">Retry</button>
+      </div>`;
+      return;
+    }
+    errEl.style.display = 'none';
+
+    let items = res.submissions || [];
+
+    // Apply client-side filters
+    if (params.source)   items = items.filter(s => s.source_page === params.source);
+    if (params.region)   items = items.filter(s => s.to_region === params.region);
+    if (params.priority) items = items.filter(s => s.priority === params.priority);
+
+    // Update subtitle
+    if (subEl) {
+      const scopeLabel = {
+        inbox: 'inbox',
+        pool: 'unassigned pool',
+        assigned: 'assigned to you',
+        sent: 'sent',
+        resolved: 'resolved',
+      }[scope] || scope;
+      subEl.textContent = items.length === 0
+        ? `No items in your ${scopeLabel}.`
+        : `${items.length} ${items.length === 1 ? 'item' : 'items'} in your ${scopeLabel}.`;
+    }
+
+    // Update tab counts — fire one request per scope (lazy, but accurate)
+    loadInboxTabCounts(params);
+
+    if (items.length === 0) {
+      listEl.innerHTML = renderInboxEmptyState(scope);
+      return;
+    }
+
+    listEl.innerHTML = items.map(s => renderInboxRow(s)).join('');
+  }
+
+  function renderInboxEmptyState(scope) {
+    const messages = {
+      inbox: { icon: '📬', title: 'Inbox is clear', sub: 'No items waiting on you. Well done.' },
+      pool: { icon: '🗂', title: 'Pool is empty', sub: 'No unassigned submissions right now.' },
+      assigned: { icon: '✓', title: 'Nothing assigned to you', sub: 'You have no open submissions right now.' },
+      sent: { icon: '📤', title: 'No sent items', sub: "You haven't sent any submissions yet." },
+      resolved: { icon: '✓', title: 'No resolved items', sub: 'Closed submissions will appear here.' },
+    };
+    const m = messages[scope] || { icon: '💬', title: 'Nothing here', sub: '' };
+    return `
+      <div class="empty-state">
+        <div class="empty-state-icon">${m.icon}</div>
+        <div class="empty-state-title">${escapeHtml(m.title)}</div>
+        <div class="empty-state-sub">${escapeHtml(m.sub)}</div>
+      </div>
+    `;
+  }
+
+  function renderInboxRow(s) {
+    const srcIcon = { fleet: '🚚', legal: '⚖️', reviews: '⭐', compliance: '👷', general: '💬' }[s.source_page] || '💬';
+    const priority = s.priority || 'med';
+    const priorityClass = priority === 'high' ? 'badge-red' : (priority === 'low' ? '' : 'badge-amber');
+    const region = (s.to_region || '').toUpperCase();
+    const unreadClass = s.has_new_reply ? 'inbox-row-unread' : '';
+    const directionLabel = s.direction === 'field_to_compliance' ? 'From ' + s.from_user : 'To ' + (s.to_region ? s.to_region.toUpperCase() : s.to_user);
+    const replyBadge = s.reply_count > 0
+      ? `<span class="inbox-row-replies">💬 ${s.reply_count}</span>`
+      : '';
+    const updated = formatRelativeTime(s.updated_at);
+    const subject = s.subject || '(no subject)';
+
+    return `
+      <a class="inbox-row ${unreadClass}" href="#/submission/${encodeURIComponent(s.id)}">
+        <span class="inbox-row-unread-dot"></span>
+        <span class="inbox-row-source">${srcIcon}</span>
+        <span class="inbox-row-subject" title="${escapeAttr(subject)}">${escapeHtml(subject)}</span>
+        <span class="inbox-row-meta">
+          <span class="inbox-row-from">${escapeHtml(directionLabel)}</span>
+          ${region ? `<span class="pill" style="padding:1px 6px;font-size:10px;">${escapeHtml(region)}</span>` : ''}
+          <span class="badge ${priorityClass}" style="font-size:10px;">${escapeHtml(priority.toUpperCase())}</span>
+          ${replyBadge}
+          <span class="inbox-row-time">${escapeHtml(updated)}</span>
+        </span>
+      </a>
+    `;
+  }
+
+  async function loadInboxTabCounts(params) {
+    // Fire count requests for all scopes in parallel (cheap — just len of already-cached data)
+    const me = getLoggedInUser();
+    const isCompliance = isPrivileged(me);
+    const scopes = isCompliance
+      ? ['inbox','pool','assigned','sent','resolved']
+      : ['inbox','sent','resolved'];
+
+    await Promise.all(scopes.map(async (scope) => {
+      const res = await api({ resource: 'submissions', scope: scope });
+      const el = $('#inbox-count-' + scope);
+      if (!el) return;
+      const count = (res.submissions || []).length;
+      el.textContent = count;
+      el.classList.toggle('inbox-tab-count-zero', count === 0);
+    }));
+  }
+
+  // Relative-time helper ("5 min ago", "2 hr ago", "3 days ago")
+  function formatRelativeTime(when) {
+    if (!when) return '';
+    const d = new Date(when);
+    if (isNaN(d)) return '';
+    const diffMs = Date.now() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return diffMin + ' min ago';
+    const diffHr = Math.floor(diffMin / 60);
+    if (diffHr < 24) return diffHr + (diffHr === 1 ? ' hour' : ' hr') + ' ago';
+    const diffDay = Math.floor(diffHr / 24);
+    if (diffDay < 7) return diffDay + (diffDay === 1 ? ' day' : ' days') + ' ago';
+    // Format as date for older
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  // Submission detail — real view ships in Stage 4.2
+  route('/submission/:id', ({ id }) => placeholder(
+    'Submission Detail',
+    'Stage 4.2',
+    `Viewing submission ${id}`,
     [
-      'KPI strip with clickable filter tiles',
-      'Grouped review cards (one per reviewId)',
-      'Inline expand with reply composer',
-      'Keyboard shortcuts (j/k, r, e, #)',
-      'Activity timeline sidebar',
-      '8-step contractor workflow',
+      'Full message + reply thread',
+      'Reply composer with send button',
+      'Status dropdown (New → In Review → Needs Info → Resolved)',
+      'Assign to team member',
+      'Priority and due date',
+      'Keyboard shortcuts (r to reply, e to resolve, # to assign)',
     ]
-  ), { title: 'Inbox' });
+  ), { title: 'Submission' });
 
   route('/workspace', () => placeholder('My Workspace', 'Stage 5',
     'Personal tasks, contacts, links, and scratchpad — same view for every user.',

@@ -1320,3 +1320,217 @@ body.view-as-active .app-root {
   transform: none;
   cursor: default;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 4.1 — INBOX LIST VIEW
+   ═══════════════════════════════════════════════════════════════════ */
+
+.inbox-view { max-width: 1200px; }
+
+.inbox-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+  flex-wrap: wrap;
+}
+
+/* Scope tabs */
+.inbox-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  border-bottom: 1px solid var(--slate-200);
+  margin-bottom: var(--sp-4);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.inbox-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate-500);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  transition: color var(--t-fast), border-color var(--t-fast);
+  white-space: nowrap;
+  margin-bottom: -1px;  /* sit on top of container border */
+}
+.inbox-tab:hover {
+  color: var(--navy);
+}
+.inbox-tab.active {
+  color: var(--navy);
+  font-weight: 700;
+  border-bottom-color: var(--blue);
+}
+.inbox-tab-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+.inbox-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 6px;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: var(--r-round);
+}
+.inbox-tab.active .inbox-tab-count {
+  background: var(--blue-pale);
+  color: var(--blue);
+}
+.inbox-tab-count-zero {
+  opacity: 0.5;
+}
+
+/* Filter bar */
+.inbox-filters {
+  display: flex;
+  gap: var(--sp-4);
+  align-items: center;
+  margin-bottom: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--slate-50);
+  border-radius: var(--r-md);
+  flex-wrap: wrap;
+}
+.inbox-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.inbox-filter label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+}
+.inbox-filter-select {
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--navy);
+  background: var(--white);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-sm);
+  outline: none;
+  cursor: pointer;
+  min-width: 140px;
+}
+.inbox-filter-select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+/* List */
+.inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--slate-200);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.inbox-row {
+  display: grid;
+  grid-template-columns: 10px 20px 1fr auto;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--white);
+  text-decoration: none;
+  color: var(--navy);
+  font-size: 13px;
+  transition: background var(--t-fast);
+  min-height: 44px;
+}
+.inbox-row:hover {
+  background: var(--slate-50);
+}
+
+.inbox-row-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  justify-self: center;
+}
+.inbox-row-unread .inbox-row-unread-dot {
+  background: var(--blue);
+}
+.inbox-row-unread .inbox-row-subject {
+  font-weight: 700;
+}
+
+.inbox-row-source {
+  font-size: 16px;
+  line-height: 1;
+  text-align: center;
+}
+
+.inbox-row-subject {
+  font-weight: 500;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.inbox-row-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: 11px;
+  color: var(--slate-500);
+  flex-shrink: 0;
+}
+
+.inbox-row-from {
+  color: var(--slate-500);
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inbox-row-replies {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--slate-500);
+  font-weight: 600;
+}
+
+.inbox-row-time {
+  color: var(--slate-400);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  /* Hide the "from" and region pills on small screens to keep rows tidy */
+  .inbox-row-from { display: none; }
+  .inbox-row-meta .pill { display: none; }
+  .inbox-filters { gap: var(--sp-2); }
+  .inbox-filter-select { min-width: 110px; }
+}
+
+/* Error state */
+.inbox-error {
+  margin-top: var(--sp-4);
+}
