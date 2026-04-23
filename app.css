@@ -1257,3 +1257,66 @@ img, svg { display: block; max-width: 100%; }
 .dash-bycategory {
   min-height: 180px;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 3.7 — VIEW-AS BANNER + STATIC AVATAR CHIPS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* View-as top banner — sits above sidebar + header */
+.view-as-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: linear-gradient(90deg, #FDE68A, #FBBF24);
+  color: #78350F;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 8px var(--sp-4);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(146, 64, 14, 0.15);
+  border-bottom: 1px solid #F59E0B;
+}
+
+.view-as-eye {
+  font-size: 16px;
+}
+
+.view-as-banner strong {
+  font-weight: 700;
+}
+
+.view-as-exit {
+  margin-left: auto;
+  padding: 4px 10px;
+  background: #78350F;
+  color: #FEF3C7;
+  border: none;
+  border-radius: var(--r-md);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+
+.view-as-exit:hover {
+  background: #451A03;
+}
+
+/* When view-as is active, shift the app layout down to make room for the banner */
+body.view-as-active .app-root {
+  /* The banner is sticky at top, so sidebar and header already sit below it naturally */
+}
+
+/* Static avatar chips — user can't click them (no permission) */
+.avatar-chip-static {
+  cursor: default;
+  opacity: 0.85;
+}
+.avatar-chip-static:hover {
+  transform: none;
+  cursor: default;
+}

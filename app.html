@@ -263,7 +263,8 @@
   const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw4ithOR-VTRkMMcV2LGKb_QozPPro6c83TdwESDbfirP388IVyPuzQ7nDUroRQ2jEx/exec';
 
   /* ─── Session storage ─────────────────────────────────────── */
-  const SESSION_KEY = 'elite2_session';
+  const SESSION_KEY    = 'elite2_session';
+  const VIEWING_AS_KEY = 'elite2_viewing_as';
 
   function getSession() {
     try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
@@ -276,6 +277,7 @@
 
   function clearSession() {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(VIEWING_AS_KEY);
   }
 
   function getToken() {
@@ -283,10 +285,72 @@
     return (s && s.token) ? s.token : null;
   }
 
+  /* ─── View-as (impersonation) state ─────────────────────── */
+  function getViewingAs() {
+    try {
+      const v = localStorage.getItem(VIEWING_AS_KEY);
+      return v ? JSON.parse(v) : null;
+    } catch { return null; }
+  }
+
+  function setViewingAs(username) {
+    if (!username) { clearViewingAs(); return; }
+    const team = TEAM_USERS.find(u => u.username === String(username).toLowerCase());
+    if (!team) { clearViewingAs(); return; }
+    localStorage.setItem(VIEWING_AS_KEY, JSON.stringify(team));
+  }
+
+  function clearViewingAs() {
+    localStorage.removeItem(VIEWING_AS_KEY);
+  }
+
+  // Real logged-in user (ignores view-as)
+  function getLoggedInUser() {
+    const sess = getSession();
+    if (sess && sess.user && sess.user.username) {
+      const lower = String(sess.user.username).toLowerCase();
+      const team = TEAM_USERS.find(u => u.username === lower);
+      if (team) return { ...team, can_view_users: sess.user.can_view_users || '' };
+      return {
+        username: lower,
+        name: sess.user.display_name || sess.user.name || lower,
+        initials: initialsFromName(sess.user.display_name || sess.user.name || lower),
+        color: sess.user.avatar_color || 'var(--slate-600)',
+        can_view_users: sess.user.can_view_users || '',
+      };
+    }
+    return { ...TEAM_USERS[0], isStub: true };
+  }
+
+  // Can the logged-in user view another user's data?
+  function canView(targetUsername) {
+    const me = getLoggedInUser();
+    const target = String(targetUsername || '').toLowerCase();
+    if (!target || me.username === target) return true;  // self always
+    if (me.username === 'angel') return true;            // super-admin
+    const canViewList = String(me.can_view_users || '').trim();
+    if (canViewList === '*') return true;
+    const list = canViewList.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    return list.indexOf(target) >= 0;
+  }
+
   /* ─── api() — all backend calls go through this ───────────── */
   async function api(params, method = 'GET', body = null) {
     const token = getToken();
-    const qs = new URLSearchParams({ ...(token ? { token } : {}), ...(params || {}) }).toString();
+    const viewing = getViewingAs();
+
+    // When viewing-as, auto-inject ?user=<viewed> into requests for per-user data
+    // (unless the caller already set `user`, which wins)
+    const perUserResources = ['tasks', 'widgets', 'settings', 'dashboard', 'submissions', 'submission', 'submission_replies'];
+    const mergedParams = { ...(params || {}) };
+    if (viewing && viewing.username && !mergedParams.user) {
+      const res = String(mergedParams.resource || '').toLowerCase();
+      if (perUserResources.indexOf(res) >= 0) {
+        mergedParams.user = viewing.username;
+      }
+    }
+
+    const qs = new URLSearchParams({ ...(token ? { token } : {}), ...mergedParams }).toString();
     const url = `${BACKEND_URL}?${qs}`;
     const opts = { method, redirect: 'follow' };
     if (method === 'POST' && body) {
@@ -353,22 +417,16 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
+  /**
+   * Returns the user whose data is currently being displayed.
+   * If view-as is active, returns the viewed user.
+   * Otherwise returns the actual logged-in user.
+   * To get the actual logged-in user regardless, use getLoggedInUser().
+   */
   function getCurrentUser() {
-    const sess = getSession();
-    if (sess && sess.user && sess.user.username) {
-      const lower = String(sess.user.username).toLowerCase();
-      const team = TEAM_USERS.find(u => u.username === lower);
-      if (team) return team;
-      // Non-team user — build from session data
-      return {
-        username: lower,
-        name: sess.user.display_name || sess.user.name || lower,
-        initials: initialsFromName(sess.user.display_name || sess.user.name || lower),
-        color: sess.user.avatar_color || 'var(--slate-600)',
-      };
-    }
-    // No session — shouldn't happen because requireSession redirects, but defensive:
-    return { ...TEAM_USERS[0], isStub: true };
+    const viewing = getViewingAs();
+    if (viewing && viewing.username) return viewing;
+    return getLoggedInUser();
   }
 
   function isPrivileged(user) {
@@ -600,35 +658,113 @@
   function renderUserSwitcher() {
     const wrap = $('#user-switcher');
     if (!wrap) return;
-    const current = getCurrentUser();
-    wrap.innerHTML = STUB_USERS.map(u => {
-      const isCurrent = u.username === current.username;
+    const me = getLoggedInUser();
+    const viewing = getViewingAs();
+    const viewedUsername = viewing ? viewing.username : me.username;
+
+    // Filter chips: show only team members the logged-in user can view, plus themselves
+    const visibleChips = TEAM_USERS.filter(u => canView(u.username));
+
+    // If no other chips to show beyond self, hide the whole switcher on narrow screens too
+    wrap.innerHTML = visibleChips.map(u => {
+      const isSelf = u.username === me.username;
+      const isCurrentlyViewed = u.username === viewedUsername;
+      const isClickable = !isSelf;  // self-chip is never clickable (you're already you)
+      const tooltip = isSelf
+        ? u.name + ' (You)'
+        : (isClickable ? u.name + ' — click to view their dashboard' : u.name);
+      const classes = [
+        'avatar-chip',
+        isCurrentlyViewed ? 'current' : '',
+        !isClickable ? 'avatar-chip-static' : '',
+      ].filter(Boolean).join(' ');
+      const clickAttr = isClickable
+        ? `onclick="switchViewAs('${escapeAttr(u.username)}');return false;"`
+        : '';
+      const href = isClickable ? 'javascript:void(0)' : 'javascript:void(0)';
       return `
-        <a class="avatar-chip ${isCurrent ? 'current' : ''}"
-           data-tooltip="${escapeAttr(u.name)}${isCurrent ? ' (You)' : ''}"
-           href="#/workspace"
+        <a class="${classes}"
+           data-tooltip="${escapeAttr(tooltip)}"
+           href="${href}"
+           ${clickAttr}
            style="background:${u.color};">${u.initials}</a>
       `;
     }).join('');
   }
 
+  async function switchViewAs(username) {
+    const target = String(username || '').toLowerCase();
+    if (!target) return;
+    const me = getLoggedInUser();
+    if (target === me.username) {
+      // Clicking your own chip = exit view-as
+      clearViewingAs();
+    } else {
+      if (!canView(target)) {
+        showToast("You don't have permission to view that user", 'error');
+        return;
+      }
+      setViewingAs(target);
+    }
+    renderUserSwitcher();
+    renderAccountMenu();
+    renderViewAsBanner();
+    // Re-run the current route so the view reloads data for the new user
+    resolveRoute();
+  }
+
+  function exitViewAs() {
+    clearViewingAs();
+    renderUserSwitcher();
+    renderAccountMenu();
+    renderViewAsBanner();
+    resolveRoute();
+  }
+
+  function renderViewAsBanner() {
+    let banner = $('#view-as-banner');
+    const viewing = getViewingAs();
+
+    if (!viewing) {
+      if (banner) banner.remove();
+      document.body.classList.remove('view-as-active');
+      return;
+    }
+
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'view-as-banner';
+      banner.className = 'view-as-banner';
+      // Insert at the very top of the app (before sidebar/header)
+      document.body.insertBefore(banner, document.body.firstChild);
+    }
+    document.body.classList.add('view-as-active');
+    banner.innerHTML = `
+      <span class="view-as-eye">👁</span>
+      <span>Viewing as <strong>${escapeHtml(viewing.name)}</strong></span>
+      <button class="view-as-exit" type="button" onclick="exitViewAs()">Exit view</button>
+    `;
+  }
+
   function renderAccountMenu() {
-    const current = getCurrentUser();
+    // Always show the actual logged-in user in the account menu,
+    // regardless of view-as state. The view-as banner clarifies who you're viewing.
+    const me = getLoggedInUser();
     const avatar = $('#header-avatar');
     const name = $('#header-avatar-name');
     const menuName = $('#menu-name');
     const menuRole = $('#menu-role');
 
-    avatar.textContent = current.initials;
-    avatar.style.background = current.color;
-    name.textContent = current.name;
-    menuName.textContent = current.name;
-    menuRole.textContent = current.isStub
-      ? 'Stub session (Stage 2.5 adds real login)'
-      : (isPrivileged(current) ? 'Compliance team' : 'Team member');
+    avatar.textContent = me.initials;
+    avatar.style.background = me.color;
+    name.textContent = me.name;
+    menuName.textContent = me.name;
+    menuRole.textContent = me.isStub
+      ? 'Stub session'
+      : (isPrivileged(me) ? 'Compliance team' : 'Team member');
 
     // Show admin entry in menu for privileged users
-    if (isPrivileged(current)) {
+    if (isPrivileged(me)) {
       $('#menu-admin').style.display = '';
       $('#nav-admin-section').style.display = '';
       const sheetAdmin = $('#sheet-admin');
@@ -1151,8 +1287,8 @@
   renderUserSwitcher();
   renderAccountMenu();
   renderRegionsSubnav();
+  renderViewAsBanner();
   resolveRoute();
-  autoCheckBackend();
   </script>
 
 </body>
