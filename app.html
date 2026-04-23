@@ -4493,10 +4493,29 @@
       return;
     }
 
+    // Show overlay spinner on the panel so user sees something is happening
+    const panel = $('#contractor-panel');
+    if (panel) {
+      const overlay = document.createElement('div');
+      overlay.id = 'ctr-save-overlay';
+      overlay.className = 'ctr-save-overlay';
+      overlay.innerHTML = `
+        <div class="ctr-save-spinner">
+          <div class="skeleton-spinner"></div>
+          <div class="ctr-save-label">${isNew ? 'Creating contractor…' : 'Saving changes…'}</div>
+        </div>
+      `;
+      panel.appendChild(overlay);
+    }
+
     const res = await api({}, 'POST', {
       action: 'savecontractor',
       contractor: data,
     });
+
+    // Remove overlay
+    const ov = $('#ctr-save-overlay');
+    if (ov) ov.remove();
 
     saveBtn.disabled = false;
     saveBtn.textContent = isNew ? 'Create Contractor' : 'Save changes';
@@ -4506,7 +4525,7 @@
       return;
     }
 
-    // Invalidate local cache entries so the list reloads fresh
+    // Invalidate local cache entries so future navigations fetch fresh
     if (typeof _apiCache !== 'undefined') {
       const keysToRemove = [];
       _apiCache.forEach((_, key) => {
@@ -4519,18 +4538,20 @@
 
     showToast(isNew ? 'Contractor created' : 'Changes saved', 'success');
 
-    // Reload the list AND the detail panel
-    await loadContractorsTable({});
-    // Fetch fresh full record and show it
-    const fresh = await api({ resource: 'contractor', id: res.contractor_id });
-    if (fresh.contractor) {
-      _currentContractor = fresh.contractor;
-      const panel = $('#contractor-panel');
-      if (panel) {
-        panel.innerHTML = renderContractorPanel(_currentContractor);
-        panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+    // Flip the panel to view mode IMMEDIATELY using the contractor returned by save.
+    // This avoids a second round-trip to fetch the full record.
+    if (res.contractor) {
+      _currentContractor = res.contractor;
+      const p = $('#contractor-panel');
+      if (p) {
+        p.innerHTML = renderContractorPanel(_currentContractor);
+        p.onclick = (e) => { if (e.target === p) closeContractorPanel(); };
       }
     }
+
+    // Reload the background list — fire-and-forget so it doesn't block the UI.
+    // User sees the updated panel NOW while list reloads in the background.
+    loadContractorsTable({}).catch(() => {});
   }
 
   async function confirmDeleteContractor() {
@@ -4817,7 +4838,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.0';
+  const APP_VERSION = '2.1.1';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).

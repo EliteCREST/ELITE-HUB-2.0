@@ -3433,3 +3433,51 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   margin-bottom: var(--sp-4);
   line-height: 1.5;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   SAVE OVERLAY + SPINNER (for contractor edit submit)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.ctr-save-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: inherit;
+}
+
+.ctr-save-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.ctr-save-label {
+  font-size: 13px;
+  color: var(--navy);
+  font-weight: 600;
+}
+
+.skeleton-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--slate-200);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spinner-rotate 0.7s linear infinite;
+}
+
+@keyframes spinner-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* Panel needs to be the positioning context for the absolute overlay */
+.ctr-panel {
+  position: relative;
+}
