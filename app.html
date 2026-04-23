@@ -4021,7 +4021,7 @@
         </div>
 
         <div class="ctr-panel-actions">
-          <button class="btn btn-primary btn-sm" onclick="contractorSendNote()">📬 Send note to compliance</button>
+          <button class="btn btn-primary btn-sm" onclick="contractorSendNote()">📨 Message about contractor</button>
           ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openEditContractor()">✎ Edit</button>` : ''}
         </div>
 
@@ -4161,18 +4161,188 @@
     panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
   }
 
-  function contractorSendNote() {
+  /**
+   * Compose a message about this contractor to a specific user or region.
+   * Opens a modal with role-aware recipient list.
+   *   - Field users → can message Compliance team + users in their own region(s)
+   *   - Privileged users → can message anyone (all 27)
+   */
+  async function contractorSendNote() {
     if (!_currentContractor) return;
     const c = _currentContractor;
-    // Pre-fill submission modal with compliance source + first region
-    const defaultRegion = (c.regions && c.regions[0]) ? c.regions[0].toLowerCase() : '';
-    openNewSubmissionModal({
-      source: 'compliance',
-      region: defaultRegion,
-      subject: 'Re: ' + c.contractor_name + ' (PAY ID ' + (c.pay_id || '—') + ')',
-      priority: 'med',
+
+    // Fetch all users (cached client-side via _apiCache)
+    const usersRes = await api({ resource: 'users' });
+    const allUsers = (usersRes && usersRes.users) ? usersRes.users : [];
+    const me = getLoggedInUser();
+    const meIsPrivileged = ['angel','sam','sara','emma','carlynn','jaida'].includes(me.username);
+    const myRegions = (me.regions || 'all').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+    const COMPLIANCE = ['angel','sam','sara','emma','carlynn'];
+
+    // Filter recipient list based on current user's role
+    const eligible = allUsers.filter(u => {
+      if (!u.is_active) return false;
+      if (u.username === me.username) return false;  // can't message yourself
+      if (meIsPrivileged) return true;  // privileged sees everyone
+      // Field user: can message compliance team OR users sharing at least one region
+      if (COMPLIANCE.includes(u.username)) return true;
+      const theirRegions = String(u.regions || 'all').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+      if (theirRegions.includes('all') || myRegions.includes('all')) return false; // don't match against "all"
+      return theirRegions.some(r => myRegions.includes(r));
     });
-    closeContractorPanel();
+
+    // Group by region for the dropdown
+    const groupCompliance = eligible.filter(u => COMPLIANCE.includes(u.username));
+    const groupOther      = eligible.filter(u => !COMPLIANCE.includes(u.username));
+
+    // Sort groups alphabetically within
+    const byName = (a, b) => (a.display_name || a.username).localeCompare(b.display_name || b.username);
+    groupCompliance.sort(byName);
+    groupOther.sort(byName);
+
+    // Build the modal
+    const modalEl = document.createElement('div');
+    modalEl.id = 'ctr-message-modal';
+    modalEl.className = 'ctr-msg-backdrop';
+    modalEl.innerHTML = `
+      <div class="ctr-msg-modal" onclick="event.stopPropagation()">
+        <form id="ctr-msg-form" onsubmit="event.preventDefault(); submitContractorMessage();">
+          <div class="ctr-msg-header">
+            <h3 class="ctr-msg-title">📨 Message about ${escapeHtml(c.contractor_name)}</h3>
+            <button type="button" class="ctr-panel-close" onclick="closeContractorMessage()" title="Close">×</button>
+          </div>
+
+          <div class="ctr-msg-body">
+            <div class="ctr-msg-field">
+              <label class="ctr-edit-label">To <span class="ctr-required">*</span></label>
+              <select class="ctr-edit-input" name="to_user" required>
+                <option value="">Select recipient…</option>
+                ${groupCompliance.length ? `
+                  <optgroup label="Compliance Team">
+                    ${groupCompliance.map(u => `<option value="${escapeAttr(u.username)}">${escapeHtml(u.display_name || u.username)}</option>`).join('')}
+                  </optgroup>
+                ` : ''}
+                ${groupOther.length ? `
+                  <optgroup label="${meIsPrivileged ? 'Field Users' : 'Your Region'}">
+                    ${groupOther.map(u => {
+                      const regionHint = u.regions && u.regions !== 'all' ? ` (${u.regions.toUpperCase()})` : '';
+                      return `<option value="${escapeAttr(u.username)}">${escapeHtml(u.display_name || u.username)}${escapeHtml(regionHint)}</option>`;
+                    }).join('')}
+                  </optgroup>
+                ` : ''}
+              </select>
+            </div>
+
+            <div class="ctr-msg-field">
+              <label class="ctr-edit-label">Priority</label>
+              <div class="ctr-msg-priority-row">
+                <label class="ctr-msg-priority-opt">
+                  <input type="radio" name="priority" value="low"> <span>Low</span>
+                </label>
+                <label class="ctr-msg-priority-opt">
+                  <input type="radio" name="priority" value="med" checked> <span>Normal</span>
+                </label>
+                <label class="ctr-msg-priority-opt">
+                  <input type="radio" name="priority" value="high"> <span>High</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="ctr-msg-field">
+              <label class="ctr-edit-label">Message <span class="ctr-required">*</span></label>
+              <textarea class="ctr-edit-input ctr-msg-textarea" name="message" required rows="6" placeholder="What's going on with this contractor?"></textarea>
+            </div>
+
+            <div class="ctr-msg-context">
+              Context: ${escapeHtml(c.contractor_name)} — PAY ID ${escapeHtml(c.pay_id || '—')}${c.regions && c.regions.length ? ' · ' + escapeHtml(c.regions.join(', ')) : ''}
+            </div>
+          </div>
+
+          <div class="ctr-msg-footer">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="closeContractorMessage()">Cancel</button>
+            <button type="submit" class="btn btn-primary btn-sm" id="ctr-msg-send-btn">Send message</button>
+          </div>
+        </form>
+      </div>
+    `;
+    document.body.appendChild(modalEl);
+    modalEl.onclick = (e) => { if (e.target === modalEl) closeContractorMessage(); };
+
+    // Focus recipient dropdown
+    setTimeout(() => {
+      const sel = modalEl.querySelector('[name="to_user"]');
+      if (sel) sel.focus();
+    }, 50);
+  }
+
+  function closeContractorMessage() {
+    const el = $('#ctr-message-modal');
+    if (el) el.remove();
+  }
+
+  async function submitContractorMessage() {
+    if (!_currentContractor) return;
+    const c = _currentContractor;
+    const form = $('#ctr-msg-form');
+    if (!form) return;
+
+    const sendBtn = $('#ctr-msg-send-btn');
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending…';
+
+    const toUser   = form.querySelector('[name="to_user"]').value;
+    const priority = form.querySelector('[name="priority"]:checked').value;
+    const message  = form.querySelector('[name="message"]').value.trim();
+
+    if (!toUser) { showToast('Please select a recipient.', 'error'); sendBtn.disabled = false; sendBtn.textContent = 'Send message'; return; }
+    if (!message) { showToast('Please enter a message.', 'error'); sendBtn.disabled = false; sendBtn.textContent = 'Send message'; return; }
+
+    const subject = `Re: ${c.contractor_name} (PAY ID ${c.pay_id || '—'})`;
+
+    // Look up recipient to determine direction + region
+    const usersRes = await api({ resource: 'users' });
+    const allUsers = (usersRes && usersRes.users) ? usersRes.users : [];
+    const recipient = allUsers.find(u => u.username === toUser);
+    const COMPLIANCE = ['angel','sam','sara','emma','carlynn'];
+    const recipientIsCompliance = recipient && COMPLIANCE.includes(recipient.username);
+
+    // Pick first region of the recipient (fall back to contractor's first region)
+    let toRegion = '';
+    if (recipient && recipient.regions && recipient.regions !== 'all') {
+      toRegion = String(recipient.regions).split(',')[0].trim().toLowerCase();
+    } else if (c.regions && c.regions.length) {
+      toRegion = c.regions[0].toLowerCase();
+    }
+
+    const me = getLoggedInUser();
+    const meIsCompliance = COMPLIANCE.includes(me.username);
+    const direction = meIsCompliance && !recipientIsCompliance
+      ? 'compliance_to_field'
+      : (recipientIsCompliance ? 'field_to_compliance' : 'field_to_field');
+
+    const submission = {
+      subject: subject,
+      body: message,
+      source_page: 'compliance',
+      priority: priority,
+      to_user: toUser,
+      to_region: toRegion,
+      direction: direction,
+      related_contractor_id: c.contractor_id,
+    };
+
+    const res = await api({}, 'POST', { action: 'savesubmission', submission: submission });
+
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send message';
+
+    if (res.error) {
+      showToast('Failed to send: ' + res.error, 'error');
+      return;
+    }
+
+    showToast('Message sent', 'success');
+    closeContractorMessage();
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -4838,7 +5008,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.1';
+  const APP_VERSION = '2.1.2';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
