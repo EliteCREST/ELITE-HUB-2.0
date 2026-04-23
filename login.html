@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0F172A">
+  <title>Sign in · Elite Hub</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+  :root {
+    --navy: #0F172A;
+    --slate-800: #1E293B;
+    --slate-700: #334155;
+    --slate-500: #64748B;
+    --slate-400: #94A3B8;
+    --slate-300: #CBD5E1;
+    --slate-200: #E2E8F0;
+    --slate-100: #F1F5F9;
+    --slate-50:  #F8FAFC;
+    --white: #FFFFFF;
+    --blue: #3B82F6;
+    --blue-hover: #2563EB;
+    --blue-pale: #EFF6FF;
+    --red: #EF4444;
+    --red-pale: #FEE2E2;
+    --green: #10B981;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    color: var(--navy);
+    background: linear-gradient(135deg, var(--slate-100), var(--blue-pale) 50%, var(--slate-100));
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+
+  .card {
+    background: var(--white);
+    border-radius: 16px;
+    box-shadow:
+      0 4px 6px -1px rgba(15, 23, 42, 0.05),
+      0 20px 25px -5px rgba(15, 23, 42, 0.08),
+      0 8px 10px -6px rgba(15, 23, 42, 0.05);
+    width: 100%;
+    max-width: 420px;
+    padding: 40px 36px 36px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .brand-logo {
+    width: 48px;
+    height: 48px;
+    background: var(--navy);
+    color: var(--white);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+  }
+  .brand-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1.1;
+    letter-spacing: -0.2px;
+  }
+  .brand-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--slate-500);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--navy);
+    letter-spacing: -0.4px;
+    margin-bottom: 6px;
+  }
+  .intro {
+    font-size: 13px;
+    color: var(--slate-500);
+    margin-bottom: 28px;
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--slate-700);
+    margin-bottom: 6px;
+  }
+
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--navy);
+    padding: 10px 14px;
+    border: 1px solid var(--slate-300);
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background: var(--white);
+  }
+  input[type="text"]:focus, input[type="password"]:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+  input[type="text"]::placeholder, input[type="password"]::placeholder { color: var(--slate-400); }
+
+  .field { margin-bottom: 18px; }
+
+  .btn-primary {
+    width: 100%;
+    padding: 11px 16px;
+    background: var(--navy);
+    color: var(--white);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid var(--navy);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+    margin-top: 8px;
+  }
+  .btn-primary:hover:not(:disabled) { background: var(--slate-800); }
+  .btn-primary:active:not(:disabled) { transform: scale(0.99); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .banner {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 18px;
+    display: none;
+  }
+  .banner.visible { display: block; }
+  .banner-error   { background: var(--red-pale); color: var(--red); }
+  .banner-success { background: #D1FAE5; color: var(--green); }
+  .banner-info    { background: var(--blue-pale); color: var(--blue); }
+
+  .helper {
+    font-size: 11px;
+    color: var(--slate-500);
+    text-align: center;
+    margin-top: 24px;
+    line-height: 1.5;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: var(--white);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 480px) {
+    .card { padding: 28px 24px 24px; }
+    h1 { font-size: 20px; }
+  }
+  </style>
+</head>
+<body>
+
+  <div class="wrap">
+    <div class="card">
+
+      <div class="brand">
+        <div class="brand-logo">ECS</div>
+        <div>
+          <div class="brand-name">Elite Hub</div>
+          <div class="brand-sub">2.0</div>
+        </div>
+      </div>
+
+      <h1>Sign in</h1>
+      <p class="intro">Enter your username and password to access Elite Hub.</p>
+
+      <div class="banner banner-error"   id="error-banner"></div>
+      <div class="banner banner-success" id="success-banner"></div>
+      <div class="banner banner-info"    id="info-banner"></div>
+
+      <form id="login-form" autocomplete="on">
+        <div class="field">
+          <label for="username">Username</label>
+          <input type="text" id="username" name="username" placeholder="e.g. emma" autocomplete="username" autofocus required>
+        </div>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <input type="password" id="password" name="password" autocomplete="current-password" required>
+        </div>
+
+        <button type="submit" class="btn-primary" id="submit-btn">Sign in</button>
+      </form>
+
+      <div class="helper">Trouble signing in? Contact Angel.</div>
+
+    </div>
+  </div>
+
+  <script>
+  const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw4ithOR-VTRkMMcV2LGKb_QozPPro6c83TdwESDbfirP388IVyPuzQ7nDUroRQ2jEx/exec';
+
+  const form   = document.getElementById('login-form');
+  const btn    = document.getElementById('submit-btn');
+  const errEl  = document.getElementById('error-banner');
+  const sucEl  = document.getElementById('success-banner');
+  const infoEl = document.getElementById('info-banner');
+
+  // Status messages from redirect
+  const params = new URLSearchParams(location.search);
+  if (params.get('expired') === '1') {
+    showBanner(infoEl, 'Your session expired. Please sign in again.');
+  } else if (params.get('loggedout') === '1') {
+    showBanner(sucEl, 'You have been signed out.');
+  }
+
+  // If a valid session already exists, jump to the app
+  (async function preCheck() {
+    try {
+      const session = JSON.parse(localStorage.getItem('elite2_session') || 'null');
+      if (!session || !session.token) return;
+      const res = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'validate_session', token: session.token }),
+      });
+      const data = await res.json();
+      if (data && data.user) {
+        redirectToApp();
+      } else {
+        localStorage.removeItem('elite2_session');
+      }
+    } catch (err) {
+      // ignore, allow manual login
+    }
+  })();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideBanner(errEl); hideBanner(sucEl); hideBanner(infoEl);
+
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+
+    if (!username || !password) {
+      showBanner(errEl, 'Please enter both username and password.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await fetch(BACKEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'login', username, password }),
+        redirect: 'follow',
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        showBanner(errEl, data.error);
+        setLoading(false);
+        return;
+      }
+
+      if (data.success && data.token) {
+        localStorage.setItem('elite2_session', JSON.stringify({
+          token: data.token,
+          user: data.user,
+          expires_at: data.expires_at,
+        }));
+        showBanner(sucEl, 'Signed in. Redirecting…');
+        setTimeout(redirectToApp, 400);
+        return;
+      }
+
+      showBanner(errEl, 'Unexpected response from server.');
+      setLoading(false);
+    } catch (err) {
+      showBanner(errEl, 'Network error — please check your connection and try again.');
+      setLoading(false);
+    }
+  });
+
+  function redirectToApp() {
+    const next = params.get('next') || 'app.html';
+    location.href = next;
+  }
+
+  function showBanner(el, msg) { el.textContent = msg; el.classList.add('visible'); }
+  function hideBanner(el) { el.classList.remove('visible'); }
+
+  function setLoading(loading) {
+    btn.disabled = loading;
+    btn.innerHTML = loading ? '<span class="spinner"></span>Signing in…' : 'Sign in';
+  }
+  </script>
+
+</body>
+</html>

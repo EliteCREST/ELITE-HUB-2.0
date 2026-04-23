@@ -259,26 +259,50 @@
      ═══════════════════════════════════════════════════════════════════ */
 
 
-  /* ─── Backend config (Stage 2.2) ──────────────────────────── */
-  const BACKEND = {
-    // Elite Hub 2.0 backend — separate Apps Script project
-    url:  'https://script.google.com/macros/s/AKfycbw4ithOR-VTRkMMcV2LGKb_QozPPro6c83TdwESDbfirP388IVyPuzQ7nDUroRQ2jEx/exec',
-    // API key — Stage 2.5 will replace with real session tokens
-    key:  'eh2-stg2-c7f4a9b2e8d6',
-  };
+  /* ─── Backend config (Stage 2.5) ──────────────────────────── */
+  const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw4ithOR-VTRkMMcV2LGKb_QozPPro6c83TdwESDbfirP388IVyPuzQ7nDUroRQ2jEx/exec';
+
+  /* ─── Session storage ─────────────────────────────────────── */
+  const SESSION_KEY = 'elite2_session';
+
+  function getSession() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }
+    catch { return null; }
+  }
+
+  function setSession(session) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  }
+
+  function clearSession() {
+    localStorage.removeItem(SESSION_KEY);
+  }
+
+  function getToken() {
+    const s = getSession();
+    return (s && s.token) ? s.token : null;
+  }
 
   /* ─── api() — all backend calls go through this ───────────── */
   async function api(params, method = 'GET', body = null) {
-    const qs = new URLSearchParams({ key: BACKEND.key, ...(params || {}) }).toString();
-    const url = `${BACKEND.url}?${qs}`;
+    const token = getToken();
+    const qs = new URLSearchParams({ ...(token ? { token } : {}), ...(params || {}) }).toString();
+    const url = `${BACKEND_URL}?${qs}`;
     const opts = { method, redirect: 'follow' };
     if (method === 'POST' && body) {
       opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
-      opts.body = JSON.stringify({ key: BACKEND.key, ...body });
+      opts.body = JSON.stringify({ ...(token ? { token } : {}), ...body });
     }
     try {
       const res = await fetch(url, opts);
-      return await res.json();
+      const data = await res.json();
+      // If server says auth expired/missing, kick to login
+      if (data && data.code === 'AUTH_REQUIRED') {
+        clearSession();
+        location.href = 'login.html?expired=1';
+        return { error: 'Session expired' };
+      }
+      return data;
     } catch (err) {
       console.error('[api] request failed:', err);
       return { error: err.message || 'Network error' };
@@ -310,8 +334,8 @@
     { code: 'mil', name: 'Milwaukee' },
   ];
 
-  // Stub user — real login arrives in Stage 2.5
-  const STUB_USERS = [
+  // Avatar chip roster — compliance team (these users show in the header switcher)
+  const TEAM_USERS = [
     { username: 'angel',   name: 'Angel Maddox',   initials: 'AM', color: 'var(--blue)' },
     { username: 'sam',     name: 'Sam Yeary',      initials: 'SY', color: 'var(--slate-600)' },
     { username: 'sara',    name: 'Sara Johnson',   initials: 'SJ', color: 'var(--green)' },
@@ -319,32 +343,69 @@
     { username: 'carlynn', name: 'Carlynn Forst',  initials: 'CF', color: 'var(--red)' },
     { username: 'jaida',   name: 'Jaida Smith',    initials: 'JS', color: 'var(--slate-800)' },
   ];
+  // Alias for backward compatibility with existing code
+  const STUB_USERS = TEAM_USERS;
 
-
-  /* ─── Session — Stage 2.5 will wire real login ──────────────── */
-  function getSession() {
-    try { return JSON.parse(localStorage.getItem('elite_session') || 'null'); }
-    catch { return null; }
+  function initialsFromName(name) {
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
   function getCurrentUser() {
     const sess = getSession();
     if (sess && sess.user && sess.user.username) {
       const lower = String(sess.user.username).toLowerCase();
-      const stub = STUB_USERS.find(u => u.username === lower);
-      return stub || { username: lower, name: sess.user.name || lower, initials: (sess.user.name||lower)[0].toUpperCase(), color: 'var(--blue)' };
+      const team = TEAM_USERS.find(u => u.username === lower);
+      if (team) return team;
+      // Non-team user — build from session data
+      return {
+        username: lower,
+        name: sess.user.display_name || sess.user.name || lower,
+        initials: initialsFromName(sess.user.display_name || sess.user.name || lower),
+        color: sess.user.avatar_color || 'var(--slate-600)',
+      };
     }
-    // Stage 1.3 fallback — pretend it's Angel so we can see the chrome
-    return { ...STUB_USERS[0], isStub: true };
+    // No session — shouldn't happen because requireSession redirects, but defensive:
+    return { ...TEAM_USERS[0], isStub: true };
   }
 
   function isPrivileged(user) {
     return ['angel','sam','sara','emma','carlynn','jaida'].includes(user.username);
   }
 
-  function signOut() {
-    localStorage.removeItem('elite_session');
-    showToast('Signed out (Stage 2.5 will redirect to login)', 'default');
+  async function signOut() {
+    const token = getToken();
+    if (token) {
+      try {
+        await fetch(BACKEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'logout', token }),
+        });
+      } catch (e) { /* ignore */ }
+    }
+    clearSession();
+    location.href = 'login.html?loggedout=1';
+  }
+
+  /* ─── Session guard — runs before anything else ──────────── */
+  function requireSession() {
+    const sess = getSession();
+    if (!sess || !sess.token) {
+      // Preserve where user was trying to go
+      const next = encodeURIComponent(location.pathname + location.search + location.hash);
+      location.href = `login.html?next=${next}`;
+      return false;
+    }
+    // Expiry check
+    if (sess.expires_at && new Date(sess.expires_at) < new Date()) {
+      clearSession();
+      location.href = 'login.html?expired=1';
+      return false;
+    }
+    return true;
   }
 
 
@@ -716,7 +777,7 @@
     return `
       <div class="view">
         <h1 class="view-title">Welcome${user.isStub ? ' (stub session)' : ', ' + escapeHtml(user.name.split(' ')[0])}</h1>
-        <p class="view-sub">Stage 2.2 shipped — backend is live and wired to the new sheets.</p>
+        <p class="view-sub">Stage 2.5 shipped — real login is live. You're signed in as yourself.</p>
 
         <!-- Backend connectivity test -->
         <div class="view-section">
@@ -748,7 +809,7 @@
                 <div class="card-title">Try the navigation</div>
                 <div class="card-sub">Click items in the sidebar, click an avatar chip, press <span class="kbd" style="font-size:10px;">?</span> for shortcuts</div>
               </div>
-              <span class="badge badge-green">STAGE 2.2</span>
+              <span class="badge badge-green">STAGE 2.5</span>
             </div>
 
             <div style="display:grid;gap:var(--sp-5);">
@@ -973,6 +1034,13 @@
   /* ═══════════════════════════════════════════════════════════════
      BOOTSTRAP
      ═══════════════════════════════════════════════════════════════ */
+
+  // Guard: if no valid session, redirect to login.html before anything else
+  if (!requireSession()) {
+    // requireSession() has already triggered the redirect
+    // Halt bootstrap by throwing — prevents UI flash of unauthenticated state
+    throw new Error('Redirecting to login');
+  }
 
   document.body.style.opacity = '1';
 
