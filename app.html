@@ -1257,20 +1257,383 @@
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
-  // Submission detail — real view ships in Stage 4.2
-  route('/submission/:id', ({ id }) => placeholder(
-    'Submission Detail',
-    'Stage 4.2',
-    `Viewing submission ${id}`,
-    [
-      'Full message + reply thread',
-      'Reply composer with send button',
-      'Status dropdown (New → In Review → Needs Info → Resolved)',
-      'Assign to team member',
-      'Priority and due date',
-      'Keyboard shortcuts (r to reply, e to resolve, # to assign)',
-    ]
-  ), { title: 'Submission' });
+  // Submission detail (Stage 4.2)
+  route('/submission/:id', ({ id }) => {
+    return `
+      <div class="view submission-view">
+        <a class="btn btn-ghost btn-sm" href="#/inbox" style="margin-bottom:var(--sp-3);">← Back to inbox</a>
+
+        <div id="submission-detail-body">
+          <div class="skeleton skeleton-title"></div>
+          <div class="skeleton skeleton-text"></div>
+          <div class="skeleton skeleton-text" style="width:60%;"></div>
+          <div class="skeleton skeleton-line" style="margin-top:var(--sp-5);height:100px;"></div>
+        </div>
+
+        <div class="submission-error" id="submission-error" style="display:none;"></div>
+      </div>
+    `;
+  }, {
+    title: 'Submission',
+    onAfterRender: (params) => loadSubmissionDetail(params.id)
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     SUBMISSION DETAIL LOADER (Stage 4.2)
+     ═══════════════════════════════════════════════════════════════ */
+
+  // Keep current submission in scope so handlers can use it
+  let _currentSubmission = null;
+
+  async function loadSubmissionDetail(id) {
+    const body = $('#submission-detail-body');
+    const err  = $('#submission-error');
+    if (!body) return;
+
+    const [subRes, repRes] = await Promise.all([
+      api({ resource: 'submission', id: id }),
+      api({ resource: 'submission_replies', id: id }),
+    ]);
+
+    if (!body) return;  // user navigated away
+
+    if (subRes.error || !subRes.submission) {
+      body.innerHTML = '';
+      err.style.display = '';
+      err.innerHTML = `<div class="card" style="border-color:var(--red);">
+        <div style="color:var(--red);font-weight:600;">⚠ ${escapeHtml(subRes.error || 'Submission not found')}</div>
+      </div>`;
+      return;
+    }
+    err.style.display = 'none';
+
+    const sub = subRes.submission;
+    const replies = (repRes.replies) || [];
+    _currentSubmission = sub;
+
+    // Auto-mark seen so unread dot clears in inbox next time
+    try {
+      await api({}, 'POST', { action: 'marksubmissionseen', id: sub.id });
+    } catch (e) { /* non-critical */ }
+
+    renderSubmissionDetail(body, sub, replies);
+  }
+
+  function renderSubmissionDetail(container, sub, replies) {
+    const me = getLoggedInUser();
+    const isComplianceTeam = ['angel','sam','sara','emma','carlynn'].includes(me.username);
+    const isJaida = me.username === 'jaida';
+    const canEdit = isComplianceTeam || isJaida;  // compliance team + Jaida can change status/assign
+
+    const srcIcon = { fleet: '🚚', legal: '⚖️', reviews: '⭐', compliance: '👷', general: '💬' }[sub.source_page] || '💬';
+    const srcLabel = (sub.source_page || '').charAt(0).toUpperCase() + (sub.source_page || '').slice(1);
+    const directionArrow = sub.direction === 'field_to_compliance' ? '→' : '←';
+    const directionText = sub.direction === 'field_to_compliance'
+      ? `From <strong>${escapeHtml(sub.from_user)}</strong> to compliance`
+      : `From <strong>${escapeHtml(sub.from_user)}</strong> to ${escapeHtml(sub.to_region ? sub.to_region.toUpperCase() : (sub.to_user || 'field'))}`;
+
+    // Status options
+    const statuses = ['New', 'In Review', 'Needs Info', 'Resolved'];
+    const statusOptions = statuses.map(s => `<option value="${s}" ${sub.status === s ? 'selected' : ''}>${s}</option>`).join('');
+
+    // Priority
+    const priorities = ['low', 'med', 'high'];
+    const priorityOptions = priorities.map(p => `<option value="${p}" ${sub.priority === p ? 'selected' : ''}>${p.charAt(0).toUpperCase() + p.slice(1)}</option>`).join('');
+
+    // Assignee — team members + unassigned
+    const team = [
+      { username: 'angel', name: 'Angel Maddox' },
+      { username: 'sam', name: 'Sam Yeary' },
+      { username: 'sara', name: 'Sara Johnson' },
+      { username: 'emma', name: 'Emma Box' },
+      { username: 'carlynn', name: 'Carlynn Forst' },
+      { username: 'jaida', name: 'Jaida Smith' },
+    ];
+    const assignOptions = `<option value="">(Unassigned)</option>` +
+      team.map(t => `<option value="${t.username}" ${sub.assigned_to === t.username ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
+
+    // Due date — format as YYYY-MM-DD for input[type=date]
+    const dueDateValue = sub.due_date ? formatDateForInput(sub.due_date) : '';
+
+    // Controls row — editable if canEdit
+    const controlsHtml = canEdit ? `
+      <div class="submission-controls">
+        <div class="submission-control">
+          <label>Status</label>
+          <select id="sub-status" class="inbox-filter-select" style="min-width:130px;">
+            ${statusOptions}
+          </select>
+        </div>
+        <div class="submission-control">
+          <label>Priority</label>
+          <select id="sub-priority" class="inbox-filter-select" style="min-width:100px;">
+            ${priorityOptions}
+          </select>
+        </div>
+        <div class="submission-control">
+          <label>Assigned to</label>
+          <select id="sub-assignee" class="inbox-filter-select" style="min-width:160px;">
+            ${assignOptions}
+          </select>
+        </div>
+        <div class="submission-control">
+          <label>Due date</label>
+          <input type="date" id="sub-duedate" class="inbox-filter-select" value="${escapeAttr(dueDateValue)}" style="min-width:140px;">
+        </div>
+        <div class="submission-control submission-save-wrap">
+          <span id="sub-control-status" class="submission-save-status"></span>
+        </div>
+      </div>
+    ` : `
+      <div class="submission-controls submission-controls-readonly">
+        <div class="submission-readonly-field">
+          <span class="submission-readonly-label">Status</span>
+          <span class="badge ${statusBadgeClass(sub.status)}">${escapeHtml(sub.status)}</span>
+        </div>
+        <div class="submission-readonly-field">
+          <span class="submission-readonly-label">Priority</span>
+          <span class="badge ${priorityBadgeClass(sub.priority)}">${escapeHtml((sub.priority || 'med').toUpperCase())}</span>
+        </div>
+        ${sub.assigned_to ? `
+        <div class="submission-readonly-field">
+          <span class="submission-readonly-label">Assigned to</span>
+          <span class="submission-readonly-value">${escapeHtml(sub.assigned_to)}</span>
+        </div>
+        ` : ''}
+        ${sub.due_date ? `
+        <div class="submission-readonly-field">
+          <span class="submission-readonly-label">Due</span>
+          <span class="submission-readonly-value">${escapeHtml(formatFriendlyDate(sub.due_date))}</span>
+        </div>
+        ` : ''}
+      </div>
+    `;
+
+    // First message (the submission itself) + thread of replies
+    const threadHtml = renderThread(sub, replies);
+
+    // Reply composer — anyone who's visible to the thread can reply
+    const composerHtml = sub.status === 'Resolved' ? `
+      <div class="submission-composer-closed">
+        🔒 This submission is resolved. <a href="javascript:void(0)" onclick="reopenSubmission()">Reopen it</a> to add more replies.
+      </div>
+    ` : `
+      <div class="submission-composer">
+        <textarea
+          id="sub-reply-textarea"
+          class="submission-composer-textarea"
+          placeholder="Type your reply… (Ctrl+Enter to send)"
+          rows="3"></textarea>
+        <div class="submission-composer-actions">
+          <span class="submission-composer-hint" id="sub-composer-hint"></span>
+          <button class="btn btn-primary btn-sm" id="sub-send-btn" onclick="sendSubmissionReply()">Send reply</button>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = `
+      <div class="submission-header">
+        <div class="submission-header-title">
+          <span class="submission-header-icon">${srcIcon}</span>
+          <h1 class="view-title" style="margin:0;">${escapeHtml(sub.subject || '(no subject)')}</h1>
+        </div>
+        <div class="submission-header-meta">
+          <span>${escapeHtml(srcLabel)}</span>
+          <span class="submission-meta-sep">·</span>
+          <span>${directionText}</span>
+          <span class="submission-meta-sep">·</span>
+          <span>${escapeHtml(formatRelativeTime(sub.created_at))}</span>
+        </div>
+      </div>
+
+      ${controlsHtml}
+
+      ${threadHtml}
+
+      ${composerHtml}
+    `;
+
+    // Wire up control handlers (if editable)
+    if (canEdit) {
+      wireControlHandlers(sub);
+    }
+
+    // Wire composer keyboard shortcut
+    const textarea = $('#sub-reply-textarea');
+    if (textarea) {
+      textarea.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+          e.preventDefault();
+          sendSubmissionReply();
+        }
+      });
+      textarea.focus();
+    }
+  }
+
+  function statusBadgeClass(status) {
+    if (status === 'Resolved') return 'badge-green';
+    if (status === 'In Review') return 'badge-blue';
+    if (status === 'Needs Info') return 'badge-amber';
+    return '';
+  }
+
+  function priorityBadgeClass(priority) {
+    if (priority === 'high') return 'badge-red';
+    if (priority === 'low') return '';
+    return 'badge-amber';
+  }
+
+  function renderThread(sub, replies) {
+    const me = getLoggedInUser();
+    const initialMsg = {
+      author: sub.from_user,
+      message: sub.message,
+      created_at: sub.created_at,
+    };
+    const allMessages = [initialMsg, ...replies];
+
+    return `
+      <div class="submission-thread">
+        ${allMessages.map(m => renderMessage(m, me.username)).join('')}
+      </div>
+    `;
+  }
+
+  function renderMessage(msg, currentUsername) {
+    const isMine = String(msg.author || '').toLowerCase() === currentUsername;
+    const authorClass = isMine ? 'submission-msg-mine' : 'submission-msg-theirs';
+    const initials = initialsFromName(msg.author || '?');
+    const teamUser = TEAM_USERS.find(u => u.username === String(msg.author || '').toLowerCase());
+    const color = teamUser ? teamUser.color : 'var(--slate-500)';
+    const displayName = teamUser ? teamUser.name : (msg.author || 'Unknown');
+
+    return `
+      <div class="submission-msg ${authorClass}">
+        <div class="submission-msg-avatar" style="background:${color};">${initials}</div>
+        <div class="submission-msg-body">
+          <div class="submission-msg-header">
+            <span class="submission-msg-author">${escapeHtml(displayName)}</span>
+            <span class="submission-msg-time">${escapeHtml(formatRelativeTime(msg.created_at))}</span>
+          </div>
+          <div class="submission-msg-content">${escapeHtml(msg.message || '').replace(/\n/g, '<br>')}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function formatDateForInput(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    if (isNaN(dt)) return '';
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
+  function formatFriendlyDate(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    if (isNaN(dt)) return String(d);
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function wireControlHandlers(sub) {
+    const statusEl   = $('#sub-status');
+    const priorityEl = $('#sub-priority');
+    const assigneeEl = $('#sub-assignee');
+    const dueEl      = $('#sub-duedate');
+    const statusNote = $('#sub-control-status');
+
+    const showSaving = (msg) => { if (statusNote) { statusNote.textContent = msg; statusNote.className = 'submission-save-status saving'; } };
+    const showSaved  = ()    => { if (statusNote) { statusNote.textContent = '✓ Saved'; statusNote.className = 'submission-save-status saved'; setTimeout(() => { if (statusNote.textContent === '✓ Saved') statusNote.textContent = ''; }, 2000); } };
+    const showErr    = (msg) => { if (statusNote) { statusNote.textContent = '✗ ' + msg; statusNote.className = 'submission-save-status error'; } };
+
+    if (statusEl) {
+      statusEl.onchange = async () => {
+        showSaving('Saving…');
+        const res = await api({}, 'POST', { action: 'updatesubmissionstatus', id: sub.id, status: statusEl.value });
+        if (res.error) showErr(res.error); else { showSaved(); _currentSubmission.status = statusEl.value; }
+      };
+    }
+
+    if (priorityEl) {
+      priorityEl.onchange = async () => {
+        showSaving('Saving…');
+        // Use savesubmission for priority/due updates (no dedicated endpoint)
+        const res = await api({}, 'POST', { action: 'savesubmission', submission: { ..._currentSubmission, priority: priorityEl.value } });
+        if (res.error) showErr(res.error); else { showSaved(); _currentSubmission.priority = priorityEl.value; }
+      };
+    }
+
+    if (assigneeEl) {
+      assigneeEl.onchange = async () => {
+        showSaving('Saving…');
+        const res = await api({}, 'POST', { action: 'assignsubmission', id: sub.id, assigned_to: assigneeEl.value });
+        if (res.error) showErr(res.error); else { showSaved(); _currentSubmission.assigned_to = assigneeEl.value; }
+      };
+    }
+
+    if (dueEl) {
+      dueEl.onchange = async () => {
+        showSaving('Saving…');
+        const res = await api({}, 'POST', { action: 'savesubmission', submission: { ..._currentSubmission, due_date: dueEl.value || '' } });
+        if (res.error) showErr(res.error); else { showSaved(); _currentSubmission.due_date = dueEl.value; }
+      };
+    }
+  }
+
+  async function sendSubmissionReply() {
+    const ta = $('#sub-reply-textarea');
+    const btn = $('#sub-send-btn');
+    const hint = $('#sub-composer-hint');
+    if (!ta || !_currentSubmission) return;
+    const message = ta.value.trim();
+    if (!message) {
+      ta.focus();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    hint.textContent = '';
+
+    const res = await api({}, 'POST', {
+      action: 'addreply',
+      submission_id: _currentSubmission.id,
+      message: message,
+    });
+
+    if (res.error) {
+      btn.disabled = false;
+      btn.textContent = 'Send reply';
+      hint.textContent = '✗ ' + res.error;
+      hint.className = 'submission-composer-hint error';
+      return;
+    }
+
+    // Success — clear textarea and reload thread
+    ta.value = '';
+    btn.disabled = false;
+    btn.textContent = 'Send reply';
+    hint.textContent = '';
+    showToast('Reply sent', 'success');
+    // Reload the detail (which also re-fetches replies)
+    loadSubmissionDetail(_currentSubmission.id);
+  }
+
+  async function reopenSubmission() {
+    if (!_currentSubmission) return;
+    const res = await api({}, 'POST', { action: 'updatesubmissionstatus', id: _currentSubmission.id, status: 'In Review' });
+    if (res.error) {
+      showToast('Failed to reopen: ' + res.error, 'error');
+      return;
+    }
+    showToast('Submission reopened', 'success');
+    loadSubmissionDetail(_currentSubmission.id);
+  }
 
   route('/workspace', () => placeholder('My Workspace', 'Stage 5',
     'Personal tasks, contacts, links, and scratchpad — same view for every user.',

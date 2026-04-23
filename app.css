@@ -1534,3 +1534,266 @@ body.view-as-active .app-root {
 .inbox-error {
   margin-top: var(--sp-4);
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 4.2 — SUBMISSION DETAIL VIEW
+   ═══════════════════════════════════════════════════════════════════ */
+
+.submission-view {
+  max-width: 860px;
+}
+
+.submission-header {
+  margin-bottom: var(--sp-4);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--slate-200);
+}
+
+.submission-header-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+
+.submission-header-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.submission-header-meta {
+  font-size: 13px;
+  color: var(--slate-500);
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.submission-header-meta strong {
+  color: var(--navy);
+  font-weight: 600;
+}
+.submission-meta-sep {
+  color: var(--slate-300);
+}
+
+/* Controls row */
+.submission-controls {
+  display: flex;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--slate-50);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-5);
+}
+.submission-controls-readonly {
+  background: transparent;
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--slate-200);
+  padding-bottom: var(--sp-3);
+}
+
+.submission-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.submission-control label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+}
+.submission-save-wrap {
+  justify-content: flex-end;
+  align-self: center;
+  margin-left: auto;
+}
+
+.submission-save-status {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--slate-500);
+}
+.submission-save-status.saving { color: var(--slate-500); }
+.submission-save-status.saved  { color: var(--green); }
+.submission-save-status.error  { color: var(--red); }
+
+.submission-readonly-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.submission-readonly-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+}
+.submission-readonly-value {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--navy);
+}
+
+/* Thread */
+.submission-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.submission-msg {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+
+.submission-msg-mine {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.submission-msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-round);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.submission-msg-body {
+  flex: 1;
+  min-width: 0;
+  max-width: 620px;
+}
+
+.submission-msg-mine .submission-msg-body {
+  margin-left: auto;
+}
+
+.submission-msg-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: 4px;
+}
+
+.submission-msg-mine .submission-msg-header {
+  justify-content: flex-end;
+}
+
+.submission-msg-author {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+}
+.submission-msg-time {
+  font-size: 11px;
+  color: var(--slate-400);
+}
+
+.submission-msg-content {
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: 12px;
+  padding: var(--sp-3) var(--sp-4);
+  font-size: 14px;
+  color: var(--navy);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  text-align: left;
+}
+
+.submission-msg-mine .submission-msg-content {
+  background: var(--blue-pale);
+  border-color: var(--blue-pale);
+}
+
+/* Composer */
+.submission-composer {
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin-top: var(--sp-4);
+}
+
+.submission-composer-textarea {
+  width: 100%;
+  min-height: 90px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--navy);
+  border: none;
+  outline: none;
+  resize: vertical;
+  padding: var(--sp-2);
+  background: transparent;
+}
+.submission-composer-textarea::placeholder {
+  color: var(--slate-400);
+}
+
+.submission-composer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--slate-100);
+}
+
+.submission-composer-hint {
+  font-size: 12px;
+  color: var(--slate-500);
+}
+.submission-composer-hint.error {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.submission-composer-closed {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--slate-100);
+  border-radius: var(--r-md);
+  font-size: 13px;
+  color: var(--slate-600);
+  text-align: center;
+}
+.submission-composer-closed a {
+  color: var(--blue);
+  font-weight: 600;
+  text-decoration: none;
+}
+.submission-composer-closed a:hover {
+  text-decoration: underline;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+  .submission-msg-body {
+    max-width: none;
+  }
+  .submission-controls {
+    gap: var(--sp-3);
+  }
+  .submission-save-wrap {
+    margin-left: 0;
+    width: 100%;
+  }
+}
