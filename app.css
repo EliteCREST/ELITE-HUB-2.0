@@ -3194,3 +3194,10 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
 .ctr-event-actor { font-weight: 600; color: var(--slate-700); }
 .ctr-event-desc { color: var(--slate-700); }
 .ctr-event-desc em { font-style: italic; color: var(--slate-500); }
+
+/* Stage 6.1 skeleton rows don't need hover */
+.ctr-row-skeleton {
+  cursor: default;
+  pointer-events: none;
+}
+.ctr-row-skeleton:hover { background: transparent; }
