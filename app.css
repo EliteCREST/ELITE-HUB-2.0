@@ -1214,3 +1214,46 @@ img, svg { display: block; max-width: 100%; }
 }
 .sheet-item:hover { background: var(--slate-100); }
 .sheet-item-icon { font-size: 18px; width: 24px; text-align: center; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 3.5 — HOME DASHBOARD
+   ═══════════════════════════════════════════════════════════════════ */
+
+.dash-hero {
+  margin-bottom: var(--sp-5);
+}
+
+.dash-hero .view-title {
+  margin-bottom: 4px;
+}
+
+/* KPI strip — responsive grid, min 140px tiles */
+.dash-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-6);
+}
+
+/* make KPI tiles stand out a bit more on dashboard */
+.dash-kpis .kpi-tile {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Dashboard two-column grid for My Day + By Category */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+}
+@media (max-width: 768px) {
+  .dash-grid { grid-template-columns: 1fr; }
+}
+
+.dash-myday,
+.dash-bycategory {
+  min-height: 180px;
+}

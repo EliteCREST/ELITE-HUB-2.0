@@ -774,87 +774,74 @@
   /* ─── HOME ──────────────────────────────────────────────────── */
   route('/home', () => {
     const user = getCurrentUser();
+    const firstName = (user.name || '').split(' ')[0] || user.username;
     return `
-      <div class="view">
-        <h1 class="view-title">Welcome${user.isStub ? ' (stub session)' : ', ' + escapeHtml(user.name.split(' ')[0])}</h1>
-        <p class="view-sub">Stage 2.5 shipped — real login is live. You're signed in as yourself.</p>
+      <div class="view" id="home-view">
+        <!-- Greeting hero -->
+        <div class="dash-hero">
+          <h1 class="view-title" id="dash-greeting">Loading…</h1>
+          <p class="view-sub" id="dash-sub">${escapeHtml(user.isStub ? 'Stub session' : 'Welcome back, ' + firstName)}</p>
+        </div>
 
-        <!-- Backend connectivity test -->
-        <div class="view-section">
-          <div class="card">
+        <!-- KPI strip -->
+        <div class="dash-kpis" id="dash-kpis">
+          <div class="skeleton skeleton-line" style="height:78px;"></div>
+          <div class="skeleton skeleton-line" style="height:78px;"></div>
+          <div class="skeleton skeleton-line" style="height:78px;"></div>
+          <div class="skeleton skeleton-line" style="height:78px;"></div>
+        </div>
+
+        <!-- Two-column: My Day + By Category -->
+        <div class="dash-grid">
+          <div class="card dash-myday">
             <div class="card-header">
               <div>
-                <div class="card-title">Backend connection</div>
-                <div class="card-sub">Live status of your new Elite Hub 2.0 backend</div>
+                <div class="card-title">My Day</div>
+                <div class="card-sub" id="dash-myday-sub">—</div>
               </div>
-              <span class="badge" id="backend-status-badge">CHECKING…</span>
+              <a class="btn btn-ghost btn-sm" href="#/workspace">Open workspace →</a>
             </div>
-            <div id="backend-status-details" style="font-size:13px;color:var(--slate-600);">
+            <div id="dash-myday-body">
+              <div class="skeleton skeleton-text"></div>
+              <div class="skeleton skeleton-text" style="width:70%;"></div>
+            </div>
+          </div>
+
+          <div class="card dash-bycategory" id="dash-bycategory-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">By category</div>
+                <div class="card-sub">Inbox items grouped by source page</div>
+              </div>
+            </div>
+            <div id="dash-bycategory-body">
               <div class="skeleton skeleton-text"></div>
               <div class="skeleton skeleton-text" style="width:60%;"></div>
             </div>
-            <div style="margin-top:var(--sp-4);display:flex;gap:var(--sp-2);flex-wrap:wrap;">
-              <button class="btn btn-secondary btn-sm" onclick="testBackend('ping')">Ping</button>
-              <button class="btn btn-secondary btn-sm" onclick="testBackend('users')">Load users</button>
-              <button class="btn btn-secondary btn-sm" onclick="testBackend('regions')">Load regions</button>
-              <button class="btn btn-secondary btn-sm" onclick="testBackend('project_defaults')">Load projects</button>
-            </div>
           </div>
         </div>
 
+        <!-- Quick actions -->
         <div class="view-section">
           <div class="card">
             <div class="card-header">
               <div>
-                <div class="card-title">Try the navigation</div>
-                <div class="card-sub">Click items in the sidebar, click an avatar chip, press <span class="kbd" style="font-size:10px;">?</span> for shortcuts</div>
+                <div class="card-title">Quick actions</div>
               </div>
-              <span class="badge badge-green">STAGE 2.5</span>
             </div>
-
-            <div style="display:grid;gap:var(--sp-5);">
-              <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Keyboard shortcuts to try</div>
-                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-3);font-size:13px;">
-                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">H</span>&nbsp;Home</div>
-                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">I</span>&nbsp;Inbox</div>
-                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">W</span>&nbsp;Workspace</div>
-                  <div><span class="kbd">G</span>&nbsp;<span class="kbd">R</span>&nbsp;Regions</div>
-                  <div><span class="kbd">/</span>&nbsp;Search</div>
-                  <div><span class="kbd">?</span>&nbsp;Help</div>
-                </div>
-              </div>
-
-              <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">Test routes</div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--sp-2);">
-                  <a class="btn btn-secondary" href="#/inbox">📬 Inbox</a>
-                  <a class="btn btn-secondary" href="#/workspace">✓ Workspace</a>
-                  <a class="btn btn-secondary" href="#/region/cle">📍 Cleveland</a>
-                  <a class="btn btn-secondary" href="#/region/stl">📍 St. Louis</a>
-                  <a class="btn btn-secondary" href="#/contractors">👷 Contractors</a>
-                  <a class="btn btn-secondary" href="#/fleet">🚚 Fleet</a>
-                  <a class="btn btn-secondary" href="#/reviews">⭐ Reviews</a>
-                  <a class="btn btn-secondary" href="#/legal">⚖️ Legal</a>
-                  <a class="btn btn-secondary" href="#/admin">⚙️ Admin</a>
-                  <a class="btn btn-secondary" href="#/nonexistent">404 test</a>
-                </div>
-              </div>
-
-              <div>
-                <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--slate-500);margin-bottom:var(--sp-2);">UI elements</div>
-                <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
-                  <button class="btn btn-primary" onclick="showToast('Saved','success')">Toast</button>
-                  <button class="btn btn-secondary" onclick="showShortcutsHelp()">Show shortcuts</button>
-                </div>
-              </div>
-
+            <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
+              <a class="btn btn-primary" href="#/inbox">📬 Open inbox</a>
+              <a class="btn btn-secondary" href="#/workspace">✓ My workspace</a>
+              <button class="btn btn-blue" onclick="showToast('New-submission modal coming in Stage 4','default')">+ New submission</button>
             </div>
           </div>
         </div>
+
+        <!-- Error / status strip (shows only if something goes wrong) -->
+        <div id="dash-error" style="display:none;margin-top:var(--sp-4);"></div>
       </div>
     `;
-  }, { title: 'Home', onAfterRender: () => autoCheckBackend() });
+  }, { title: 'Home', onAfterRender: () => loadDashboard() });
 
 
   /* ─── Placeholders ────────────────────────────────────────── */
@@ -957,63 +944,180 @@
 
 
   /* ═══════════════════════════════════════════════════════════════
-     BACKEND TEST (Stage 2.2) — verifies connectivity from home page
+     DASHBOARD LOADER (Stage 3.5)
+     Calls /resource=dashboard and renders KPIs, My Day, By Category.
      ═══════════════════════════════════════════════════════════════ */
 
-  async function testBackend(resource) {
-    const badge = $('#backend-status-badge');
-    const details = $('#backend-status-details');
-    if (!badge || !details) return;
+  let dashboardRefreshTimer = null;
 
-    badge.className = 'badge';
-    badge.textContent = 'CHECKING…';
-    details.innerHTML = `<div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text" style="width:60%;"></div>`;
+  async function loadDashboard() {
+    // Cancel any existing timer (we're re-entering home view)
+    if (dashboardRefreshTimer) {
+      clearTimeout(dashboardRefreshTimer);
+      dashboardRefreshTimer = null;
+    }
 
-    const startedAt = performance.now();
-    const result = await api({ resource: resource });
-    const elapsedMs = Math.round(performance.now() - startedAt);
+    const greetingEl = $('#dash-greeting');
+    const subEl      = $('#dash-sub');
+    const kpiEl      = $('#dash-kpis');
+    const mydayEl    = $('#dash-myday-body');
+    const mydaySub   = $('#dash-myday-sub');
+    const catCard    = $('#dash-bycategory-card');
+    const catEl      = $('#dash-bycategory-body');
+    const errEl      = $('#dash-error');
 
-    if (result && result.error) {
-      badge.className = 'badge badge-red';
-      badge.textContent = 'ERROR';
-      details.innerHTML = `
-        <div style="color:var(--red);font-weight:600;">✗ ${escapeHtml(result.error)}</div>
-        <div style="color:var(--slate-500);font-size:12px;margin-top:var(--sp-2);">Resource: <code>${escapeHtml(resource)}</code> · Took ${elapsedMs}ms</div>
-      `;
+    // If we're not on the home view, abort (user navigated away)
+    if (!greetingEl) return;
+
+    const data = await api({ resource: 'dashboard' });
+
+    if (!greetingEl || !kpiEl) return;  // user navigated away during fetch
+
+    if (data && data.error) {
+      if (errEl) {
+        errEl.style.display = '';
+        errEl.innerHTML = `
+          <div class="card" style="border-color:var(--red);">
+            <div style="color:var(--red);font-weight:600;">⚠ ${escapeHtml(data.error)}</div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:var(--sp-2);" onclick="loadDashboard()">Retry</button>
+          </div>`;
+      }
+      greetingEl.textContent = 'Dashboard unavailable';
+      kpiEl.innerHTML = '';
       return;
     }
 
-    badge.className = 'badge badge-green';
-    badge.textContent = 'ONLINE';
+    // Render greeting
+    const greet = data.greeting || {};
+    const tod = greet.time_of_day || 'morning';
+    const verb = tod === 'morning' ? 'Good morning' : tod === 'afternoon' ? 'Good afternoon' : 'Good evening';
+    const firstName = (greet.display_name || data.user || '').split(' ')[0];
+    greetingEl.textContent = `${verb}, ${firstName}.`;
 
-    // Summarize the payload
-    let summary = '';
-    if (resource === 'ping') {
-      summary = `✓ Backend v${escapeHtml(result.version || '?')} responding · Server time: ${escapeHtml(result.time || '?')}`;
-    } else if (resource === 'users' && result.users) {
-      summary = `✓ Loaded <strong>${result.users.length}</strong> users: ${result.users.map(u => escapeHtml(u.display_name || u.username)).join(', ')}`;
-    } else if (resource === 'regions' && result.regions) {
-      summary = `✓ Loaded <strong>${result.regions.length}</strong> regions: ${result.regions.map(r => escapeHtml(r.abbr || r.code)).join(', ')}`;
-    } else if (resource === 'project_defaults' && result.projects) {
-      summary = `✓ Loaded <strong>${result.projects.length}</strong> projects: ${result.projects.slice(0, 5).map(p => escapeHtml(p.name)).join(', ')}${result.projects.length > 5 ? ', …' : ''}`;
+    const isCompliance = !!data.is_compliance;
+    const sub = data.submissions || {};
+    const myday = data.my_day || {};
+
+    subEl.textContent = isCompliance
+      ? `You have ${sub.inbox_count || 0} in your inbox, ${sub.pool_count || 0} in the pool.`
+      : `You have ${sub.inbox_count || 0} messages from compliance waiting.`;
+
+    // KPI tiles — different per role
+    renderDashboardKpis(kpiEl, data);
+
+    // My Day card
+    renderMyDay(mydayEl, mydaySub, myday);
+
+    // By-category card — hide for field users (they don't have cross-source insight)
+    if (isCompliance) {
+      catCard.style.display = '';
+      renderByCategory(catEl, sub.by_source || {});
     } else {
-      summary = `✓ Response: ${escapeHtml(JSON.stringify(result).slice(0, 200))}`;
+      catCard.style.display = 'none';
     }
 
-    details.innerHTML = `
-      <div>${summary}</div>
-      <div style="color:var(--slate-500);font-size:12px;margin-top:var(--sp-2);">
-        Resource: <code>${escapeHtml(resource)}</code> · Took ${elapsedMs}ms
-      </div>
-    `;
+    // Schedule a refresh in 60s (only while on home)
+    dashboardRefreshTimer = setTimeout(() => {
+      // Double-check we're still on home
+      if ($('#dash-greeting') && (location.hash === '#/home' || location.hash === '')) {
+        loadDashboard();
+      }
+    }, 60000);
   }
 
-  // Auto-ping when home view renders
-  function autoCheckBackend() {
-    // Only auto-check if we're on the home view AND status card is present
-    setTimeout(() => {
-      if ($('#backend-status-badge')) testBackend('ping');
-    }, 50);
+  function renderDashboardKpis(el, data) {
+    const sub = data.submissions || {};
+    const myday = data.my_day || {};
+    const isCompliance = !!data.is_compliance;
+
+    const tiles = [];
+
+    if (isCompliance) {
+      tiles.push({ label: 'Assigned to me', value: sub.assigned_count || 0, color: 'blue',  href: '#/inbox?scope=assigned' });
+      tiles.push({ label: 'Pool',           value: sub.pool_count || 0,     color: 'amber', href: '#/inbox?scope=pool' });
+      tiles.push({ label: 'Unread replies', value: sub.unread_count || 0,   color: 'red',   href: '#/inbox?scope=sent' });
+      tiles.push({ label: 'High priority',  value: sub.high_priority || 0,  color: 'red',   href: '#/inbox?priority=high' });
+      tiles.push({ label: 'Due soon',       value: sub.due_soon || 0,       color: 'amber', href: '#/inbox?due=soon' });
+    } else {
+      tiles.push({ label: 'From compliance', value: sub.inbox_count || 0,   color: 'blue',  href: '#/inbox?scope=inbox' });
+      tiles.push({ label: 'My submissions',  value: sub.sent_count || 0,    color: 'slate', href: '#/inbox?scope=sent' });
+      tiles.push({ label: 'Unread replies',  value: sub.unread_count || 0,  color: 'red',   href: '#/inbox?scope=sent' });
+      tiles.push({ label: 'Due soon',        value: sub.due_soon || 0,      color: 'amber', href: '#/inbox?due=soon' });
+    }
+
+    // Always add task tiles
+    tiles.push({ label: 'Tasks today', value: myday.tasks_due_today || 0, color: 'amber', href: '#/workspace' });
+    tiles.push({ label: 'Overdue',     value: myday.tasks_overdue || 0,   color: 'red',   href: '#/workspace' });
+
+    el.innerHTML = tiles.map(t => `
+      <a class="kpi-tile kpi-${escapeAttr(t.color)}" href="${escapeAttr(t.href)}">
+        <div>
+          <div class="kpi-tile-label">${escapeHtml(t.label)}</div>
+        </div>
+        <div class="kpi-tile-value">${t.value}</div>
+      </a>
+    `).join('');
+  }
+
+  function renderMyDay(bodyEl, subEl, myday) {
+    const totalOpen = myday.tasks_total_open || 0;
+    const dueToday = myday.tasks_due_today || 0;
+    const overdue = myday.tasks_overdue || 0;
+
+    subEl.textContent = totalOpen === 0
+      ? 'No open tasks'
+      : `${totalOpen} open · ${dueToday} due today · ${overdue} overdue`;
+
+    if (totalOpen === 0) {
+      bodyEl.innerHTML = `
+        <div style="padding:var(--sp-4) 0;color:var(--slate-500);font-size:13px;">
+          🎉 No tasks on your plate. Enjoy the quiet.
+        </div>`;
+    } else {
+      bodyEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3);">
+          <div style="padding:var(--sp-3);background:var(--amber-pale);border-radius:var(--r-md);">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--amber);">Due today</div>
+            <div style="font-size:20px;font-weight:700;color:var(--navy);margin-top:2px;">${dueToday}</div>
+          </div>
+          <div style="padding:var(--sp-3);background:${overdue > 0 ? 'var(--red-pale)' : 'var(--slate-100)'};border-radius:var(--r-md);">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:${overdue > 0 ? 'var(--red)' : 'var(--slate-500)'};">Overdue</div>
+            <div style="font-size:20px;font-weight:700;color:var(--navy);margin-top:2px;">${overdue}</div>
+          </div>
+        </div>`;
+    }
+  }
+
+  function renderByCategory(el, bySource) {
+    const categories = [
+      { key: 'fleet',      label: 'Fleet',      icon: '🚚' },
+      { key: 'legal',      label: 'Legal',      icon: '⚖️' },
+      { key: 'reviews',    label: 'Reviews',    icon: '⭐' },
+      { key: 'compliance', label: 'Compliance', icon: '👷' },
+      { key: 'general',    label: 'General',    icon: '💬' },
+    ];
+
+    const total = categories.reduce((s, c) => s + (bySource[c.key] || 0), 0);
+    if (total === 0) {
+      el.innerHTML = `
+        <div style="padding:var(--sp-4) 0;color:var(--slate-500);font-size:13px;">
+          No submissions yet. They'll appear here as soon as field users start sending them.
+        </div>`;
+      return;
+    }
+
+    el.innerHTML = categories.map(c => {
+      const count = bySource[c.key] || 0;
+      const dim = count === 0;
+      return `
+        <a href="#/inbox?source=${c.key}" style="display:flex;align-items:center;justify-content:space-between;padding:var(--sp-2) var(--sp-3);border-radius:var(--r-md);text-decoration:none;color:var(--navy);margin-bottom:4px;${dim ? 'opacity:.45;' : 'background:var(--slate-50);'}">
+          <span style="display:flex;align-items:center;gap:var(--sp-2);font-size:13px;font-weight:500;">
+            <span style="font-size:15px;">${c.icon}</span>
+            ${escapeHtml(c.label)}
+          </span>
+          <span class="badge ${count > 0 ? 'badge-blue' : ''}">${count}</span>
+        </a>`;
+    }).join('');
   }
 
 
