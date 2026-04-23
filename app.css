@@ -3608,3 +3608,125 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   border-top: 1px solid var(--slate-200);
   background: var(--slate-50);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   REVIEWS — Stage 6.3 Chunk B
+   Modeled on .ctr-* styles for visual consistency with contractors page.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Green variant of summary pill (new 5-star reviews), pairs with existing
+   .ctr-summary-red for negatives. Uses existing --green-pale token. */
+.rev-summary-green {
+  background: var(--green-pale);
+  color: #047857;
+}
+
+/* Table container: reuses .contractors-list-wrap for the outer border/bg. */
+.reviews-table {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Row layout: Location | Rating | Change | Total | New | New 1-3★ */
+.rev-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 2.4fr) 100px 100px 100px 90px 110px;
+  gap: var(--sp-3);
+  padding: 10px var(--sp-3);
+  border-bottom: 1px solid var(--slate-100);
+  align-items: center;
+  transition: background var(--t-fast);
+}
+.rev-row:last-child { border-bottom: none; }
+.rev-row:not(.rev-row-head):not(.rev-row-skeleton):hover { background: var(--slate-50); }
+
+/* Header row */
+.rev-row-head {
+  background: var(--slate-50);
+  border-bottom: 1px solid var(--navy);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--slate-600);
+}
+
+/* Skeleton row inherits same grid, no hover */
+.rev-row-skeleton { cursor: default; }
+
+/* Cells */
+.rev-cell-name { min-width: 0; }
+.rev-name-main {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rev-name-meta {
+  font-size: 11px;
+  color: var(--slate-500);
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rev-cell-rating {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rev-rating-good { color: var(--green); }
+.rev-rating-mid  { color: #B45309; }
+.rev-rating-bad  { color: var(--red); }
+.rev-rating-none { color: var(--slate-400); font-weight: 500; }
+
+.rev-cell-change {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.rev-change-up   { color: var(--green); }
+.rev-change-down { color: var(--red); }
+.rev-change-flat { color: var(--slate-400); }
+
+.rev-cell-total,
+.rev-cell-new {
+  font-size: 13px;
+  color: var(--slate-700);
+  white-space: nowrap;
+}
+.rev-cell-muted { color: var(--slate-400); }
+
+.rev-cell-neg { white-space: nowrap; }
+
+/* Negative-count badge (new 1-3★ reviews) */
+.rev-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: var(--r-round);
+  line-height: 1;
+}
+.rev-badge-negative {
+  background: var(--red-pale);
+  color: var(--red);
+}
+
+/* Narrow-screen safety: collapse change + new columns below 900px */
+@media (max-width: 900px) {
+  .rev-row {
+    grid-template-columns: minmax(200px, 2fr) 80px 80px 90px;
+  }
+  .rev-cell-change,
+  .rev-cell-new {
+    display: none;
+  }
+  .rev-row-head .rev-cell-change,
+  .rev-row-head .rev-cell-new {
+    display: none;
+  }
+}

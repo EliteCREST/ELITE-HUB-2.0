@@ -630,7 +630,7 @@
   const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
 
   // Resources that should be cached on GET. Writes invalidate relevant caches.
-  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions'];
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_summary','reviews_individual'];
 
   // Which resources to invalidate when an action happens
   const INVALIDATE_MAP = {
@@ -4454,7 +4454,7 @@
               <div class="ctr-edit-grid">
                 <div class="ctr-edit-field ctr-edit-field-wide">
                   <label class="ctr-edit-label">Regions <span class="ctr-required">*</span></label>
-                  <input type="text" class="ctr-edit-input" name="regions_raw" value="${escapeAttr(c.regions_raw || '')}" required placeholder="e.g. CHI, STL, MKE">
+                  <input type="text" class="ctr-edit-input" name="regions_raw" value="${escapeAttr(c.regions_raw || '')}" required placeholder="e.g. CHI, STL, MIL">
                   <div class="ctr-edit-hint">Comma-separated region codes (uppercased on save)</div>
                 </div>
                 <div class="ctr-edit-field">
@@ -4794,16 +4794,292 @@
     ]
   ), { title: 'Fleet' });
 
-  route('/reviews', () => placeholder('Reviews', 'Stage 6',
-    'Cross-region review view — customer reviews, ratings, response tracking.',
-    [
-      'All reviews across 9 regions with region filter',
-      'Star rating distribution and trends',
-      'Response status (replied, needs response)',
-      'Link to original review on source platform',
-      'Submit for compliance review (feeds the Inbox)',
-    ]
-  ), { title: 'Reviews' });
+  /* ═══════════════════════════════════════════════════════════════
+     REVIEWS — admin page (Stage 6.3 Chunk B)
+     ═══════════════════════════════════════════════════════════════ */
+
+  let _reviewsSummaryCache = [];    // filtered view (currently displayed)
+  let _reviewsSummaryAll = [];      // everything fetched once
+  let _reviewsSearchTimer = null;
+  let _reviewsScopedRegion = null;  // when on a region page, fixed to that region
+
+  function debouncedLoadReviews() {
+    if (_reviewsSearchTimer) clearTimeout(_reviewsSearchTimer);
+    _reviewsSearchTimer = setTimeout(() => applyReviewsFilters(), 80);
+  }
+
+  route('/reviews', () => {
+    const me = getLoggedInUser();
+    const canImport = me && me.username === 'angel';
+    return `
+      <div class="view reviews-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Reviews</h1>
+            <p class="view-sub" id="reviews-sub">Loading…</p>
+          </div>
+          ${canImport ? `<button class="btn btn-primary" onclick="openImportReviewsModal()">📥 Import CSV</button>` : ''}
+        </div>
+        ${renderReviewsBody({})}
+      </div>
+    `;
+  }, {
+    title: 'Reviews',
+    onAfterRender: () => loadReviewsSummary({})
+  });
+
+  /**
+   * Returns the HTML for the reviews summary table section.
+   * Used on the admin /reviews page; will be reused on region reviews tab (Chunk C).
+   * options.regionCode → pin to a single region
+   */
+  function renderReviewsBody(options) {
+    options = options || {};
+    const isRegionScoped = !!options.regionCode;
+    return `
+      <div class="contractors-toolbar">
+        <input type="text" id="rev-search" class="ctr-filter-input" placeholder="Search by location name or group…" oninput="debouncedLoadReviews()">
+        ${!isRegionScoped ? `
+          <select id="rev-region" class="ctr-filter-select" onchange="applyReviewsFilters()">
+            <option value="">All regions</option>
+            ${REGIONS.map(r => `<option value="${r.code}">${escapeHtml(r.name)}</option>`).join('')}
+            <option value="ot">Other</option>
+          </select>
+        ` : `<input type="hidden" id="rev-region" value="${escapeAttr(options.regionCode)}">`}
+        <select id="rev-publisher" class="ctr-filter-select" onchange="applyReviewsFilters()">
+          <option value="">All publishers</option>
+          <option value="Google My Business">Google My Business</option>
+          <option value="Google Maps">Google Maps</option>
+          <option value="Facebook">Facebook</option>
+        </select>
+        <select id="rev-rating" class="ctr-filter-select" onchange="applyReviewsFilters()">
+          <option value="">All ratings</option>
+          <option value="5">5★ only</option>
+          <option value="4+">4★ and up</option>
+          <option value="below4">Below 4★</option>
+          <option value="negatives">Has new negatives</option>
+        </select>
+      </div>
+
+      <div class="contractors-summary" id="reviews-summary-strip">
+        <span class="skeleton skeleton-line" style="height:22px;width:90px;border-radius:9999px;display:inline-block;"></span>
+        <span class="skeleton skeleton-line" style="height:22px;width:110px;border-radius:9999px;display:inline-block;"></span>
+        <span class="skeleton skeleton-line" style="height:22px;width:120px;border-radius:9999px;display:inline-block;"></span>
+      </div>
+
+      <div class="contractors-list-wrap">
+        <div class="reviews-table" id="reviews-table">
+          ${[0,1,2,3,4,5].map(() => `
+            <div class="rev-row rev-row-skeleton">
+              <div class="rev-cell-name">
+                <div class="skeleton skeleton-line" style="height:14px;width:70%;margin-bottom:4px;"></div>
+                <div class="skeleton skeleton-line" style="height:10px;width:40%;"></div>
+              </div>
+              <div class="rev-cell-rating"><div class="skeleton skeleton-line" style="height:14px;width:60px;"></div></div>
+              <div class="rev-cell-change"><div class="skeleton skeleton-line" style="height:14px;width:40px;"></div></div>
+              <div class="rev-cell-total"><div class="skeleton skeleton-line" style="height:14px;width:50px;"></div></div>
+              <div class="rev-cell-new"><div class="skeleton skeleton-line" style="height:14px;width:40px;"></div></div>
+              <div class="rev-cell-neg"><div class="skeleton skeleton-line" style="height:16px;width:40px;border-radius:9999px;"></div></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Fetch all summary snapshots ONCE (latest-only, optionally region-scoped),
+   * then filter client-side for instant response on filter/search changes.
+   */
+  async function loadReviewsSummary(overrides) {
+    overrides = overrides || {};
+    const listEl = $('#reviews-table');
+    if (!listEl) return;
+    _reviewsScopedRegion = overrides.region || null;
+
+    const params = { resource: 'reviews_summary', latest_only: 'true' };
+    if (overrides.region) params.region = overrides.region;
+
+    try {
+      const res = await api(params);
+      if (res && res.error) {
+        listEl.innerHTML = `<div class="empty-state"><div class="empty-state-title">Couldn't load reviews</div><div class="empty-state-sub">${escapeHtml(res.error)}</div></div>`;
+        const sub = $('#reviews-sub'); if (sub) sub.textContent = 'Error loading reviews.';
+        return;
+      }
+      _reviewsSummaryAll = (res && res.items) || [];
+      applyReviewsFilters();
+    } catch (err) {
+      console.error('[reviews] loadReviewsSummary failed:', err);
+      listEl.innerHTML = `<div class="empty-state"><div class="empty-state-title">Network error</div><div class="empty-state-sub">${escapeHtml(err.message || String(err))}</div></div>`;
+    }
+  }
+
+  /**
+   * Client-side filtering: uses _reviewsSummaryAll as source, writes filtered rows to _reviewsSummaryCache,
+   * renders table + summary strip. Fast — no API calls.
+   */
+  function applyReviewsFilters() {
+    const searchEl    = $('#rev-search');
+    const regionEl    = $('#rev-region');
+    const publisherEl = $('#rev-publisher');
+    const ratingEl    = $('#rev-rating');
+    if (!$('#reviews-table')) return;
+
+    const search    = (searchEl    && searchEl.value    || '').trim().toLowerCase();
+    const region    = (regionEl    && regionEl.value    || '').trim().toLowerCase();
+    const publisher = (publisherEl && publisherEl.value || '').trim();
+    const rating    = (ratingEl    && ratingEl.value    || '').trim();
+
+    let rows = _reviewsSummaryAll.slice();
+
+    if (region) {
+      rows = rows.filter(r => (r.region || '').toLowerCase() === region);
+    }
+    if (publisher) {
+      rows = rows.filter(r => r.publisher === publisher);
+    }
+    if (rating) {
+      if (rating === '5')        rows = rows.filter(r => r.rating_current >= 4.95);
+      else if (rating === '4+')  rows = rows.filter(r => r.rating_current >= 4);
+      else if (rating === 'below4') rows = rows.filter(r => r.rating_current > 0 && r.rating_current < 4);
+      else if (rating === 'negatives') rows = rows.filter(r => r.negative_reviews_new > 0);
+    }
+    if (search) {
+      rows = rows.filter(r =>
+        (r.name || '').toLowerCase().indexOf(search) >= 0 ||
+        (r.group_name || '').toLowerCase().indexOf(search) >= 0
+      );
+    }
+
+    // Sort: region, then publisher, then name
+    rows.sort((a, b) => {
+      const ra = (a.region || '').localeCompare(b.region || '');
+      if (ra) return ra;
+      const pa = (a.publisher || '').localeCompare(b.publisher || '');
+      if (pa) return pa;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    _reviewsSummaryCache = rows;
+    renderReviewsTable(rows);
+    renderReviewsSummaryStrip(rows);
+  }
+
+  function renderReviewsSummaryStrip(rows) {
+    const el = $('#reviews-summary-strip');
+    if (!el) return;
+
+    if (rows.length === 0) {
+      el.innerHTML = `<span class="ctr-summary-item">0 locations</span>`;
+      const sub = $('#reviews-sub');
+      if (sub) sub.textContent = 'No reviews yet. Import a CSV to get started.';
+      return;
+    }
+
+    const totalLocations = rows.length;
+    const totalReviews   = rows.reduce((sum, r) => sum + (r.review_counts_total || 0), 0);
+    const newReviews     = rows.reduce((sum, r) => sum + (r.review_counts_new || 0), 0);
+    const newNegatives   = rows.reduce((sum, r) => sum + (r.negative_reviews_new || 0), 0);
+    const newFiveStars   = rows.reduce((sum, r) => sum + (r.five_star_reviews_new || 0), 0);
+
+    // Weighted avg rating (weight by review_counts_total; skip 0-count rows)
+    let weightedSum = 0, weightTotal = 0;
+    rows.forEach(r => {
+      if (r.rating_current > 0 && r.review_counts_total > 0) {
+        weightedSum += r.rating_current * r.review_counts_total;
+        weightTotal += r.review_counts_total;
+      }
+    });
+    const avgRating = weightTotal > 0 ? (weightedSum / weightTotal).toFixed(2) : '—';
+
+    el.innerHTML = `
+      <span class="ctr-summary-item"><strong>${totalLocations}</strong> location${totalLocations === 1 ? '' : 's'}</span>
+      <span class="ctr-summary-item">Avg <strong>${avgRating}</strong>★</span>
+      <span class="ctr-summary-item"><strong>${totalReviews.toLocaleString()}</strong> total reviews</span>
+      <span class="ctr-summary-item">${newReviews} new</span>
+      ${newNegatives > 0 ? `<span class="ctr-summary-item ctr-summary-red"><strong>${newNegatives}</strong> new 1-3★</span>` : ''}
+      ${newFiveStars > 0 ? `<span class="ctr-summary-item rev-summary-green">${newFiveStars} new 5★</span>` : ''}
+    `;
+
+    const sub = $('#reviews-sub');
+    if (sub) {
+      const latest = rows.reduce((acc, r) => (r.import_date > acc ? r.import_date : acc), '');
+      sub.textContent = latest
+        ? `${totalLocations} location${totalLocations === 1 ? '' : 's'} · last import ${latest}`
+        : `${totalLocations} location${totalLocations === 1 ? '' : 's'}`;
+    }
+  }
+
+  function renderReviewsTable(rows) {
+    const el = $('#reviews-table');
+    if (!el) return;
+    if (rows.length === 0) {
+      el.innerHTML = `<div class="empty-state">
+        <div class="empty-state-title">No reviews match your filters</div>
+        <div class="empty-state-sub">Try clearing filters or importing a Removify CSV.</div>
+      </div>`;
+      return;
+    }
+
+    const regionName = code => {
+      const r = REGIONS.find(x => x.code === code);
+      return r ? r.name : (code === 'ot' ? 'Other' : (code || '—').toUpperCase());
+    };
+
+    el.innerHTML = `
+      <div class="rev-row rev-row-head">
+        <div class="rev-cell-name">Location</div>
+        <div class="rev-cell-rating">Rating</div>
+        <div class="rev-cell-change">Change</div>
+        <div class="rev-cell-total">Total</div>
+        <div class="rev-cell-new">New</div>
+        <div class="rev-cell-neg">New 1-3★</div>
+      </div>
+      ${rows.map(r => renderReviewRow(r, regionName)).join('')}
+    `;
+  }
+
+  function renderReviewRow(r, regionName) {
+    const rating = r.rating_current > 0 ? r.rating_current.toFixed(1) : '—';
+    const ratingClass = r.rating_current >= 4.5 ? 'rev-rating-good'
+      : r.rating_current >= 4.0 ? 'rev-rating-mid'
+      : r.rating_current > 0   ? 'rev-rating-bad'
+      : 'rev-rating-none';
+
+    let changeDisplay = '';
+    if (r.rating_change > 0) changeDisplay = `<span class="rev-change-up">▲ +${r.rating_change.toFixed(1)}</span>`;
+    else if (r.rating_change < 0) changeDisplay = `<span class="rev-change-down">▼ ${r.rating_change.toFixed(1)}</span>`;
+    else changeDisplay = `<span class="rev-change-flat">—</span>`;
+
+    const negBadge = r.negative_reviews_new > 0
+      ? `<span class="rev-badge rev-badge-negative">${r.negative_reviews_new}</span>`
+      : `<span class="rev-cell-muted">0</span>`;
+
+    return `
+      <div class="rev-row">
+        <div class="rev-cell-name">
+          <div class="rev-name-main">${escapeHtml(r.name)}</div>
+          <div class="rev-name-meta">${escapeHtml(regionName(r.region))} · ${escapeHtml(r.publisher)}</div>
+        </div>
+        <div class="rev-cell-rating ${ratingClass}">${rating}${r.rating_current > 0 ? '★' : ''}</div>
+        <div class="rev-cell-change">${changeDisplay}</div>
+        <div class="rev-cell-total">${(r.review_counts_total || 0).toLocaleString()}</div>
+        <div class="rev-cell-new">${r.review_counts_new > 0 ? `<strong>+${r.review_counts_new}</strong>` : '0'}</div>
+        <div class="rev-cell-neg">${negBadge}</div>
+      </div>
+    `;
+  }
+
+  // Placeholder for Chunk D — opens the drag-drop CSV import modal
+  function openImportReviewsModal() {
+    showToast('CSV import modal coming in the next deploy.', 'default');
+  }
+
+  // Expose to inline onclick handlers
+  window.debouncedLoadReviews   = debouncedLoadReviews;
+  window.applyReviewsFilters    = applyReviewsFilters;
+  window.openImportReviewsModal = openImportReviewsModal;
 
   route('/legal', () => placeholder('Legal', 'Stage 6',
     'Legal cases across all regions.',
@@ -5018,7 +5294,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.5';
+  const APP_VERSION = '2.1.6';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
