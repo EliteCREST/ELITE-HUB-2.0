@@ -1469,8 +1469,8 @@
         : `${items.length} ${items.length === 1 ? 'item' : 'items'} in your ${scopeLabel}.`;
     }
 
-    // Update tab counts — fire one request per scope (lazy, but accurate)
-    loadInboxTabCounts(params);
+    // Update tab counts from the response we just got — no extra API calls needed
+    if (res.counts) applyInboxTabCounts(res.counts);
 
     if (items.length === 0) {
       listEl.innerHTML = renderInboxEmptyState(scope);
@@ -1478,6 +1478,16 @@
     }
 
     listEl.innerHTML = items.map(s => renderInboxRow(s)).join('');
+  }
+
+  function applyInboxTabCounts(counts) {
+    Object.keys(counts).forEach(scope => {
+      const el = $('#inbox-count-' + scope);
+      if (!el) return;
+      const count = counts[scope];
+      el.textContent = count;
+      el.classList.toggle('inbox-tab-count-zero', count === 0);
+    });
   }
 
   function renderInboxEmptyState(scope) {
@@ -1528,21 +1538,8 @@
   }
 
   async function loadInboxTabCounts(params) {
-    // Fire count requests for all scopes in parallel (cheap — just len of already-cached data)
-    const me = getLoggedInUser();
-    const isCompliance = isPrivileged(me);
-    const scopes = isCompliance
-      ? ['inbox','pool','assigned','sent','resolved']
-      : ['inbox','sent','resolved'];
-
-    await Promise.all(scopes.map(async (scope) => {
-      const res = await api({ resource: 'submissions', scope: scope });
-      const el = $('#inbox-count-' + scope);
-      if (!el) return;
-      const count = (res.submissions || []).length;
-      el.textContent = count;
-      el.classList.toggle('inbox-tab-count-zero', count === 0);
-    }));
+    // DEPRECATED: tab counts now come back inline with the main submissions
+    // response (see applyInboxTabCounts). No-op to prevent redundant API calls.
   }
 
   // Relative-time helper ("5 min ago", "2 hr ago", "3 days ago")
