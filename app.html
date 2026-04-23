@@ -85,6 +85,10 @@
           <span class="nav-item-label">Users</span>
         </a>
       </div>
+
+      <div class="app-sidebar-footer">
+        <span class="app-sidebar-version" id="app-sidebar-version">v—</span>
+      </div>
     </aside>
 
 
@@ -4808,16 +4812,115 @@
 
 
   /* ═══════════════════════════════════════════════════════════════
-     SERVICE WORKER REGISTRATION
+     SERVICE WORKER REGISTRATION + VERSION / UPDATE DETECTION
      ═══════════════════════════════════════════════════════════════ */
+
+  // App version — shown in sidebar footer. Bump this every deploy.
+  // Should match APP_VERSION in app-sw.js.
+  const APP_VERSION = '2.1.0';
+  // If this is true, any new version triggers a MANDATORY update modal
+  // (user cannot dismiss). Set to true when a backend change requires a
+  // matching frontend change (e.g. renamed field, new required API param).
+  const FORCE_UPDATE_ON_NEW_VERSION = false;
+
+  let _pendingSwUpdate = null;   // The waiting service worker, if an update is ready
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('app-sw.js').then(
-        () => console.log('[Elite Hub 2.0] SW registered'),
-        (err) => console.log('[Elite Hub 2.0] SW registration failed:', err)
-      );
+      navigator.serviceWorker.register('app-sw.js').then(reg => {
+        console.log('[Elite Hub 2.0] SW registered');
+
+        // Check for updates every 5 minutes
+        setInterval(() => { reg.update(); }, 5 * 60 * 1000);
+
+        // When a new SW is found, listen for it to become "installed"
+        reg.addEventListener('updatefound', () => {
+          const newSw = reg.installing;
+          if (!newSw) return;
+          newSw.addEventListener('statechange', () => {
+            if (newSw.state === 'installed' && navigator.serviceWorker.controller) {
+              // New version available AND we have an active (old) SW — update ready
+              _pendingSwUpdate = newSw;
+              showUpdateAvailable();
+            }
+          });
+        });
+
+        // If there's already a waiting SW on first load, show the prompt
+        if (reg.waiting) {
+          _pendingSwUpdate = reg.waiting;
+          showUpdateAvailable();
+        }
+      }).catch(err => console.log('[Elite Hub 2.0] SW registration failed:', err));
+
+      // Listen for SW messages (activation confirmation, etc.)
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        if (event.data && event.data.type === 'SW_ACTIVATED') {
+          console.log('[Elite Hub 2.0] SW activated v' + event.data.version);
+        }
+      });
+
+      // After a new SW takes control, reload the page exactly once
+      let _reloadedAfterSwTakeover = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (_reloadedAfterSwTakeover) return;
+        _reloadedAfterSwTakeover = true;
+        location.reload();
+      });
     });
+  }
+
+  function showUpdateAvailable() {
+    // Avoid duplicate prompts
+    if (document.getElementById('update-toast') || document.getElementById('force-update-modal')) return;
+
+    if (FORCE_UPDATE_ON_NEW_VERSION) {
+      // FORCED: unskippable modal
+      const modal = document.createElement('div');
+      modal.id = 'force-update-modal';
+      modal.className = 'force-update-backdrop';
+      modal.innerHTML = `
+        <div class="force-update-modal">
+          <div class="force-update-icon">🔄</div>
+          <h2 class="force-update-title">Update Required</h2>
+          <p class="force-update-body">A new version of Elite Hub is available. Please update now to continue.</p>
+          <button class="btn btn-primary" onclick="applyPendingSwUpdate()">Update now</button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } else {
+      // DISMISSIBLE: toast
+      const toast = document.createElement('div');
+      toast.id = 'update-toast';
+      toast.className = 'update-toast';
+      toast.innerHTML = `
+        <div class="update-toast-inner">
+          <span class="update-toast-icon">🎉</span>
+          <div class="update-toast-body">
+            <strong>New version available</strong>
+            <span class="update-toast-sub">Refresh to get the latest features.</span>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="applyPendingSwUpdate()">Update</button>
+          <button class="update-toast-close" onclick="dismissUpdateToast()" title="Dismiss">×</button>
+        </div>
+      `;
+      document.body.appendChild(toast);
+    }
+  }
+
+  function dismissUpdateToast() {
+    const t = document.getElementById('update-toast');
+    if (t) t.remove();
+  }
+
+  function applyPendingSwUpdate() {
+    if (_pendingSwUpdate) {
+      _pendingSwUpdate.postMessage({ type: 'SKIP_WAITING' });
+      // controllerchange listener will reload the page
+    } else {
+      // Fallback: just reload
+      location.reload();
+    }
   }
 
 
@@ -4833,6 +4936,10 @@
   }
 
   document.body.style.opacity = '1';
+
+  // Show version in sidebar footer
+  const versionEl = document.getElementById('app-sidebar-version');
+  if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
 
   renderUserSwitcher();
   renderAccountMenu();
