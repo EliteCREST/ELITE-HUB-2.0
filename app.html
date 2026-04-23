@@ -217,6 +217,7 @@
         <button class="modal-close" onclick="closeModal('shortcuts-modal')">×</button>
       </div>
       <div class="modal-body">
+        <div class="kbd-help-section-title">Navigation</div>
         <div class="kbd-help">
           <div class="kbd-help-label">Go to Home</div>
           <div class="kbd-keys"><span class="kbd">G</span><span class="kbd">H</span></div>
@@ -235,6 +236,12 @@
 
           <div class="kbd-help-label">Focus search</div>
           <div class="kbd-keys"><span class="kbd">/</span></div>
+        </div>
+
+        <div class="kbd-help-section-title">Actions</div>
+        <div class="kbd-help">
+          <div class="kbd-help-label">New submission</div>
+          <div class="kbd-keys"><span class="kbd">N</span></div>
 
           <div class="kbd-help-label">Close modal / clear search</div>
           <div class="kbd-keys"><span class="kbd">Esc</span></div>
@@ -242,9 +249,111 @@
           <div class="kbd-help-label">Show this help</div>
           <div class="kbd-keys"><span class="kbd">?</span></div>
         </div>
+
+        <div class="kbd-help-section-title">In the Inbox</div>
+        <div class="kbd-help">
+          <div class="kbd-help-label">Next / previous row</div>
+          <div class="kbd-keys"><span class="kbd">J</span><span class="kbd">K</span></div>
+
+          <div class="kbd-help-label">Open selected</div>
+          <div class="kbd-keys"><span class="kbd">Enter</span></div>
+        </div>
+
+        <div class="kbd-help-section-title">In submission detail</div>
+        <div class="kbd-help">
+          <div class="kbd-help-label">Reply (focus composer)</div>
+          <div class="kbd-keys"><span class="kbd">R</span></div>
+
+          <div class="kbd-help-label">Mark resolved</div>
+          <div class="kbd-keys"><span class="kbd">E</span></div>
+
+          <div class="kbd-help-label">Focus assignee dropdown</div>
+          <div class="kbd-keys"><span class="kbd">#</span></div>
+
+          <div class="kbd-help-label">Send reply (in composer)</div>
+          <div class="kbd-keys"><span class="kbd">Ctrl</span><span class="kbd">Enter</span></div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-primary" onclick="closeModal('shortcuts-modal')">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Submission Modal (Stage 4.3) -->
+  <div id="new-submission-modal" class="modal-backdrop">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <div class="modal-title" id="new-sub-title">New submission</div>
+        <button class="modal-close" onclick="closeModal('new-submission-modal')" type="button">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="view-sub" id="new-sub-desc" style="margin-bottom:var(--sp-4);">—</p>
+
+        <div class="new-sub-banner" id="new-sub-error" style="display:none;"></div>
+
+        <div class="new-sub-grid">
+          <!-- Compliance-only: To region -->
+          <div class="new-sub-field" id="new-sub-region-field" style="display:none;">
+            <label for="new-sub-region">To region</label>
+            <select id="new-sub-region" class="new-sub-select">
+              <option value="">— Select a region —</option>
+              <!-- populated at open time -->
+            </select>
+          </div>
+
+          <!-- Compliance-only: To user (optional) -->
+          <div class="new-sub-field" id="new-sub-touser-field" style="display:none;">
+            <label for="new-sub-touser">To user <span class="new-sub-optional">(optional)</span></label>
+            <select id="new-sub-touser" class="new-sub-select">
+              <option value="">(Anyone in that region)</option>
+            </select>
+          </div>
+
+          <!-- Source page -->
+          <div class="new-sub-field">
+            <label for="new-sub-source">Source</label>
+            <select id="new-sub-source" class="new-sub-select">
+              <option value="fleet">🚚 Fleet</option>
+              <option value="legal">⚖️ Legal</option>
+              <option value="reviews">⭐ Reviews</option>
+              <option value="compliance">👷 Compliance</option>
+              <option value="general">💬 General</option>
+            </select>
+          </div>
+
+          <!-- Priority -->
+          <div class="new-sub-field">
+            <label for="new-sub-priority">Priority</label>
+            <select id="new-sub-priority" class="new-sub-select">
+              <option value="low">Low</option>
+              <option value="med" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+
+          <!-- Due date (compliance-only, since they're requesting action from field) -->
+          <div class="new-sub-field" id="new-sub-due-field" style="display:none;">
+            <label for="new-sub-duedate">Due date <span class="new-sub-optional">(optional)</span></label>
+            <input type="date" id="new-sub-duedate" class="new-sub-select">
+          </div>
+
+          <!-- Subject -->
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="new-sub-subject">Subject</label>
+            <input type="text" id="new-sub-subject" class="new-sub-select" placeholder="Short summary" maxlength="200">
+          </div>
+
+          <!-- Message -->
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="new-sub-message">Message</label>
+            <textarea id="new-sub-message" class="new-sub-textarea" rows="5" placeholder="What's the issue or request?"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" onclick="closeModal('new-submission-modal')">Cancel</button>
+        <button class="btn btn-primary" id="new-sub-send-btn" type="button" onclick="submitNewSubmission()">Send</button>
       </div>
     </div>
   </div>
@@ -981,7 +1090,7 @@
             <div style="display:flex;flex-wrap:wrap;gap:var(--sp-2);">
               <a class="btn btn-primary" href="#/inbox">📬 Open inbox</a>
               <a class="btn btn-secondary" href="#/workspace">✓ My workspace</a>
-              <button class="btn btn-blue" onclick="showToast('New-submission modal coming in Stage 4','default')">+ New submission</button>
+              <button class="btn btn-blue" onclick="openNewSubmissionModal()">+ New submission</button>
             </div>
           </div>
         </div>
@@ -1047,7 +1156,7 @@
             <h1 class="view-title">Inbox</h1>
             <p class="view-sub" id="inbox-sub">Loading…</p>
           </div>
-          <button class="btn btn-primary" onclick="showToast('New-submission modal ships in Stage 4.3','default')">+ New submission</button>
+          <button class="btn btn-primary" onclick="openNewSubmissionModal()">+ New submission</button>
         </div>
 
         <div class="inbox-tabs" id="inbox-tabs">
@@ -1634,6 +1743,228 @@
     showToast('Submission reopened', 'success');
     loadSubmissionDetail(_currentSubmission.id);
   }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     NEW SUBMISSION MODAL (Stage 4.3)
+     Dual-mode: field→compliance (default for non-team) OR compliance→field
+     ═══════════════════════════════════════════════════════════════ */
+
+  function openNewSubmissionModal(defaults) {
+    const me = getLoggedInUser();
+    const isCompliance = isPrivileged(me);
+    defaults = defaults || {};
+
+    const title    = $('#new-sub-title');
+    const desc     = $('#new-sub-desc');
+    const regionF  = $('#new-sub-region-field');
+    const touserF  = $('#new-sub-touser-field');
+    const dueF     = $('#new-sub-due-field');
+    const err      = $('#new-sub-error');
+    err.style.display = 'none';
+
+    if (isCompliance) {
+      title.textContent = 'Send to a region';
+      desc.textContent  = 'Route an action item to a field team. They will see it in their inbox.';
+      regionF.style.display = '';
+      touserF.style.display = '';
+      dueF.style.display    = '';
+    } else {
+      title.textContent = 'Send to compliance';
+      desc.textContent  = 'Flag an issue for the compliance team. They will follow up.';
+      regionF.style.display = 'none';
+      touserF.style.display = 'none';
+      dueF.style.display    = 'none';
+    }
+
+    // Populate regions dropdown (compliance mode)
+    if (isCompliance) {
+      const regionSel = $('#new-sub-region');
+      regionSel.innerHTML = '<option value="">— Select a region —</option>' +
+        REGIONS.map(r => `<option value="${r.code}" ${defaults.region === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
+      // Wire change handler to populate to-user dropdown based on region
+      regionSel.onchange = () => refreshNewSubUserList(regionSel.value);
+      refreshNewSubUserList(regionSel.value || '');
+    }
+
+    // Reset form fields
+    $('#new-sub-source').value   = defaults.source   || 'fleet';
+    $('#new-sub-priority').value = defaults.priority || 'med';
+    $('#new-sub-duedate').value  = defaults.due_date || '';
+    $('#new-sub-subject').value  = defaults.subject  || '';
+    $('#new-sub-message').value  = defaults.message  || '';
+
+    // Open
+    openModal('new-submission-modal');
+    // Focus subject field
+    setTimeout(() => { const s = $('#new-sub-subject'); if (s) s.focus(); }, 60);
+  }
+
+  function refreshNewSubUserList(regionCode) {
+    const sel = $('#new-sub-touser');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">(Anyone in that region)</option>';
+    if (!regionCode) return;
+    // Office manager + admin usernames follow a predictable pattern from Stage 2.5 seed
+    // (the USERS tab has full data; for simplicity we hard-code the 2 per region here)
+    // A future enhancement could fetch the USERS list and filter by regions_allowed.
+    const rc = String(regionCode).toLowerCase();
+    // Map of region code → expected username prefixes
+    // e.g. 'stl' → omstl, adminstl
+    const omUser    = 'om' + rc;
+    const adminUser = 'admin' + rc;
+    // The albuquerque region has code 'abq' but usernames use 'aqe' suffix
+    const specialMap = { abq: { om: 'omaqe', admin: 'adminaqe' } };
+    const omName    = specialMap[rc] ? specialMap[rc].om    : omUser;
+    const adminName = specialMap[rc] ? specialMap[rc].admin : adminUser;
+
+    sel.innerHTML += `<option value="${omName}">Office Manager (${omName})</option>`;
+    sel.innerHTML += `<option value="${adminName}">Office Admin (${adminName})</option>`;
+  }
+
+  async function submitNewSubmission() {
+    const me = getLoggedInUser();
+    const isCompliance = isPrivileged(me);
+
+    const source   = $('#new-sub-source').value;
+    const priority = $('#new-sub-priority').value;
+    const subject  = $('#new-sub-subject').value.trim();
+    const message  = $('#new-sub-message').value.trim();
+    const region   = isCompliance ? $('#new-sub-region').value : (me.regions && me.regions !== 'all' ? me.regions.split(',')[0].trim() : '');
+    const toUser   = isCompliance ? $('#new-sub-touser').value : '';
+    const dueDate  = isCompliance ? $('#new-sub-duedate').value : '';
+
+    const err = $('#new-sub-error');
+    const clearErr = () => { err.style.display = 'none'; err.textContent = ''; };
+    const showErr  = (msg) => { err.style.display = ''; err.textContent = msg; };
+    clearErr();
+
+    // Validation
+    if (!subject) { showErr('Please enter a subject.'); $('#new-sub-subject').focus(); return; }
+    if (!message) { showErr('Please enter a message.'); $('#new-sub-message').focus(); return; }
+    if (isCompliance && !region) { showErr('Please select a region.'); $('#new-sub-region').focus(); return; }
+
+    const btn = $('#new-sub-send-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    const payload = {
+      source_page: source,
+      subject: subject,
+      message: message,
+      priority: priority,
+      to_region: region || '',
+      to_user: toUser || '',
+      due_date: dueDate || '',
+    };
+
+    const res = await api({}, 'POST', { action: 'savesubmission', submission: payload });
+
+    btn.disabled = false;
+    btn.textContent = 'Send';
+
+    if (res.error) {
+      showErr(res.error);
+      return;
+    }
+
+    closeModal('new-submission-modal');
+    showToast('Submission sent', 'success');
+
+    // If user is on inbox or home, reload data
+    if (location.hash.startsWith('#/inbox')) {
+      resolveRoute();  // re-renders inbox
+    } else if (location.hash === '#/home' || location.hash === '') {
+      loadDashboard();
+    }
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     INBOX KEYBOARD SHORTCUTS (Stage 4.3)
+     j/k = navigate rows, Enter = open, n = new submission
+     Detail-view shortcuts: r = reply, e = resolve, # = assign
+     ═══════════════════════════════════════════════════════════════ */
+
+  let _inboxSelectedIdx = -1;
+
+  function inboxSelectRow(idx) {
+    const rows = $$('#inbox-list .inbox-row');
+    if (rows.length === 0) return;
+    if (idx < 0) idx = 0;
+    if (idx >= rows.length) idx = rows.length - 1;
+    _inboxSelectedIdx = idx;
+    rows.forEach((r, i) => r.classList.toggle('inbox-row-selected', i === idx));
+    // Scroll into view
+    rows[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  function inboxOpenSelected() {
+    const rows = $$('#inbox-list .inbox-row');
+    if (_inboxSelectedIdx < 0 || _inboxSelectedIdx >= rows.length) return;
+    rows[_inboxSelectedIdx].click();
+  }
+
+  // Extend the existing keyboard handler with inbox-specific shortcuts
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toUpperCase();
+    const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable;
+    if (isTyping) return;
+
+    // If a modal is open, only Esc works (Esc is already handled globally)
+    const modalOpen = $$('.modal-backdrop.open').length > 0;
+    if (modalOpen) return;
+
+    const hash = location.hash || '';
+    const onInbox = hash.startsWith('#/inbox');
+    const onDetail = hash.startsWith('#/submission/');
+
+    // n = open new submission modal (works anywhere except inside "g" key combo)
+    if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey && !gPressed) {
+      e.preventDefault();
+      openNewSubmissionModal();
+      return;
+    }
+
+    if (onInbox) {
+      if (e.key === 'j' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        inboxSelectRow(_inboxSelectedIdx + 1);
+      } else if (e.key === 'k' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        inboxSelectRow(_inboxSelectedIdx - 1);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        inboxOpenSelected();
+      }
+    }
+
+    if (onDetail && _currentSubmission) {
+      if (e.key === 'r') {
+        e.preventDefault();
+        const ta = $('#sub-reply-textarea');
+        if (ta) ta.focus();
+      } else if (e.key === 'e' && _currentSubmission.status !== 'Resolved') {
+        e.preventDefault();
+        const statusEl = $('#sub-status');
+        if (statusEl) {
+          statusEl.value = 'Resolved';
+          statusEl.dispatchEvent(new Event('change'));
+        }
+      } else if (e.key === '#') {
+        e.preventDefault();
+        const ae = $('#sub-assignee');
+        if (ae) ae.focus();
+      }
+    }
+  });
+
+  // Reset selection whenever inbox reloads
+  const _origLoadInbox = loadInbox;
+  loadInbox = async function(params) {
+    _inboxSelectedIdx = -1;
+    return _origLoadInbox(params);
+  };
 
   route('/workspace', () => placeholder('My Workspace', 'Stage 5',
     'Personal tasks, contacts, links, and scratchpad — same view for every user.',
