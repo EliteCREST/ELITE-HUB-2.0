@@ -2320,3 +2320,276 @@ body.view-as-active .app-root {
 .ws-scratch-status.saving { color: var(--slate-500); }
 .ws-scratch-status.saved  { color: var(--green); }
 .ws-scratch-status.error  { color: var(--red); font-weight: 600; }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 5.2 — WORKSPACE WIDGETS (Notes, Links, Contacts)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* 3-column widget row below Tasks + Scratchpad */
+.ws-widgets-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+@media (max-width: 1100px) {
+  .ws-widgets-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .ws-widgets-grid { grid-template-columns: 1fr; }
+}
+
+.ws-widget-card {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.ws-widget-empty {
+  padding: var(--sp-5) var(--sp-3);
+  text-align: center;
+  color: var(--slate-500);
+  font-size: 13px;
+  background: var(--slate-50);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--slate-300);
+}
+
+/* ─── Notes ──────────────────────────────────────────────── */
+.ws-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex: 1;
+}
+
+.ws-note-card {
+  position: relative;
+  background: #FFFBEB;  /* amber-50, sticky-note feel */
+  border: 1px solid #FDE68A;
+  border-radius: var(--r-md);
+  transition: border-color var(--t-fast);
+}
+.ws-note-card:hover {
+  border-color: var(--amber);
+}
+.ws-note-card:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+
+.ws-note-text {
+  width: 100%;
+  min-height: 70px;
+  padding: 10px 32px 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--navy);
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: vertical;
+  line-height: 1.5;
+}
+.ws-note-text::placeholder {
+  color: #CA8A04;  /* amber-500 slightly muted */
+  opacity: 0.6;
+}
+
+.ws-note-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--slate-400);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: var(--r-sm);
+  opacity: 0;
+  transition: opacity var(--t-fast), background var(--t-fast), color var(--t-fast);
+}
+.ws-note-card:hover .ws-note-delete { opacity: 1; }
+.ws-note-delete:hover {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.ws-note-status {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--slate-500);
+  pointer-events: none;
+}
+.ws-note-status.saving { color: var(--slate-500); }
+.ws-note-status.saved  { color: var(--green); }
+.ws-note-status.error  { color: var(--red); }
+
+
+/* ─── Quick Links ────────────────────────────────────────── */
+.ws-links-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.ws-link-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast);
+}
+.ws-link-row:hover { background: var(--slate-50); }
+
+.ws-link-main {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  text-decoration: none;
+  color: var(--navy);
+  overflow: hidden;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+.ws-link-main:hover { color: var(--blue); }
+
+.ws-link-icon {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ws-link-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-link-edit,
+.ws-link-delete {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--slate-400);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--r-sm);
+  opacity: 0;
+  transition: opacity var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.ws-link-row:hover .ws-link-edit,
+.ws-link-row:hover .ws-link-delete { opacity: 1; }
+.ws-link-edit:hover {
+  color: var(--blue);
+  background: var(--blue-pale);
+}
+.ws-link-delete:hover {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+
+/* ─── Contacts ───────────────────────────────────────────── */
+.ws-contacts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex: 1;
+}
+
+.ws-contact-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto auto;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast);
+}
+.ws-contact-row:hover { background: var(--slate-50); }
+
+.ws-contact-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-round);
+  background: var(--slate-600);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+
+.ws-contact-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ws-contact-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.ws-contact-role {
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+.ws-contact-link {
+  font-size: 12px;
+  color: var(--blue);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-contact-link:hover { text-decoration: underline; }
+
+.ws-contact-edit,
+.ws-contact-delete {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--slate-400);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: var(--r-sm);
+  opacity: 0;
+  transition: opacity var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.ws-contact-row:hover .ws-contact-edit,
+.ws-contact-row:hover .ws-contact-delete { opacity: 1; }
+.ws-contact-edit:hover {
+  color: var(--blue);
+  background: var(--blue-pale);
+}
+.ws-contact-delete:hover {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.1);
+}

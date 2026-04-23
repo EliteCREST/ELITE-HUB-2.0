@@ -406,6 +406,72 @@
     </div>
   </div>
 
+  <!-- Link Modal (Stage 5.2) -->
+  <div id="link-modal" class="modal-backdrop">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="link-modal-title">Add link</div>
+        <button class="modal-close" onclick="closeModal('link-modal')" type="button">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="new-sub-banner" id="link-modal-error" style="display:none;"></div>
+        <div class="new-sub-grid">
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="link-title">Title <span class="new-sub-optional">(defaults to URL if blank)</span></label>
+            <input type="text" id="link-title" class="new-sub-select" placeholder="e.g. UPT Master Pricing" maxlength="120">
+          </div>
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="link-url">URL</label>
+            <input type="text" id="link-url" class="new-sub-select" placeholder="https://…">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" onclick="closeModal('link-modal')">Cancel</button>
+        <button class="btn btn-primary" id="link-save-btn" type="button" onclick="submitLinkModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Modal (Stage 5.2) -->
+  <div id="contact-modal" class="modal-backdrop">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <div class="modal-title" id="contact-modal-title">Add contact</div>
+        <button class="modal-close" onclick="closeModal('contact-modal')" type="button">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="new-sub-banner" id="contact-modal-error" style="display:none;"></div>
+        <div class="new-sub-grid">
+          <div class="new-sub-field">
+            <label for="contact-name">Name</label>
+            <input type="text" id="contact-name" class="new-sub-select" placeholder="Full name" maxlength="120">
+          </div>
+          <div class="new-sub-field">
+            <label for="contact-role">Role <span class="new-sub-optional">(optional)</span></label>
+            <input type="text" id="contact-role" class="new-sub-select" placeholder="e.g. GM at ABC Roofing" maxlength="120">
+          </div>
+          <div class="new-sub-field">
+            <label for="contact-email">Email <span class="new-sub-optional">(optional)</span></label>
+            <input type="email" id="contact-email" class="new-sub-select" placeholder="name@example.com">
+          </div>
+          <div class="new-sub-field">
+            <label for="contact-phone">Phone <span class="new-sub-optional">(optional)</span></label>
+            <input type="tel" id="contact-phone" class="new-sub-select" placeholder="555-123-4567">
+          </div>
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="contact-notes">Notes <span class="new-sub-optional">(optional)</span></label>
+            <textarea id="contact-notes" class="new-sub-textarea" rows="3" placeholder="Anything else to remember…"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" onclick="closeModal('contact-modal')">Cancel</button>
+        <button class="btn btn-primary" id="contact-save-btn" type="button" onclick="submitContactModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container" class="toast-container"></div>
 
 
@@ -2131,6 +2197,53 @@
           </div>
 
         </div>
+
+        <!-- Widgets row: Notes + Quick Links + Contacts -->
+        <div class="ws-widgets-grid">
+
+          <!-- NOTES -->
+          <div class="card ws-widget-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Notes</div>
+                <div class="card-sub" id="ws-notes-sub">—</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="wsNoteNew()">+ New note</button>
+            </div>
+            <div class="ws-notes-list" id="ws-notes-list">
+              <div class="skeleton skeleton-line" style="height:60px;margin-bottom:6px;"></div>
+            </div>
+          </div>
+
+          <!-- QUICK LINKS -->
+          <div class="card ws-widget-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Quick Links</div>
+                <div class="card-sub" id="ws-links-sub">—</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="openLinkModal()">+ Add link</button>
+            </div>
+            <div class="ws-links-list" id="ws-links-list">
+              <div class="skeleton skeleton-line" style="height:40px;margin-bottom:6px;"></div>
+            </div>
+          </div>
+
+          <!-- CONTACTS -->
+          <div class="card ws-widget-card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Contacts</div>
+                <div class="card-sub" id="ws-contacts-sub">—</div>
+              </div>
+              <button class="btn btn-secondary btn-sm" onclick="openContactModal()">+ Add contact</button>
+            </div>
+            <div class="ws-contacts-list" id="ws-contacts-list">
+              <div class="skeleton skeleton-line" style="height:56px;margin-bottom:6px;"></div>
+            </div>
+          </div>
+
+        </div>
       </div>
     `;
   }, {
@@ -2196,6 +2309,14 @@
         _scratchSaveTimer = setTimeout(saveScratchpad, 800);
       };
     }
+
+    // Notes / Links / Contacts (Stage 5.2)
+    _wsNotes    = (widgetsRes.notes    || []).slice();
+    _wsLinks    = (widgetsRes.links    || []).slice();
+    _wsContacts = (widgetsRes.contacts || []).slice();
+    renderNotes();
+    renderLinks();
+    renderContacts();
 
     // Wire quick-add Enter key
     const qa = $('#ws-quickadd-input');
@@ -2750,6 +2871,391 @@
     const activeTab = (new URLSearchParams(location.hash.split('?')[1] || '')).get('tab') || 'today';
     renderTaskList(activeTab);
     showToast('Task added', 'success');
+  }
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     STAGE 5.2 — NOTES / LINKS / CONTACTS WIDGETS
+     ═══════════════════════════════════════════════════════════════ */
+
+  let _wsNotes = [];
+  let _wsLinks = [];
+  let _wsContacts = [];
+  const _noteSaveTimers = {};   // per-note debounce timers
+
+  /* ─── Generic widget save/delete helpers ──────────────────── */
+
+  async function saveWidgetItem(widgetType, item) {
+    const me = getCurrentUser();
+    const widget = {
+      id:          item.id,
+      user:        me.username,
+      widget_type: widgetType,
+      sort_order:  item.sort_order || 0,
+      // Non-standard fields go into the data blob (backend handles this)
+      ...item,
+    };
+    return api({}, 'POST', { action: 'savewidget', widget: widget, user: me.username });
+  }
+
+  async function deleteWidgetItem(id) {
+    const me = getCurrentUser();
+    return api({}, 'POST', { action: 'deletewidget', id: id, user: me.username });
+  }
+
+  function newWidgetId(prefix) {
+    return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  }
+
+
+  /* ─── Notes ──────────────────────────────────────────────── */
+
+  function renderNotes() {
+    const el = $('#ws-notes-list');
+    const sub = $('#ws-notes-sub');
+    if (!el) return;
+
+    if (sub) sub.textContent = _wsNotes.length === 0
+      ? 'No notes yet'
+      : `${_wsNotes.length} note${_wsNotes.length === 1 ? '' : 's'}`;
+
+    if (_wsNotes.length === 0) {
+      el.innerHTML = `<div class="ws-widget-empty">
+        📝 Click "+ New note" to create your first one.
+      </div>`;
+      return;
+    }
+
+    // Sort: newest first by updated_at
+    const sorted = _wsNotes.slice().sort((a, b) => {
+      const ta = new Date(a.updated_at || a.created_at || 0).getTime();
+      const tb = new Date(b.updated_at || b.created_at || 0).getTime();
+      return tb - ta;
+    });
+
+    el.innerHTML = sorted.map(n => `
+      <div class="ws-note-card" data-id="${escapeAttr(n.id)}">
+        <textarea
+          class="ws-note-text"
+          placeholder="Write something…"
+          oninput="wsNoteInput('${escapeAttr(n.id)}', this.value)">${escapeHtml(n.content || n.text || '')}</textarea>
+        <button class="ws-note-delete" title="Delete note" onclick="wsNoteDelete('${escapeAttr(n.id)}')">×</button>
+        <span class="ws-note-status" id="ws-note-status-${escapeAttr(n.id)}"></span>
+      </div>
+    `).join('');
+  }
+
+  function wsNoteNew() {
+    const id = newWidgetId('note');
+    const now = new Date().toISOString();
+    const note = {
+      id:         id,
+      content:    '',
+      sort_order: 0,
+      created_at: now,
+      updated_at: now,
+    };
+    _wsNotes.unshift(note);
+    renderNotes();
+    // Focus the textarea of the new note
+    setTimeout(() => {
+      const card = $(`.ws-note-card[data-id="${id}"] .ws-note-text`);
+      if (card) card.focus();
+    }, 50);
+  }
+
+  function wsNoteInput(id, text) {
+    const note = _wsNotes.find(n => n.id === id);
+    if (!note) return;
+    note.content = text;
+    note.updated_at = new Date().toISOString();
+
+    // Debounced save (800ms after last keystroke)
+    const statusEl = $(`#ws-note-status-${id}`);
+    if (statusEl) {
+      statusEl.textContent = 'Saving…';
+      statusEl.className = 'ws-note-status saving';
+    }
+
+    if (_noteSaveTimers[id]) clearTimeout(_noteSaveTimers[id]);
+    _noteSaveTimers[id] = setTimeout(async () => {
+      const res = await saveWidgetItem('note', note);
+      if (res.error) {
+        if (statusEl) {
+          statusEl.textContent = '⚠ ' + res.error;
+          statusEl.className = 'ws-note-status error';
+        }
+        return;
+      }
+      if (statusEl) {
+        statusEl.textContent = '✓ Saved';
+        statusEl.className = 'ws-note-status saved';
+        setTimeout(() => {
+          if (statusEl.textContent === '✓ Saved') statusEl.textContent = '';
+        }, 1500);
+      }
+    }, 800);
+  }
+
+  async function wsNoteDelete(id) {
+    const note = _wsNotes.find(n => n.id === id);
+    if (!note) return;
+    // Only prompt if the note has actual content
+    if ((note.content || '').trim() && !confirm('Delete this note?')) return;
+    const res = await deleteWidgetItem(id);
+    if (res.error) {
+      showToast('Failed: ' + res.error, 'error');
+      return;
+    }
+    _wsNotes = _wsNotes.filter(n => n.id !== id);
+    renderNotes();
+  }
+
+
+  /* ─── Quick Links ────────────────────────────────────────── */
+
+  function renderLinks() {
+    const el = $('#ws-links-list');
+    const sub = $('#ws-links-sub');
+    if (!el) return;
+
+    if (sub) sub.textContent = _wsLinks.length === 0
+      ? 'No links yet'
+      : `${_wsLinks.length} link${_wsLinks.length === 1 ? '' : 's'}`;
+
+    if (_wsLinks.length === 0) {
+      el.innerHTML = `<div class="ws-widget-empty">
+        🔗 Click "+ Add link" to save a quick link.
+      </div>`;
+      return;
+    }
+
+    const sorted = _wsLinks.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    el.innerHTML = sorted.map(l => {
+      const icon = guessLinkIcon(l.url);
+      const title = l.title || l.url || '(untitled)';
+      return `
+        <div class="ws-link-row" data-id="${escapeAttr(l.id)}">
+          <a class="ws-link-main" href="${escapeAttr(l.url || '#')}" target="_blank" rel="noopener">
+            <span class="ws-link-icon">${icon}</span>
+            <span class="ws-link-title">${escapeHtml(title)}</span>
+          </a>
+          <button class="ws-link-edit" title="Edit" onclick="openLinkModal('${escapeAttr(l.id)}')">✎</button>
+          <button class="ws-link-delete" title="Delete" onclick="wsLinkDelete('${escapeAttr(l.id)}')">×</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function guessLinkIcon(url) {
+    const u = String(url || '').toLowerCase();
+    if (u.includes('docs.google.com/spreadsheets')) return '📊';
+    if (u.includes('docs.google.com/document')) return '📝';
+    if (u.includes('docs.google.com/presentation')) return '📑';
+    if (u.includes('drive.google.com')) return '📂';
+    if (u.includes('docs.google.com')) return '📄';
+    if (u.includes('mail.google.com') || u.includes('outlook')) return '📧';
+    if (u.includes('calendar.google.com')) return '📅';
+    if (u.includes('script.google.com')) return '⚙️';
+    if (u.includes('github.com')) return '💻';
+    if (u.includes('slack.com')) return '💬';
+    if (u.includes('zoom.us')) return '🎥';
+    return '🔗';
+  }
+
+  function openLinkModal(editId) {
+    const existing = editId ? _wsLinks.find(l => l.id === editId) : null;
+    $('#link-modal-title').textContent = existing ? 'Edit link' : 'Add link';
+    $('#link-title').value = existing ? (existing.title || '') : '';
+    $('#link-url').value   = existing ? (existing.url || '')   : '';
+    $('#link-modal-error').style.display = 'none';
+    $('#link-save-btn').dataset.editId = editId || '';
+    openModal('link-modal');
+    setTimeout(() => { const t = $('#link-title'); if (t) t.focus(); }, 60);
+  }
+
+  async function submitLinkModal() {
+    const title = $('#link-title').value.trim();
+    const url = $('#link-url').value.trim();
+    const editId = $('#link-save-btn').dataset.editId;
+    const err = $('#link-modal-error');
+
+    if (!url) {
+      err.style.display = '';
+      err.textContent = 'URL is required.';
+      return;
+    }
+    // Auto-prepend https:// if missing a scheme
+    const fullUrl = /^[a-z]+:\/\//i.test(url) ? url : ('https://' + url);
+
+    const btn = $('#link-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const now = new Date().toISOString();
+    let link;
+    if (editId) {
+      link = _wsLinks.find(l => l.id === editId);
+      if (!link) { btn.disabled = false; btn.textContent = 'Save'; return; }
+      link.title = title || fullUrl;
+      link.url = fullUrl;
+      link.updated_at = now;
+    } else {
+      link = {
+        id:         newWidgetId('link'),
+        title:      title || fullUrl,
+        url:        fullUrl,
+        sort_order: _wsLinks.length,
+        created_at: now,
+        updated_at: now,
+      };
+    }
+
+    const res = await saveWidgetItem('link', link);
+    btn.disabled = false;
+    btn.textContent = 'Save';
+
+    if (res.error) {
+      err.style.display = '';
+      err.textContent = res.error;
+      return;
+    }
+
+    if (!editId) _wsLinks.push(link);
+    closeModal('link-modal');
+    renderLinks();
+    showToast(editId ? 'Link updated' : 'Link added', 'success');
+  }
+
+  async function wsLinkDelete(id) {
+    if (!confirm('Delete this link?')) return;
+    const res = await deleteWidgetItem(id);
+    if (res.error) { showToast('Failed: ' + res.error, 'error'); return; }
+    _wsLinks = _wsLinks.filter(l => l.id !== id);
+    renderLinks();
+  }
+
+
+  /* ─── Contacts ───────────────────────────────────────────── */
+
+  function renderContacts() {
+    const el = $('#ws-contacts-list');
+    const sub = $('#ws-contacts-sub');
+    if (!el) return;
+
+    if (sub) sub.textContent = _wsContacts.length === 0
+      ? 'No contacts yet'
+      : `${_wsContacts.length} contact${_wsContacts.length === 1 ? '' : 's'}`;
+
+    if (_wsContacts.length === 0) {
+      el.innerHTML = `<div class="ws-widget-empty">
+        👤 Click "+ Add contact" to save one.
+      </div>`;
+      return;
+    }
+
+    const sorted = _wsContacts.slice().sort((a, b) => {
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+
+    el.innerHTML = sorted.map(c => {
+      const initials = initialsFromName(c.name || '?');
+      return `
+        <div class="ws-contact-row" data-id="${escapeAttr(c.id)}">
+          <div class="ws-contact-avatar">${escapeHtml(initials)}</div>
+          <div class="ws-contact-body">
+            <div class="ws-contact-name">${escapeHtml(c.name || '(unnamed)')}</div>
+            ${c.role ? `<div class="ws-contact-role">${escapeHtml(c.role)}</div>` : ''}
+            ${c.email ? `<a class="ws-contact-link" href="mailto:${escapeAttr(c.email)}">${escapeHtml(c.email)}</a>` : ''}
+            ${c.phone ? `<a class="ws-contact-link" href="tel:${escapeAttr(c.phone)}">${escapeHtml(c.phone)}</a>` : ''}
+          </div>
+          <button class="ws-contact-edit" title="Edit" onclick="openContactModal('${escapeAttr(c.id)}')">✎</button>
+          <button class="ws-contact-delete" title="Delete" onclick="wsContactDelete('${escapeAttr(c.id)}')">×</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function openContactModal(editId) {
+    const existing = editId ? _wsContacts.find(c => c.id === editId) : null;
+    $('#contact-modal-title').textContent = existing ? 'Edit contact' : 'Add contact';
+    $('#contact-name').value  = existing ? (existing.name  || '') : '';
+    $('#contact-role').value  = existing ? (existing.role  || '') : '';
+    $('#contact-email').value = existing ? (existing.email || '') : '';
+    $('#contact-phone').value = existing ? (existing.phone || '') : '';
+    $('#contact-notes').value = existing ? (existing.notes || '') : '';
+    $('#contact-modal-error').style.display = 'none';
+    $('#contact-save-btn').dataset.editId = editId || '';
+    openModal('contact-modal');
+    setTimeout(() => { const t = $('#contact-name'); if (t) t.focus(); }, 60);
+  }
+
+  async function submitContactModal() {
+    const name  = $('#contact-name').value.trim();
+    const role  = $('#contact-role').value.trim();
+    const email = $('#contact-email').value.trim();
+    const phone = $('#contact-phone').value.trim();
+    const notes = $('#contact-notes').value;
+    const editId = $('#contact-save-btn').dataset.editId;
+    const err = $('#contact-modal-error');
+
+    if (!name) {
+      err.style.display = '';
+      err.textContent = 'Name is required.';
+      return;
+    }
+
+    const btn = $('#contact-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const now = new Date().toISOString();
+    let contact;
+    if (editId) {
+      contact = _wsContacts.find(c => c.id === editId);
+      if (!contact) { btn.disabled = false; btn.textContent = 'Save'; return; }
+      contact.name = name; contact.role = role; contact.email = email;
+      contact.phone = phone; contact.notes = notes;
+      contact.updated_at = now;
+    } else {
+      contact = {
+        id:         newWidgetId('contact'),
+        name:       name,
+        role:       role,
+        email:      email,
+        phone:      phone,
+        notes:      notes,
+        sort_order: _wsContacts.length,
+        created_at: now,
+        updated_at: now,
+      };
+    }
+
+    const res = await saveWidgetItem('contact', contact);
+    btn.disabled = false;
+    btn.textContent = 'Save';
+
+    if (res.error) {
+      err.style.display = '';
+      err.textContent = res.error;
+      return;
+    }
+
+    if (!editId) _wsContacts.push(contact);
+    closeModal('contact-modal');
+    renderContacts();
+    showToast(editId ? 'Contact updated' : 'Contact added', 'success');
+  }
+
+  async function wsContactDelete(id) {
+    const c = _wsContacts.find(x => x.id === id);
+    if (!c) return;
+    if (!confirm(`Delete contact "${c.name}"?`)) return;
+    const res = await deleteWidgetItem(id);
+    if (res.error) { showToast('Failed: ' + res.error, 'error'); return; }
+    _wsContacts = _wsContacts.filter(x => x.id !== id);
+    renderContacts();
   }
 
   route('/region/:code', ({ code }) => {
