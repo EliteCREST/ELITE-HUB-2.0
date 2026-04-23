@@ -558,6 +558,64 @@
   }
 
   /* ─── api() — all backend calls go through this ───────────── */
+  // Debug mode: enabled via ?debug=1 OR Ctrl+Shift+D. Shows a timing HUD.
+  const DEBUG_TIMING = (() => {
+    try {
+      if (location.hash.indexOf('debug=1') >= 0) { sessionStorage.setItem('eh2_debug','1'); return true; }
+      if (location.search.indexOf('debug=1') >= 0) { sessionStorage.setItem('eh2_debug','1'); return true; }
+      return sessionStorage.getItem('eh2_debug') === '1';
+    } catch (e) { return false; }
+  })();
+  window.__eh2_timings = [];
+
+  function _logTiming(kind, detail, ms) {
+    const entry = { kind, detail, ms: Math.round(ms), t: new Date().toISOString() };
+    window.__eh2_timings.push(entry);
+    if (window.__eh2_timings.length > 100) window.__eh2_timings.shift();
+    if (DEBUG_TIMING) {
+      const color = ms > 2000 ? '#dc2626' : (ms > 1000 ? '#d97706' : (ms > 500 ? '#ca8a04' : '#15803d'));
+      console.log('%c[' + kind + ']', 'color:' + color + ';font-weight:bold', detail, '—', Math.round(ms) + 'ms');
+      renderDebugHud();
+    }
+  }
+
+  function renderDebugHud() {
+    if (!DEBUG_TIMING) return;
+    let hud = document.getElementById('eh2-debug-hud');
+    if (!hud) {
+      hud = document.createElement('div');
+      hud.id = 'eh2-debug-hud';
+      hud.style.cssText = 'position:fixed;bottom:12px;right:12px;width:380px;max-height:40vh;overflow:auto;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:10px 12px;font:11px/1.4 ui-monospace,monospace;z-index:9999;box-shadow:0 10px 40px rgba(0,0,0,.5);';
+      document.body.appendChild(hud);
+    }
+    const last20 = window.__eh2_timings.slice(-20).reverse();
+    const total = window.__eh2_timings.reduce((s,e) => s + e.ms, 0);
+    hud.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <strong style="color:#38bdf8;">⏱ Timing HUD</strong>
+        <span style="color:#94a3b8;">${window.__eh2_timings.length} events · ${Math.round(total)}ms total</span>
+        <button onclick="sessionStorage.removeItem('eh2_debug');location.reload()" style="background:transparent;border:1px solid #475569;color:#e2e8f0;font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;">Off</button>
+      </div>
+      ${last20.map(e => {
+        const color = e.ms > 2000 ? '#fca5a5' : (e.ms > 1000 ? '#fcd34d' : (e.ms > 500 ? '#fde68a' : '#86efac'));
+        return `<div style="display:grid;grid-template-columns:60px 1fr auto;gap:6px;padding:2px 0;border-bottom:1px solid #1e293b;">
+          <span style="color:#94a3b8;">${e.kind}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeAttr(e.detail)}">${escapeHtml(e.detail)}</span>
+          <span style="color:${color};font-weight:700;">${e.ms}ms</span>
+        </div>`;
+      }).join('')}
+    `;
+  }
+
+  // Toggle HUD with Ctrl+Shift+D
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+      const cur = sessionStorage.getItem('eh2_debug') === '1';
+      if (cur) sessionStorage.removeItem('eh2_debug'); else sessionStorage.setItem('eh2_debug','1');
+      location.reload();
+    }
+  });
+
   async function api(params, method = 'GET', body = null) {
     const token = getToken();
     const viewing = getViewingAs();
@@ -580,9 +638,17 @@
       opts.headers = { 'Content-Type': 'text/plain;charset=utf-8' };
       opts.body = JSON.stringify({ ...(token ? { token } : {}), ...body });
     }
+
+    const callDetail = method + ' ' + (mergedParams.resource || (body && body.action) || '?');
+    const t0 = performance.now();
     try {
       const res = await fetch(url, opts);
+      const tFetch = performance.now();
       const data = await res.json();
+      const tParse = performance.now();
+
+      _logTiming('api', callDetail + ' (fetch ' + Math.round(tFetch - t0) + 'ms, parse ' + Math.round(tParse - tFetch) + 'ms)', tParse - t0);
+
       // If server says auth expired/missing, kick to login
       if (data && data.code === 'AUTH_REQUIRED') {
         clearSession();
@@ -591,6 +657,7 @@
       }
       return data;
     } catch (err) {
+      _logTiming('api', callDetail + ' FAILED: ' + err.message, performance.now() - t0);
       console.error('[api] request failed:', err);
       return { error: err.message || 'Network error' };
     }
@@ -801,8 +868,10 @@
   }
 
   function renderView(r, params, path) {
+    const _t0 = performance.now();
     const main = $('#main');
     const result = r.handler(params);
+    const _tRendered = performance.now();
     if (typeof result === 'string') main.innerHTML = result;
     document.title = r.meta.title ? `${r.meta.title} · Elite Hub` : 'Elite Hub';
     window.scrollTo(0, 0);
@@ -813,9 +882,22 @@
     renderBreadcrumb(r.meta, params, path);
     // Close any open menus
     closeAllMenus();
+    const _tChrome = performance.now();
+    _logTiming('route', path + ' (render ' + Math.round(_tRendered - _t0) + 'ms, chrome ' + Math.round(_tChrome - _tRendered) + 'ms)', _tChrome - _t0);
+
     // Optional post-render hook (for auto-loading data on specific routes)
     if (typeof r.meta.onAfterRender === 'function') {
-      try { r.meta.onAfterRender(params); } catch (e) { console.error('onAfterRender failed:', e); }
+      try {
+        const _tHook0 = performance.now();
+        const hookResult = r.meta.onAfterRender(params);
+        if (hookResult && typeof hookResult.then === 'function') {
+          hookResult.then(() => {
+            _logTiming('hook', path + ' onAfterRender (async)', performance.now() - _tHook0);
+          });
+        } else {
+          _logTiming('hook', path + ' onAfterRender (sync)', performance.now() - _tHook0);
+        }
+      } catch (e) { console.error('onAfterRender failed:', e); }
     }
   }
 
