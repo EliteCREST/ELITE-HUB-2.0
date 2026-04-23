@@ -358,6 +358,54 @@
     </div>
   </div>
 
+  <!-- Detailed Task Modal (Stage 5.1) -->
+  <div id="detailed-task-modal" class="modal-backdrop">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <div class="modal-title">Add a task</div>
+        <button class="modal-close" onclick="closeModal('detailed-task-modal')" type="button">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="new-sub-banner" id="detailed-task-error" style="display:none;"></div>
+
+        <div class="new-sub-grid">
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="dt-text">Task</label>
+            <input type="text" id="dt-text" class="new-sub-select" placeholder="What needs to happen?" maxlength="500">
+          </div>
+
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="dt-notes">Notes <span class="new-sub-optional">(optional)</span></label>
+            <textarea id="dt-notes" class="new-sub-textarea" rows="3" placeholder="Additional details…"></textarea>
+          </div>
+
+          <div class="new-sub-field">
+            <label for="dt-priority">Priority</label>
+            <select id="dt-priority" class="new-sub-select">
+              <option value="low">Low</option>
+              <option value="med" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+
+          <div class="new-sub-field">
+            <label for="dt-project">Project <span class="new-sub-optional">(optional)</span></label>
+            <input type="text" id="dt-project" class="new-sub-select" placeholder="e.g. compliance" maxlength="60">
+          </div>
+
+          <div class="new-sub-field new-sub-field-wide">
+            <label for="dt-duedate">Due date <span class="new-sub-optional">(optional)</span></label>
+            <input type="date" id="dt-duedate" class="new-sub-select">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" onclick="closeModal('detailed-task-modal')">Cancel</button>
+        <button class="btn btn-primary" id="dt-save-btn" type="button" onclick="submitDetailedTask()">Add task</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container" class="toast-container"></div>
 
 
@@ -2048,9 +2096,10 @@
                   type="text"
                   id="ws-quickadd-input"
                   class="ws-quickadd-input"
-                  placeholder="Add a task… (try slash commands: /tomorrow, /high, /p:compliance)"
+                  placeholder="Add a task… (plain text, or slash commands like /tomorrow /high /p:name)"
                   maxlength="500">
                 <button class="btn btn-primary btn-sm" onclick="wsQuickAdd()">Add</button>
+                <button class="btn btn-secondary btn-sm" onclick="openDetailedTaskModal()" title="Open a form with all task fields">+ Detailed</button>
               </div>
               <div class="ws-quickadd-hint" id="ws-quickadd-hint"></div>
 
@@ -2133,18 +2182,13 @@
       renderTaskList(activeTab);
     }
 
-    // Scratchpad
-    const widgets = widgetsRes.widgets || [];
-    const scratch = widgets.find(w => w.type === 'scratchpad');
+    // Scratchpad (backend returns {scratchpad: string} — we use a deterministic id per user)
+    const scratchContent = (typeof widgetsRes.scratchpad === 'string') ? widgetsRes.scratchpad : '';
+    const me = getCurrentUser();
+    _workspaceScratchId = 'scratchpad_' + me.username;  // deterministic — one per user
     const ta = $('#ws-scratchpad-text');
     if (ta) {
-      if (scratch) {
-        _workspaceScratchId = scratch.id;
-        ta.value = scratch.content || '';
-      } else {
-        _workspaceScratchId = null;
-        ta.value = '';
-      }
+      ta.value = scratchContent;
       // Wire autosave on input
       ta.oninput = () => {
         markScratchSaving();
@@ -2615,27 +2659,19 @@
     const s = $('#ws-scratch-status');
     if (!ta) return;
     const me = getCurrentUser();
-    const now = new Date().toISOString();
     const widget = {
-      id:         _workspaceScratchId || ('w_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)),
-      user:       me.username,
-      type:       'scratchpad',
-      title:      'Scratchpad',
-      content:    ta.value,
-      url:        '',
-      meta:       '',
-      sort_order: 0,
-      created_at: now,
-      updated_at: now,
+      id:          _workspaceScratchId,           // deterministic id = 'scratchpad_' + username
+      user:        me.username,
+      widget_type: 'scratchpad',                  // backend requires widget_type, not type
+      content:     ta.value,                      // backend packs all extras into JSON data blob
+      sort_order:  0,
     };
     const res = await api({}, 'POST', { action: 'savewidget', widget: widget, user: me.username });
     if (res.error) {
-      if (s) { s.textContent = '⚠ Couldn\'t save — retrying'; s.className = 'ws-scratch-status error'; }
-      // Retry once after 3 seconds
-      setTimeout(saveScratchpad, 3000);
+      if (s) { s.textContent = '⚠ Couldn\'t save — ' + res.error; s.className = 'ws-scratch-status error'; }
+      // Do NOT auto-retry — that creates a loop if there's a real error
       return;
     }
-    _workspaceScratchId = widget.id;
     if (s) {
       s.textContent = '✓ Saved';
       s.className = 'ws-scratch-status saved';
@@ -2643,6 +2679,77 @@
         if (s.textContent === '✓ Saved') s.textContent = '';
       }, 2000);
     }
+  }
+
+  /* ─── Detailed task modal (Stage 5.1) ─────────────────────── */
+  function openDetailedTaskModal(defaults) {
+    defaults = defaults || {};
+    $('#dt-text').value     = defaults.text     || '';
+    $('#dt-notes').value    = defaults.notes    || '';
+    $('#dt-priority').value = defaults.priority || 'med';
+    $('#dt-project').value  = defaults.project  || '';
+    $('#dt-duedate').value  = defaults.due_date || '';
+    $('#detailed-task-error').style.display = 'none';
+    openModal('detailed-task-modal');
+    setTimeout(() => { const t = $('#dt-text'); if (t) t.focus(); }, 60);
+  }
+
+  async function submitDetailedTask() {
+    const text     = $('#dt-text').value.trim();
+    const notes    = $('#dt-notes').value;
+    const priority = $('#dt-priority').value;
+    const project  = $('#dt-project').value.trim();
+    const dueDate  = $('#dt-duedate').value;
+    const err      = $('#detailed-task-error');
+
+    if (!text) {
+      err.style.display = '';
+      err.textContent = 'Task text is required.';
+      $('#dt-text').focus();
+      return;
+    }
+
+    const btn = $('#dt-save-btn');
+    btn.disabled = true;
+    btn.textContent = 'Adding…';
+
+    const me = getCurrentUser();
+    const now = new Date().toISOString();
+    const task = {
+      id:           'task_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      user:         me.username,
+      text:         text,
+      notes:        notes,
+      status:       'open',
+      priority:     priority,
+      project:      project,
+      due_date:     dueDate || '',
+      category:     'To Do',
+      created_at:   now,
+      updated_at:   now,
+      completed_at: '',
+      work_status:  '',
+      start_date:   '',
+      related_submission_id: '',
+    };
+
+    const res = await api({}, 'POST', { action: 'savetask', task: task, user: me.username });
+
+    btn.disabled = false;
+    btn.textContent = 'Add task';
+
+    if (res.error) {
+      err.style.display = '';
+      err.textContent = res.error;
+      return;
+    }
+
+    _workspaceTasks.unshift(task);
+    closeModal('detailed-task-modal');
+    renderTaskTabCounts();
+    const activeTab = (new URLSearchParams(location.hash.split('?')[1] || '')).get('tab') || 'today';
+    renderTaskList(activeTab);
+    showToast('Task added', 'success');
   }
 
   route('/region/:code', ({ code }) => {
