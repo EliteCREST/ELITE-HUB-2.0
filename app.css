@@ -1915,3 +1915,408 @@ body.view-as-active .app-root {
   padding-top: 0;
   border-top: 0;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 5.1 — WORKSPACE (Tasks + Scratchpad)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.workspace-view { max-width: 1280px; }
+
+.workspace-hero {
+  margin-bottom: var(--sp-4);
+}
+
+/* Today aggregated workload bar */
+.ws-today-bar {
+  margin-bottom: var(--sp-5);
+}
+
+.ws-today-bar-inner {
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.ws-today-bar-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+  flex-shrink: 0;
+}
+
+.ws-today-bar-items {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.ws-today-chip {
+  display: flex;
+  flex-direction: column;
+  padding: 6px var(--sp-3);
+  background: var(--slate-50);
+  border-left: 3px solid var(--slate-300);
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  color: var(--navy);
+  transition: background var(--t-fast);
+  min-width: 140px;
+}
+.ws-today-chip:hover { background: var(--slate-100); }
+.ws-today-chip-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.ws-today-chip-sub {
+  font-size: 11px;
+  color: var(--slate-500);
+  margin-top: 1px;
+}
+.ws-today-red    { border-left-color: var(--red); background: var(--red-pale); }
+.ws-today-red:hover { background: #FEE8E8; }
+.ws-today-amber  { border-left-color: var(--amber); background: var(--amber-pale); }
+.ws-today-amber:hover { background: #FDE9B2; }
+.ws-today-blue   { border-left-color: var(--blue); background: var(--blue-pale); }
+
+.ws-today-bar-empty {
+  padding: var(--sp-4);
+  text-align: center;
+  color: var(--slate-500);
+  font-size: 13px;
+  background: var(--slate-50);
+  border-radius: var(--r-md);
+  border: 1px dashed var(--slate-300);
+}
+
+/* Main 2-column layout */
+.ws-main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+}
+@media (max-width: 960px) {
+  .ws-main-grid { grid-template-columns: 1fr; }
+}
+
+/* Tasks card */
+.ws-tasks-card {
+  height: 100%;
+}
+
+.ws-tabs {
+  display: flex;
+  gap: var(--sp-1);
+  border-bottom: 1px solid var(--slate-200);
+  margin: var(--sp-3) 0 var(--sp-3);
+  overflow-x: auto;
+}
+.ws-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 8px var(--sp-3);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate-500);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.ws-tab:hover { color: var(--navy); }
+.ws-tab.active {
+  color: var(--navy);
+  font-weight: 700;
+  border-bottom-color: var(--blue);
+}
+.ws-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 6px;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: var(--r-round);
+}
+.ws-tab.active .ws-tab-count {
+  background: var(--blue-pale);
+  color: var(--blue);
+}
+.ws-tab-count-zero { opacity: 0.5; }
+
+/* Quick-add */
+.ws-quickadd {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-1);
+}
+.ws-quickadd-input {
+  flex: 1;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--navy);
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  outline: none;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.ws-quickadd-input:focus {
+  background: var(--white);
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+}
+.ws-quickadd-hint {
+  font-size: 11px;
+  color: var(--slate-500);
+  margin-bottom: var(--sp-3);
+  min-height: 14px;
+}
+
+/* Task list */
+.ws-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ws-task-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: var(--sp-2);
+  align-items: center;
+  padding: 8px var(--sp-2);
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast);
+  position: relative;
+}
+.ws-task-row:hover { background: var(--slate-50); }
+.ws-task-done { opacity: 0.6; }
+.ws-task-done .ws-task-text { text-decoration: line-through; }
+
+.ws-task-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.ws-task-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--blue);
+}
+
+.ws-task-main {
+  min-width: 0;
+  cursor: pointer;
+}
+.ws-task-text {
+  font-size: 14px;
+  color: var(--navy);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-task-meta {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  font-size: 11px;
+  color: var(--slate-500);
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.ws-task-project {
+  padding: 1px 6px;
+  background: var(--slate-100);
+  color: var(--slate-700);
+  border-radius: var(--r-round);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ws-task-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.ws-task-due-today { color: var(--amber); font-weight: 700; }
+.ws-task-due-overdue { color: var(--red); font-weight: 700; }
+
+.ws-task-linked {
+  color: var(--blue);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 0 4px;
+}
+.ws-task-linked:hover { text-decoration: underline; }
+
+.ws-task-delete {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--slate-400);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  border-radius: var(--r-sm);
+  opacity: 0;
+  transition: opacity var(--t-fast), color var(--t-fast), background var(--t-fast);
+}
+.ws-task-row:hover .ws-task-delete { opacity: 1; }
+.ws-task-delete:hover {
+  color: var(--red);
+  background: var(--red-pale);
+}
+
+.ws-task-expand {
+  grid-column: 1 / -1;
+}
+
+.ws-task-editor {
+  background: var(--slate-50);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.ws-task-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ws-task-editor-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+}
+.ws-task-editor-input,
+.ws-task-editor-textarea {
+  width: 100%;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--navy);
+  background: var(--white);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-sm);
+  outline: none;
+}
+.ws-task-editor-input:focus,
+.ws-task-editor-textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.ws-task-editor-textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+.ws-task-editor-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--sp-2);
+}
+@media (max-width: 640px) {
+  .ws-task-editor-row { grid-template-columns: 1fr; }
+}
+.ws-task-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+}
+
+/* Project group */
+.ws-project-group {
+  margin-bottom: var(--sp-3);
+}
+.ws-project-group-header {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+  padding: var(--sp-2) var(--sp-2);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ws-project-group-count {
+  padding: 1px 6px;
+  background: var(--slate-100);
+  color: var(--slate-600);
+  border-radius: var(--r-round);
+  font-size: 10px;
+}
+
+/* Empty state */
+.ws-empty {
+  padding: var(--sp-6) var(--sp-3);
+  text-align: center;
+  color: var(--slate-500);
+  font-size: 13px;
+}
+.ws-empty-icon {
+  font-size: 28px;
+  margin-bottom: var(--sp-2);
+}
+
+/* Scratchpad */
+.ws-scratchpad-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 400px;
+}
+.ws-scratchpad-text {
+  flex: 1;
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--navy);
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3);
+  outline: none;
+  resize: vertical;
+  min-height: 300px;
+  line-height: 1.5;
+}
+.ws-scratchpad-text:focus {
+  background: var(--white);
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.12);
+}
+
+.ws-scratch-status {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--slate-500);
+  transition: color var(--t-fast);
+}
+.ws-scratch-status.saving { color: var(--slate-500); }
+.ws-scratch-status.saved  { color: var(--green); }
+.ws-scratch-status.error  { color: var(--red); font-weight: 600; }

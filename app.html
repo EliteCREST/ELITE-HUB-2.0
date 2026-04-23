@@ -1545,7 +1545,8 @@
       <div class="submission-header">
         <div class="submission-header-title">
           <span class="submission-header-icon">${srcIcon}</span>
-          <h1 class="view-title" style="margin:0;">${escapeHtml(sub.subject || '(no subject)')}</h1>
+          <h1 class="view-title" style="margin:0;flex:1;">${escapeHtml(sub.subject || '(no subject)')}</h1>
+          <button class="btn btn-secondary btn-sm" onclick="createTaskFromSubmission()" title="Create a task linked to this submission">➕ Task</button>
         </div>
         <div class="submission-header-meta">
           <span>${escapeHtml(srcLabel)}</span>
@@ -1742,6 +1743,43 @@
     }
     showToast('Submission reopened', 'success');
     loadSubmissionDetail(_currentSubmission.id);
+  }
+
+  async function createTaskFromSubmission() {
+    if (!_currentSubmission) return;
+    const sub = _currentSubmission;
+    const defaultDue = sub.due_date || '';
+    const due = prompt(
+      'Create a task linked to this submission.\n\nDue date (YYYY-MM-DD, or leave blank for no due date):',
+      defaultDue ? formatDateForInput(defaultDue) : ''
+    );
+    if (due === null) return;  // cancelled
+
+    const me = getLoggedInUser();
+    const now = new Date().toISOString();
+    const task = {
+      id:           'task_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      user:         me.username,
+      text:         sub.subject || 'Follow up on submission',
+      notes:        'Related to submission: ' + sub.id + '\n\n' + (sub.message || '').slice(0, 300),
+      status:       'open',
+      priority:     sub.priority || 'med',
+      project:      sub.source_page || '',
+      due_date:     due || '',
+      category:     'To Do',
+      created_at:   now,
+      updated_at:   now,
+      completed_at: '',
+      work_status:  '',
+      start_date:   '',
+      related_submission_id: sub.id,
+    };
+    const res = await api({}, 'POST', { action: 'savetask', task: task, user: me.username });
+    if (res.error) {
+      showToast('Failed: ' + res.error, 'error');
+      return;
+    }
+    showToast('Task created. View in My Workspace.', 'success');
   }
 
 
@@ -1966,16 +2004,646 @@
     return _origLoadInbox(params);
   };
 
-  route('/workspace', () => placeholder('My Workspace', 'Stage 5',
-    'Personal tasks, contacts, links, and scratchpad — same view for every user.',
-    [
-      'KPI strip (Due Today, Overdue, Compliance Queue, Legal)',
-      'Slash-command quick-add (/tomorrow, /high, /p:elite)',
-      'Project tagging with per-user custom lists',
-      'Saved views and smart sorting',
-      'Configurable tools row (per-user)',
-    ]
-  ), { title: 'Workspace' });
+  route('/workspace', (params) => {
+    const tab = params.tab || 'today';
+    return `
+      <div class="view workspace-view" id="workspace-view">
+        <div class="workspace-hero">
+          <h1 class="view-title" id="ws-greeting">Loading…</h1>
+          <p class="view-sub" id="ws-sub">—</p>
+        </div>
+
+        <!-- Today aggregated workload bar -->
+        <div class="ws-today-bar" id="ws-today-bar">
+          <div class="skeleton skeleton-line" style="height:48px;"></div>
+        </div>
+
+        <!-- Main two-column layout: Tasks (wide) + Scratchpad (narrow) -->
+        <div class="ws-main-grid">
+
+          <!-- TASKS -->
+          <div class="ws-tasks">
+            <div class="card ws-tasks-card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Tasks</div>
+                  <div class="card-sub" id="ws-tasks-sub">—</div>
+                </div>
+              </div>
+
+              <!-- Tabs -->
+              <div class="ws-tabs" id="ws-tabs">
+                ${['today','week','all','projects','done'].map(t => {
+                  const label = { today: 'Today', week: 'This week', all: 'All open', projects: 'By project', done: 'Done' }[t];
+                  return `<a class="ws-tab ${tab === t ? 'active' : ''}" href="#/workspace?tab=${t}" data-tab="${t}">
+                    <span class="ws-tab-label">${label}</span>
+                    <span class="ws-tab-count" id="ws-tab-count-${t}">—</span>
+                  </a>`;
+                }).join('')}
+              </div>
+
+              <!-- Quick-add -->
+              <div class="ws-quickadd">
+                <input
+                  type="text"
+                  id="ws-quickadd-input"
+                  class="ws-quickadd-input"
+                  placeholder="Add a task… (try slash commands: /tomorrow, /high, /p:compliance)"
+                  maxlength="500">
+                <button class="btn btn-primary btn-sm" onclick="wsQuickAdd()">Add</button>
+              </div>
+              <div class="ws-quickadd-hint" id="ws-quickadd-hint"></div>
+
+              <!-- Task list -->
+              <div class="ws-task-list" id="ws-task-list">
+                <div class="skeleton skeleton-line" style="height:44px;margin-bottom:6px;"></div>
+                <div class="skeleton skeleton-line" style="height:44px;margin-bottom:6px;"></div>
+                <div class="skeleton skeleton-line" style="height:44px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SCRATCHPAD -->
+          <div class="ws-scratchpad">
+            <div class="card ws-scratchpad-card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Scratchpad</div>
+                  <div class="card-sub">Random thoughts, meeting notes — autosaves as you type</div>
+                </div>
+                <span class="ws-scratch-status" id="ws-scratch-status"></span>
+              </div>
+              <textarea
+                id="ws-scratchpad-text"
+                class="ws-scratchpad-text"
+                placeholder="Type anything here…"
+                rows="18"></textarea>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    `;
+  }, {
+    title: 'Workspace',
+    onAfterRender: (params) => loadWorkspace(params || {})
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════════
+     WORKSPACE LOADER (Stage 5.1)
+     ═══════════════════════════════════════════════════════════════ */
+
+  let _workspaceTasks = [];
+  let _workspaceScratchId = null;
+  let _scratchSaveTimer = null;
+
+  async function loadWorkspace(params) {
+    const activeTab = params.tab || 'today';
+    const user = getCurrentUser();  // respects view-as
+    const greetingEl = $('#ws-greeting');
+    const subEl = $('#ws-sub');
+    if (greetingEl) {
+      const tod = (new Date().getHours() < 12) ? 'morning' : (new Date().getHours() < 18 ? 'afternoon' : 'evening');
+      const verb = tod === 'morning' ? 'Good morning' : tod === 'afternoon' ? 'Good afternoon' : 'Good evening';
+      const firstName = (user.name || user.username).split(' ')[0];
+      greetingEl.textContent = `${verb}, ${firstName}.`;
+    }
+
+    // Fire requests in parallel
+    const [tasksRes, widgetsRes, dashboardRes] = await Promise.all([
+      api({ resource: 'tasks' }),
+      api({ resource: 'widgets' }),
+      api({ resource: 'dashboard' }),
+    ]);
+
+    if (!$('#ws-task-list')) return;  // navigated away
+
+    // Today bar
+    renderTodayBar(dashboardRes || {});
+
+    // Tasks
+    _workspaceTasks = (tasksRes.tasks || []).filter(t => t.status !== 'deleted');
+    if (tasksRes.error) {
+      $('#ws-task-list').innerHTML = `<div class="card" style="border-color:var(--red);">
+        <div style="color:var(--red);font-weight:600;">⚠ ${escapeHtml(tasksRes.error)}</div>
+      </div>`;
+    } else {
+      renderTaskTabCounts();
+      renderTaskList(activeTab);
+    }
+
+    // Scratchpad
+    const widgets = widgetsRes.widgets || [];
+    const scratch = widgets.find(w => w.type === 'scratchpad');
+    const ta = $('#ws-scratchpad-text');
+    if (ta) {
+      if (scratch) {
+        _workspaceScratchId = scratch.id;
+        ta.value = scratch.content || '';
+      } else {
+        _workspaceScratchId = null;
+        ta.value = '';
+      }
+      // Wire autosave on input
+      ta.oninput = () => {
+        markScratchSaving();
+        if (_scratchSaveTimer) clearTimeout(_scratchSaveTimer);
+        _scratchSaveTimer = setTimeout(saveScratchpad, 800);
+      };
+    }
+
+    // Wire quick-add Enter key
+    const qa = $('#ws-quickadd-input');
+    if (qa) {
+      qa.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); wsQuickAdd(); }
+      };
+    }
+  }
+
+  /* ─── Today bar ──────────────────────────────────────────── */
+  function renderTodayBar(dash) {
+    const el = $('#ws-today-bar');
+    if (!el) return;
+    const sub = dash.submissions || {};
+    const myday = dash.my_day || {};
+
+    const items = [];
+    const dueToday = myday.tasks_due_today || 0;
+    const overdue = myday.tasks_overdue || 0;
+    if (dueToday > 0 || overdue > 0) {
+      items.push({
+        label: (dueToday + overdue) + ' task' + (dueToday + overdue === 1 ? '' : 's'),
+        sub: `${dueToday} due today${overdue > 0 ? `, ${overdue} overdue` : ''}`,
+        color: overdue > 0 ? 'red' : 'amber',
+        href: '#/workspace?tab=today',
+      });
+    }
+    if (sub.unread_count > 0) {
+      items.push({
+        label: sub.unread_count + ' unread repl' + (sub.unread_count === 1 ? 'y' : 'ies'),
+        sub: 'In your inbox',
+        color: 'red',
+        href: '#/inbox',
+      });
+    }
+    if (sub.pool_count > 0) {
+      items.push({
+        label: sub.pool_count + ' pool item' + (sub.pool_count === 1 ? '' : 's'),
+        sub: 'Unassigned, pick one up',
+        color: 'amber',
+        href: '#/inbox?scope=pool',
+      });
+    }
+    if (sub.high_priority > 0) {
+      items.push({
+        label: sub.high_priority + ' high-priority',
+        sub: 'Needs attention',
+        color: 'red',
+        href: '#/inbox?priority=high',
+      });
+    }
+
+    if (items.length === 0) {
+      el.innerHTML = `<div class="ws-today-bar-empty">🎉 Nothing urgent on your plate.</div>`;
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="ws-today-bar-inner">
+        <div class="ws-today-bar-label">Today</div>
+        <div class="ws-today-bar-items">
+          ${items.map(i => `
+            <a class="ws-today-chip ws-today-${i.color}" href="${escapeAttr(i.href)}">
+              <span class="ws-today-chip-label">${escapeHtml(i.label)}</span>
+              <span class="ws-today-chip-sub">${escapeHtml(i.sub)}</span>
+            </a>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  /* ─── Task tab counts ─────────────────────────────────────── */
+  function renderTaskTabCounts() {
+    const tasks = _workspaceTasks;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const weekEnd = new Date(today.getTime() + 7 * 86400000);
+
+    const open = tasks.filter(t => t.status !== 'done' && t.status !== 'completed');
+    const done = tasks.filter(t => t.status === 'done' || t.status === 'completed');
+
+    const counts = {
+      today: open.filter(t => isTaskDueToday(t, today)).length,
+      week: open.filter(t => isTaskDueThisWeek(t, today, weekEnd)).length,
+      all: open.length,
+      projects: new Set(open.map(t => t.project || '(no project)')).size,
+      done: done.length,
+    };
+    Object.keys(counts).forEach(k => {
+      const el = $('#ws-tab-count-' + k);
+      if (el) {
+        el.textContent = counts[k];
+        el.classList.toggle('ws-tab-count-zero', counts[k] === 0);
+      }
+    });
+  }
+
+  function isTaskDueToday(t, today) {
+    if (!t.due_date) return false;
+    const d = new Date(t.due_date);
+    if (isNaN(d)) return false;
+    d.setHours(0,0,0,0);
+    return d.getTime() <= today.getTime();  // today or overdue
+  }
+  function isTaskDueThisWeek(t, today, weekEnd) {
+    if (!t.due_date) return false;
+    const d = new Date(t.due_date);
+    if (isNaN(d)) return false;
+    d.setHours(0,0,0,0);
+    return d.getTime() <= weekEnd.getTime();
+  }
+
+  /* ─── Task list rendering ─────────────────────────────────── */
+  function renderTaskList(activeTab) {
+    const listEl = $('#ws-task-list');
+    const subEl = $('#ws-tasks-sub');
+    if (!listEl) return;
+
+    const today = new Date(); today.setHours(0,0,0,0);
+    const weekEnd = new Date(today.getTime() + 7 * 86400000);
+
+    let tasks = _workspaceTasks.slice();
+    const open = tasks.filter(t => t.status !== 'done' && t.status !== 'completed');
+    const done = tasks.filter(t => t.status === 'done' || t.status === 'completed');
+
+    let filtered;
+    if (activeTab === 'today') {
+      filtered = open.filter(t => isTaskDueToday(t, today));
+    } else if (activeTab === 'week') {
+      filtered = open.filter(t => isTaskDueThisWeek(t, today, weekEnd));
+    } else if (activeTab === 'projects') {
+      filtered = open;  // handled specially below (grouped)
+    } else if (activeTab === 'done') {
+      filtered = done;
+    } else {
+      filtered = open;
+    }
+
+    // Sort: priority desc, then due_date asc, then created_at desc
+    const priorityRank = { high: 0, med: 1, low: 2 };
+    filtered.sort((a, b) => {
+      const pa = priorityRank[a.priority] ?? 1;
+      const pb = priorityRank[b.priority] ?? 1;
+      if (pa !== pb) return pa - pb;
+      const da = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+      const db = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+      if (da !== db) return da - db;
+      return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+
+    // Update subtitle
+    if (subEl) {
+      subEl.textContent = filtered.length === 0
+        ? 'No tasks to show'
+        : `${filtered.length} task${filtered.length === 1 ? '' : 's'}`;
+    }
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = `<div class="ws-empty">
+        <div class="ws-empty-icon">${activeTab === 'done' ? '✅' : '✨'}</div>
+        <div>${activeTab === 'done' ? 'No completed tasks yet.' : 'All clear. Add one above to get started.'}</div>
+      </div>`;
+      return;
+    }
+
+    if (activeTab === 'projects') {
+      // Group by project
+      const groups = {};
+      filtered.forEach(t => {
+        const key = t.project || '(no project)';
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(t);
+      });
+      const groupNames = Object.keys(groups).sort();
+      listEl.innerHTML = groupNames.map(gName => `
+        <div class="ws-project-group">
+          <div class="ws-project-group-header">${escapeHtml(gName)} <span class="ws-project-group-count">${groups[gName].length}</span></div>
+          ${groups[gName].map(t => renderTaskRow(t)).join('')}
+        </div>
+      `).join('');
+    } else {
+      listEl.innerHTML = filtered.map(t => renderTaskRow(t)).join('');
+    }
+  }
+
+  function renderTaskRow(t) {
+    const isDone = t.status === 'done' || t.status === 'completed';
+    const priorityClass = t.priority === 'high' ? 'badge-red' : (t.priority === 'low' ? '' : 'badge-amber');
+    const dueClass = getDueDateClass(t);
+    const dueLabel = t.due_date ? formatTaskDue(t.due_date) : '';
+    const projectChip = t.project ? `<span class="ws-task-project">${escapeHtml(t.project)}</span>` : '';
+    const priorityChip = t.priority && t.priority !== 'med' ? `<span class="badge ${priorityClass}" style="font-size:10px;">${escapeHtml(t.priority.toUpperCase())}</span>` : '';
+    const linkedChip = t.related_submission_id ? `<a class="ws-task-linked" href="#/submission/${encodeURIComponent(t.related_submission_id)}" onclick="event.stopPropagation()" title="Open related submission">📬</a>` : '';
+
+    return `
+      <div class="ws-task-row ${isDone ? 'ws-task-done' : ''}" data-id="${escapeAttr(t.id)}">
+        <label class="ws-task-checkbox">
+          <input type="checkbox" ${isDone ? 'checked' : ''} onchange="toggleTaskDone('${escapeAttr(t.id)}', this.checked)">
+        </label>
+        <div class="ws-task-main" onclick="toggleTaskExpand('${escapeAttr(t.id)}')">
+          <div class="ws-task-text">${escapeHtml(t.text || '(no title)')}</div>
+          <div class="ws-task-meta">
+            ${priorityChip}
+            ${projectChip}
+            ${dueLabel ? `<span class="ws-task-due ${dueClass}">📅 ${escapeHtml(dueLabel)}</span>` : ''}
+            ${linkedChip}
+          </div>
+        </div>
+        <button class="ws-task-delete" title="Delete task" onclick="deleteTaskConfirm('${escapeAttr(t.id)}')">×</button>
+        <div class="ws-task-expand" id="ws-task-expand-${escapeAttr(t.id)}" style="display:none;"></div>
+      </div>
+    `;
+  }
+
+  function formatTaskDue(due) {
+    const d = new Date(due);
+    if (isNaN(d)) return String(due);
+    d.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    const diffDays = Math.round((d - today) / 86400000);
+    if (diffDays === 0) return 'Today';
+    if (diffDays === 1) return 'Tomorrow';
+    if (diffDays === -1) return 'Yesterday';
+    if (diffDays < 0) return Math.abs(diffDays) + ' days ago';
+    if (diffDays < 7) {
+      return d.toLocaleDateString('en-US', { weekday: 'short' });
+    }
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+
+  function getDueDateClass(t) {
+    if (!t.due_date) return '';
+    const d = new Date(t.due_date);
+    if (isNaN(d)) return '';
+    d.setHours(0,0,0,0);
+    const today = new Date(); today.setHours(0,0,0,0);
+    if (d.getTime() < today.getTime()) return 'ws-task-due-overdue';
+    if (d.getTime() === today.getTime()) return 'ws-task-due-today';
+    return '';
+  }
+
+  /* ─── Task actions ────────────────────────────────────────── */
+
+  async function toggleTaskDone(id, done) {
+    const t = _workspaceTasks.find(x => x.id === id);
+    if (!t) return;
+    const now = new Date().toISOString();
+    const updated = {
+      ...t,
+      status: done ? 'done' : 'open',
+      completed_at: done ? now : '',
+      updated_at: now,
+    };
+    const res = await api({}, 'POST', { action: 'savetask', task: updated, user: t.user });
+    if (res.error) { showToast('Failed: ' + res.error, 'error'); return; }
+    // Update local state + re-render
+    const idx = _workspaceTasks.findIndex(x => x.id === id);
+    if (idx >= 0) _workspaceTasks[idx] = updated;
+    renderTaskTabCounts();
+    const activeTab = (new URLSearchParams(location.hash.split('?')[1] || '')).get('tab') || 'today';
+    renderTaskList(activeTab);
+  }
+
+  async function deleteTaskConfirm(id) {
+    if (!confirm('Delete this task? This cannot be undone.')) return;
+    const t = _workspaceTasks.find(x => x.id === id);
+    if (!t) return;
+    const res = await api({}, 'POST', { action: 'deletetask', id: id, user: t.user });
+    if (res.error) { showToast('Failed: ' + res.error, 'error'); return; }
+    _workspaceTasks = _workspaceTasks.filter(x => x.id !== id);
+    renderTaskTabCounts();
+    const activeTab = (new URLSearchParams(location.hash.split('?')[1] || '')).get('tab') || 'today';
+    renderTaskList(activeTab);
+    showToast('Task deleted', 'default');
+  }
+
+  function toggleTaskExpand(id) {
+    const expandEl = $('#ws-task-expand-' + id);
+    if (!expandEl) return;
+    if (expandEl.style.display === 'none') {
+      const t = _workspaceTasks.find(x => x.id === id);
+      if (!t) return;
+      expandEl.innerHTML = `
+        <div class="ws-task-editor">
+          <label>
+            <span class="ws-task-editor-label">Text</span>
+            <input type="text" id="ws-edit-text-${escapeAttr(id)}" class="ws-task-editor-input" value="${escapeAttr(t.text || '')}">
+          </label>
+          <label>
+            <span class="ws-task-editor-label">Notes</span>
+            <textarea id="ws-edit-notes-${escapeAttr(id)}" class="ws-task-editor-textarea" rows="3">${escapeHtml(t.notes || '')}</textarea>
+          </label>
+          <div class="ws-task-editor-row">
+            <label>
+              <span class="ws-task-editor-label">Priority</span>
+              <select id="ws-edit-priority-${escapeAttr(id)}" class="ws-task-editor-input">
+                <option value="low"  ${t.priority === 'low'  ? 'selected' : ''}>Low</option>
+                <option value="med"  ${t.priority === 'med'  ? 'selected' : ''}>Medium</option>
+                <option value="high" ${t.priority === 'high' ? 'selected' : ''}>High</option>
+              </select>
+            </label>
+            <label>
+              <span class="ws-task-editor-label">Project</span>
+              <input type="text" id="ws-edit-project-${escapeAttr(id)}" class="ws-task-editor-input" value="${escapeAttr(t.project || '')}" placeholder="e.g. compliance">
+            </label>
+            <label>
+              <span class="ws-task-editor-label">Due date</span>
+              <input type="date" id="ws-edit-due-${escapeAttr(id)}" class="ws-task-editor-input" value="${escapeAttr(t.due_date ? formatDateForInput(t.due_date) : '')}">
+            </label>
+          </div>
+          <div class="ws-task-editor-actions">
+            <button class="btn btn-ghost btn-sm" onclick="toggleTaskExpand('${escapeAttr(id)}')">Cancel</button>
+            <button class="btn btn-primary btn-sm" onclick="saveTaskEdits('${escapeAttr(id)}')">Save changes</button>
+          </div>
+        </div>
+      `;
+      expandEl.style.display = '';
+    } else {
+      expandEl.style.display = 'none';
+      expandEl.innerHTML = '';
+    }
+  }
+
+  async function saveTaskEdits(id) {
+    const t = _workspaceTasks.find(x => x.id === id);
+    if (!t) return;
+    const updated = {
+      ...t,
+      text:     $('#ws-edit-text-' + id).value.trim(),
+      notes:    $('#ws-edit-notes-' + id).value,
+      priority: $('#ws-edit-priority-' + id).value,
+      project:  $('#ws-edit-project-' + id).value.trim(),
+      due_date: $('#ws-edit-due-' + id).value || '',
+      updated_at: new Date().toISOString(),
+    };
+    if (!updated.text) { showToast('Task text required', 'error'); return; }
+
+    const res = await api({}, 'POST', { action: 'savetask', task: updated, user: t.user });
+    if (res.error) { showToast('Failed: ' + res.error, 'error'); return; }
+
+    const idx = _workspaceTasks.findIndex(x => x.id === id);
+    if (idx >= 0) _workspaceTasks[idx] = updated;
+    toggleTaskExpand(id);
+    renderTaskTabCounts();
+    const activeTab = (new URLSearchParams(location.hash.split('?')[1] || '')).get('tab') || 'today';
+    renderTaskList(activeTab);
+    showToast('Saved', 'success');
+  }
+
+  /* ─── Quick-add with slash commands ───────────────────────── */
+
+  async function wsQuickAdd(overrideText) {
+    const input = $('#ws-quickadd-input');
+    const raw = overrideText !== undefined ? overrideText : (input ? input.value.trim() : '');
+    if (!raw) return;
+
+    const parsed = parseSlashCommands(raw);
+    const me = getCurrentUser();
+    const now = new Date().toISOString();
+    const task = {
+      id:           'task_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      user:         me.username,
+      text:         parsed.text,
+      notes:        '',
+      status:       'open',
+      priority:     parsed.priority || 'med',
+      project:      parsed.project || '',
+      due_date:     parsed.due_date || '',
+      category:     'To Do',
+      created_at:   now,
+      updated_at:   now,
+      completed_at: '',
+      work_status:  '',
+      start_date:   '',
+      related_submission_id: parsed.related_submission_id || '',
+    };
+
+    const res = await api({}, 'POST', { action: 'savetask', task: task, user: me.username });
+    if (res.error) { showToast('Failed to add: ' + res.error, 'error'); return; }
+
+    _workspaceTasks.unshift(task);
+    if (input) input.value = '';
+    const hint = $('#ws-quickadd-hint');
+    if (hint) hint.textContent = '';
+    renderTaskTabCounts();
+    const activeTab = (new URLSearchParams(location.hash.split('?')[1] || '')).get('tab') || 'today';
+    renderTaskList(activeTab);
+    showToast('Task added', 'success');
+  }
+
+  function parseSlashCommands(raw) {
+    let text = raw;
+    let priority = null;
+    let project = null;
+    let due_date = null;
+
+    // /high /med /low
+    text = text.replace(/\s*\/high\b/i, () => { priority = 'high'; return ''; });
+    text = text.replace(/\s*\/med(?:ium)?\b/i, () => { priority = 'med'; return ''; });
+    text = text.replace(/\s*\/low\b/i, () => { priority = 'low'; return ''; });
+
+    // /p:projectname (one word)
+    text = text.replace(/\s*\/p:([A-Za-z0-9_-]+)/i, (_, p) => { project = p; return ''; });
+
+    // /today, /tomorrow, /friday etc.
+    const today = new Date(); today.setHours(0,0,0,0);
+    const weekdayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
+    text = text.replace(/\s*\/today\b/i, () => {
+      due_date = formatDateForInput(today);
+      return '';
+    });
+    text = text.replace(/\s*\/tomorrow\b/i, () => {
+      const d = new Date(today); d.setDate(d.getDate() + 1);
+      due_date = formatDateForInput(d);
+      return '';
+    });
+    text = text.replace(/\s*\/next\s*week\b/i, () => {
+      const d = new Date(today); d.setDate(d.getDate() + 7);
+      due_date = formatDateForInput(d);
+      return '';
+    });
+    // /monday, /tuesday, etc.
+    text = text.replace(/\s*\/(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i, (_, wd) => {
+      const target = weekdayMap[wd.toLowerCase()];
+      const d = new Date(today);
+      const cur = d.getDay();
+      let offset = (target - cur + 7) % 7;
+      if (offset === 0) offset = 7;  // next one of this day, not today
+      d.setDate(d.getDate() + offset);
+      due_date = formatDateForInput(d);
+      return '';
+    });
+    // /M-D or /M/D  (e.g. /4-30, /12/25)
+    text = text.replace(/\s*\/(\d{1,2})[-/](\d{1,2})\b/, (_, m, day) => {
+      const year = today.getFullYear();
+      const d = new Date(year, parseInt(m) - 1, parseInt(day));
+      // If that date already passed, assume next year
+      if (d < today) d.setFullYear(year + 1);
+      due_date = formatDateForInput(d);
+      return '';
+    });
+
+    text = text.trim().replace(/\s+/g, ' ');
+    return { text, priority, project, due_date };
+  }
+
+  /* ─── Scratchpad ──────────────────────────────────────────── */
+
+  function markScratchSaving() {
+    const s = $('#ws-scratch-status');
+    if (s) {
+      s.textContent = 'Saving…';
+      s.className = 'ws-scratch-status saving';
+    }
+  }
+
+  async function saveScratchpad() {
+    const ta = $('#ws-scratchpad-text');
+    const s = $('#ws-scratch-status');
+    if (!ta) return;
+    const me = getCurrentUser();
+    const now = new Date().toISOString();
+    const widget = {
+      id:         _workspaceScratchId || ('w_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6)),
+      user:       me.username,
+      type:       'scratchpad',
+      title:      'Scratchpad',
+      content:    ta.value,
+      url:        '',
+      meta:       '',
+      sort_order: 0,
+      created_at: now,
+      updated_at: now,
+    };
+    const res = await api({}, 'POST', { action: 'savewidget', widget: widget, user: me.username });
+    if (res.error) {
+      if (s) { s.textContent = '⚠ Couldn\'t save — retrying'; s.className = 'ws-scratch-status error'; }
+      // Retry once after 3 seconds
+      setTimeout(saveScratchpad, 3000);
+      return;
+    }
+    _workspaceScratchId = widget.id;
+    if (s) {
+      s.textContent = '✓ Saved';
+      s.className = 'ws-scratch-status saved';
+      setTimeout(() => {
+        if (s.textContent === '✓ Saved') s.textContent = '';
+      }, 2000);
+    }
+  }
 
   route('/region/:code', ({ code }) => {
     const region = REGIONS.find(r => r.code === code.toLowerCase());
