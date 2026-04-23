@@ -2132,6 +2132,12 @@
           <div class="skeleton skeleton-line" style="height:48px;"></div>
         </div>
 
+        <!-- Pinned Links row (Stage 5.3) -->
+        <div class="ws-pinned" id="ws-pinned" style="display:none;">
+          <div class="ws-pinned-label">📌 Pinned</div>
+          <div class="ws-pinned-chips" id="ws-pinned-chips"></div>
+        </div>
+
         <!-- Main two-column layout: Tasks (wide) + Scratchpad (narrow) -->
         <div class="ws-main-grid">
 
@@ -2210,6 +2216,7 @@
               </div>
               <button class="btn btn-secondary btn-sm" onclick="wsNoteNew()">+ New note</button>
             </div>
+            <input type="text" class="ws-widget-search" id="ws-notes-search" placeholder="Search notes…" style="display:none;" oninput="renderNotes()">
             <div class="ws-notes-list" id="ws-notes-list">
               <div class="skeleton skeleton-line" style="height:60px;margin-bottom:6px;"></div>
             </div>
@@ -2224,6 +2231,7 @@
               </div>
               <button class="btn btn-secondary btn-sm" onclick="openLinkModal()">+ Add link</button>
             </div>
+            <input type="text" class="ws-widget-search" id="ws-links-search" placeholder="Search links…" style="display:none;" oninput="renderLinks()">
             <div class="ws-links-list" id="ws-links-list">
               <div class="skeleton skeleton-line" style="height:40px;margin-bottom:6px;"></div>
             </div>
@@ -2238,6 +2246,7 @@
               </div>
               <button class="btn btn-secondary btn-sm" onclick="openContactModal()">+ Add contact</button>
             </div>
+            <input type="text" class="ws-widget-search" id="ws-contacts-search" placeholder="Search contacts…" style="display:none;" oninput="renderContacts()">
             <div class="ws-contacts-list" id="ws-contacts-list">
               <div class="skeleton skeleton-line" style="height:56px;margin-bottom:6px;"></div>
             </div>
@@ -2913,7 +2922,12 @@
   function renderNotes() {
     const el = $('#ws-notes-list');
     const sub = $('#ws-notes-sub');
+    const searchEl = $('#ws-notes-search');
     if (!el) return;
+
+    // Show search when 6+ items
+    if (searchEl) searchEl.style.display = _wsNotes.length >= 6 ? '' : 'none';
+    const q = (searchEl && searchEl.value || '').toLowerCase().trim();
 
     if (sub) sub.textContent = _wsNotes.length === 0
       ? 'No notes yet'
@@ -2927,11 +2941,23 @@
     }
 
     // Sort: newest first by updated_at
-    const sorted = _wsNotes.slice().sort((a, b) => {
+    let sorted = _wsNotes.slice().sort((a, b) => {
       const ta = new Date(a.updated_at || a.created_at || 0).getTime();
       const tb = new Date(b.updated_at || b.created_at || 0).getTime();
       return tb - ta;
     });
+
+    // Apply search filter
+    if (q) {
+      sorted = sorted.filter(n => String(n.content || n.text || '').toLowerCase().includes(q));
+    }
+
+    if (sorted.length === 0) {
+      el.innerHTML = `<div class="ws-widget-empty">
+        No notes match "${escapeHtml(q)}".
+      </div>`;
+      return;
+    }
 
     el.innerHTML = sorted.map(n => `
       <div class="ws-note-card" data-id="${escapeAttr(n.id)}">
@@ -3014,14 +3040,23 @@
 
   /* ─── Quick Links ────────────────────────────────────────── */
 
+  const PIN_LIMIT = 10;
+
   function renderLinks() {
     const el = $('#ws-links-list');
     const sub = $('#ws-links-sub');
+    const searchEl = $('#ws-links-search');
     if (!el) return;
+
+    if (searchEl) searchEl.style.display = _wsLinks.length >= 6 ? '' : 'none';
+    const q = (searchEl && searchEl.value || '').toLowerCase().trim();
 
     if (sub) sub.textContent = _wsLinks.length === 0
       ? 'No links yet'
       : `${_wsLinks.length} link${_wsLinks.length === 1 ? '' : 's'}`;
+
+    // Render the pinned row first (separate function, always runs)
+    renderPinnedRow();
 
     if (_wsLinks.length === 0) {
       el.innerHTML = `<div class="ws-widget-empty">
@@ -3030,22 +3065,121 @@
       return;
     }
 
-    const sorted = _wsLinks.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    let sorted = _wsLinks.slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+    // Apply search filter
+    if (q) {
+      sorted = sorted.filter(l =>
+        String(l.title || '').toLowerCase().includes(q) ||
+        String(l.url || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (sorted.length === 0) {
+      el.innerHTML = `<div class="ws-widget-empty">
+        No links match "${escapeHtml(q)}".
+      </div>`;
+      return;
+    }
 
     el.innerHTML = sorted.map(l => {
       const icon = guessLinkIcon(l.url);
       const title = l.title || l.url || '(untitled)';
+      const isPinned = !!l.pinned;
+      const pinIcon = isPinned ? '📌' : '📍';
+      const pinTitle = isPinned ? 'Unpin from top' : 'Pin to top';
       return `
-        <div class="ws-link-row" data-id="${escapeAttr(l.id)}">
+        <div class="ws-link-row ${isPinned ? 'ws-link-pinned' : ''}" data-id="${escapeAttr(l.id)}">
           <a class="ws-link-main" href="${escapeAttr(l.url || '#')}" target="_blank" rel="noopener">
             <span class="ws-link-icon">${icon}</span>
             <span class="ws-link-title">${escapeHtml(title)}</span>
           </a>
+          <button class="ws-link-pin ${isPinned ? 'pinned' : ''}" title="${pinTitle}" onclick="wsLinkTogglePin('${escapeAttr(l.id)}')">${pinIcon}</button>
           <button class="ws-link-edit" title="Edit" onclick="openLinkModal('${escapeAttr(l.id)}')">✎</button>
           <button class="ws-link-delete" title="Delete" onclick="wsLinkDelete('${escapeAttr(l.id)}')">×</button>
         </div>
       `;
     }).join('');
+  }
+
+  /* ─── Pinned Links row ───────────────────────────────────── */
+
+  function renderPinnedRow() {
+    const row = $('#ws-pinned');
+    const chips = $('#ws-pinned-chips');
+    if (!row || !chips) return;
+
+    const pinned = _wsLinks.filter(l => l.pinned);
+
+    // Hide row entirely if user has NO links at all (not yet worth showing)
+    if (_wsLinks.length === 0) {
+      row.style.display = 'none';
+      return;
+    }
+
+    // Show row with empty state if there are links but none pinned
+    row.style.display = '';
+
+    if (pinned.length === 0) {
+      chips.innerHTML = `<span class="ws-pinned-empty">Pin a link from Quick Links to see it here.</span>`;
+      return;
+    }
+
+    // Sort pinned by pinned_at (earliest first — stable order)
+    pinned.sort((a, b) => {
+      const ta = new Date(a.pinned_at || a.updated_at || 0).getTime();
+      const tb = new Date(b.pinned_at || b.updated_at || 0).getTime();
+      return ta - tb;
+    });
+
+    chips.innerHTML = pinned.map(l => {
+      const icon = guessLinkIcon(l.url);
+      const title = l.title || l.url || '(untitled)';
+      return `
+        <a class="ws-pinned-chip" href="${escapeAttr(l.url || '#')}" target="_blank" rel="noopener" title="${escapeAttr(title)}">
+          <span class="ws-pinned-chip-icon">${icon}</span>
+          <span class="ws-pinned-chip-title">${escapeHtml(title)}</span>
+        </a>
+      `;
+    }).join('');
+  }
+
+  async function wsLinkTogglePin(id) {
+    const link = _wsLinks.find(l => l.id === id);
+    if (!link) return;
+
+    if (link.pinned) {
+      // Unpin
+      link.pinned = false;
+      link.pinned_at = '';
+    } else {
+      // Check pin limit
+      const currentPinned = _wsLinks.filter(l => l.pinned);
+      if (currentPinned.length >= PIN_LIMIT) {
+        // Remove oldest pin
+        const oldest = currentPinned.sort((a, b) => {
+          const ta = new Date(a.pinned_at || a.updated_at || 0).getTime();
+          const tb = new Date(b.pinned_at || b.updated_at || 0).getTime();
+          return ta - tb;
+        })[0];
+        oldest.pinned = false;
+        oldest.pinned_at = '';
+        // Save the unpinned one to backend
+        await saveWidgetItem('link', oldest);
+        showToast(`Reached pin limit (${PIN_LIMIT}). Unpinned "${oldest.title}".`, 'default');
+      }
+      link.pinned = true;
+      link.pinned_at = new Date().toISOString();
+    }
+
+    const res = await saveWidgetItem('link', link);
+    if (res.error) {
+      // Revert local state on failure
+      link.pinned = !link.pinned;
+      showToast('Failed: ' + res.error, 'error');
+      return;
+    }
+    renderLinks();  // re-renders both list + pinned row
   }
 
   function guessLinkIcon(url) {
@@ -3142,7 +3276,11 @@
   function renderContacts() {
     const el = $('#ws-contacts-list');
     const sub = $('#ws-contacts-sub');
+    const searchEl = $('#ws-contacts-search');
     if (!el) return;
+
+    if (searchEl) searchEl.style.display = _wsContacts.length >= 6 ? '' : 'none';
+    const q = (searchEl && searchEl.value || '').toLowerCase().trim();
 
     if (sub) sub.textContent = _wsContacts.length === 0
       ? 'No contacts yet'
@@ -3155,9 +3293,25 @@
       return;
     }
 
-    const sorted = _wsContacts.slice().sort((a, b) => {
+    let sorted = _wsContacts.slice().sort((a, b) => {
       return String(a.name || '').localeCompare(String(b.name || ''));
     });
+
+    // Apply search filter
+    if (q) {
+      sorted = sorted.filter(c =>
+        String(c.name  || '').toLowerCase().includes(q) ||
+        String(c.role  || '').toLowerCase().includes(q) ||
+        String(c.email || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (sorted.length === 0) {
+      el.innerHTML = `<div class="ws-widget-empty">
+        No contacts match "${escapeHtml(q)}".
+      </div>`;
+      return;
+    }
 
     el.innerHTML = sorted.map(c => {
       const initials = initialsFromName(c.name || '?');

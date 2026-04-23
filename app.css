@@ -2593,3 +2593,155 @@ body.view-as-active .app-root {
   color: var(--red);
   background: rgba(239, 68, 68, 0.1);
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   STAGE 5.3 — WIDGET SCROLL LIMIT + SEARCH + PINNED LINKS
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Cap widget list height so the page stays stable at 40+ items */
+.ws-notes-list,
+.ws-links-list,
+.ws-contacts-list {
+  max-height: 400px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--slate-300) transparent;
+  padding-right: 2px;  /* Avoid cropping focus rings */
+}
+.ws-notes-list::-webkit-scrollbar,
+.ws-links-list::-webkit-scrollbar,
+.ws-contacts-list::-webkit-scrollbar {
+  width: 6px;
+}
+.ws-notes-list::-webkit-scrollbar-thumb,
+.ws-links-list::-webkit-scrollbar-thumb,
+.ws-contacts-list::-webkit-scrollbar-thumb {
+  background: var(--slate-300);
+  border-radius: 3px;
+}
+
+/* Search input inside widget cards */
+.ws-widget-search {
+  width: 100%;
+  padding: 7px 10px;
+  margin-bottom: var(--sp-2);
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--navy);
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.ws-widget-search:focus {
+  background: var(--white);
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.ws-widget-search::placeholder {
+  color: var(--slate-400);
+}
+
+/* Pinned Links row */
+.ws-pinned {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-4);
+}
+.ws-pinned-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+  flex-shrink: 0;
+}
+.ws-pinned-chips {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  flex: 1;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 2px 0;
+}
+.ws-pinned-chips::-webkit-scrollbar { display: none; }
+
+.ws-pinned-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-round);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--navy);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--t-fast), border-color var(--t-fast);
+  max-width: 220px;
+}
+.ws-pinned-chip:hover {
+  background: var(--blue-pale);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.ws-pinned-chip-icon {
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.ws-pinned-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-pinned-empty {
+  font-size: 12px;
+  color: var(--slate-500);
+  font-style: italic;
+}
+
+/* Pin button in link rows */
+.ws-link-row {
+  grid-template-columns: 1fr auto auto auto;
+}
+.ws-link-pin {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: var(--r-sm);
+  opacity: 0;
+  transition: opacity var(--t-fast), background var(--t-fast);
+  filter: grayscale(100%);
+}
+.ws-link-row:hover .ws-link-pin { opacity: 1; }
+.ws-link-pin.pinned {
+  opacity: 1;
+  filter: none;
+}
+.ws-link-pin:hover {
+  background: var(--slate-100);
+}
+
+/* Pinned link row gets a subtle left border accent */
+.ws-link-pinned {
+  background: linear-gradient(90deg, rgba(59,130,246,0.04), transparent 20%);
+  box-shadow: inset 3px 0 0 rgba(59,130,246,0.3);
+}
