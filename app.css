@@ -3986,21 +3986,14 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   padding-top: var(--sp-2);
 }
 
+
 /* ═══════════════════════════════════════════════════════════════════════
-   COMMUNICATION — Stage 6.3 Chunk C.2
-   Used on contractor detail panel (and, later, review/fleet/legal panels).
-   Thread rows link to existing #/submission/:id route for full detail.
+   COMMUNICATION BADGES + INBOX RECORD FILTER — Stage 6.3 Chunk C.2 (Design 1)
+   The accordion/inline-thread UI was replaced with a deep-link to the inbox.
+   What remains: the 💬 N badge on contractor list rows (still used) and the
+   inbox record-filter pill + source-chip that show "About: X" context.
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* Small count indicator in section titles, e.g. "Communication (3)" */
-.ctr-panel-section-count {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--slate-500);
-  margin-left: 4px;
-}
-
-/* Row-level badge: 💬 N at the LEFT of the contractor name (impossible to miss) */
 .comms-badge {
   display: inline-flex;
   align-items: center;
@@ -4015,273 +4008,73 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   white-space: nowrap;
   vertical-align: 1px;
 }
+
 .comms-badge-unread {
   background: var(--red-pale);
   color: var(--red);
 }
 
-/* Communication section gets a scroll cap so very long histories don't blow up the panel */
-.ctr-comms-section { /* layout — no overrides needed beyond defaults */ }
-.ctr-comms-scroll {
-  max-height: 500px;
-  overflow-y: auto;
-  margin-top: var(--sp-2);
+/* "View N messages" action-bar button — red styling when any thread is unread */
+.ctr-view-messages-unread {
+  background: var(--red-pale) !important;
+  border-color: var(--red) !important;
+  color: var(--red) !important;
 }
 
-/* Accordion thread cards (top-level list inside .ctr-comms-list) */
-.ctr-comms-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-
-.comms-thread {
-  border: 1px solid var(--slate-200);
-  border-radius: var(--r-md);
-  background: var(--white);
-  overflow: hidden;
-  transition: border-color var(--t-fast);
-}
-.comms-thread.comms-thread-open {
-  border-color: var(--navy);
-}
-
-.comms-thread-header {
+/* Inbox record-filter pill (shown above filters when inbox is scoped to ONE record) */
+.inbox-record-filter {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: 10px var(--sp-3);
-  cursor: pointer;
-  transition: background var(--t-fast);
-}
-.comms-thread-header:hover {
-  background: var(--slate-50);
-}
-
-.comms-expand-chevron {
-  font-size: 11px;
-  color: var(--slate-400);
-  flex-shrink: 0;
-  transition: transform var(--t-fast);
-}
-.comms-thread-open .comms-expand-chevron {
-  transform: rotate(90deg);
-}
-
-.comms-msg-count {
-  white-space: nowrap;
-}
-
-/* Body shown when expanded */
-.comms-thread-body {
-  border-top: 1px solid var(--slate-100);
-  padding: var(--sp-3);
-  background: var(--slate-50);
-}
-.comms-thread-loading {
-  font-size: 12px;
-  color: var(--slate-500);
-  padding: var(--sp-2);
-  text-align: center;
-}
-.comms-thread-error {
-  font-size: 12px;
-  color: var(--red);
-  padding: var(--sp-2);
-  text-align: center;
-}
-
-/* Message list inside an expanded thread */
-.comms-msg-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
+  padding: 8px var(--sp-3);
+  background: var(--blue-pale);
+  border: 1px solid var(--blue);
+  border-radius: var(--r-md);
   margin-bottom: var(--sp-3);
+  font-size: 13px;
 }
-
-/* Individual message: avatar + bubble */
-.comms-msg {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: flex-start;
-}
-
-.comms-msg-avatar {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--white);
-  letter-spacing: 0.3px;
-}
-
-.comms-msg-bubble {
-  flex: 1;
-  min-width: 0;
-  background: var(--white);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--r-md);
-  padding: 8px var(--sp-3);
-}
-
-.comms-msg-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 4px;
-  font-size: 11px;
-}
-.comms-msg-author {
-  font-weight: 700;
+.inbox-record-filter-label {
+  font-weight: 600;
   color: var(--navy);
 }
-.comms-msg-time {
-  color: var(--slate-500);
-}
-.comms-msg-tag {
-  background: var(--slate-100);
-  color: var(--slate-600);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  padding: 1px 6px;
+.inbox-record-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: var(--white);
+  border: 1px solid var(--blue);
   border-radius: var(--r-round);
-}
-.comms-msg-body {
-  font-size: 13px;
-  color: var(--slate-800);
-  line-height: 1.45;
-  word-wrap: break-word;
-}
-
-/* Reply composer at the bottom of an expanded thread */
-.comms-reply-composer {
-  margin-top: var(--sp-2);
-  padding-top: var(--sp-3);
-  border-top: 1px dashed var(--slate-200);
-}
-.comms-reply-input {
-  width: 100%;
-  padding: 8px var(--sp-3);
-  border: 1px solid var(--slate-300);
-  border-radius: var(--r-md);
-  font-family: var(--font);
-  font-size: 13px;
-  resize: vertical;
-  min-height: 56px;
-  background: var(--white);
-}
-.comms-reply-input:focus {
-  outline: none;
-  border-color: var(--blue);
-}
-.comms-reply-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-}
-.comms-open-inbox {
-  font-size: 11px;
-  color: var(--slate-500);
-  text-decoration: none;
-}
-.comms-open-inbox:hover {
-  color: var(--blue-hover);
-  text-decoration: underline;
-}
-.comms-resolved-note {
-  margin-top: var(--sp-2);
-  padding: 8px var(--sp-3);
-  background: var(--slate-100);
-  border-radius: var(--r-md);
-  font-size: 12px;
-  color: var(--slate-600);
-  text-align: center;
-}
-.comms-resolved-note a {
-  color: var(--blue-hover);
-  text-decoration: none;
-}
-.comms-resolved-note a:hover {
-  text-decoration: underline;
-}
-
-/* Priority dot on the left of each thread row */
-.comms-priority {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--slate-300);
-}
-.comms-priority-high { background: var(--red); }
-.comms-priority-med  { background: var(--amber); }
-.comms-priority-low  { background: var(--slate-300); }
-
-.comms-thread-main {
-  flex: 1;
-  min-width: 0;
-}
-
-.comms-thread-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
   font-weight: 700;
-  color: var(--navy);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--blue-hover);
 }
-
-.comms-unread-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--blue);
-  flex-shrink: 0;
-}
-
-.comms-thread-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-top: 4px;
-  font-size: 11px;
+.inbox-record-filter-clear {
   color: var(--slate-500);
-  flex-wrap: wrap;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 0 2px;
+  border-radius: var(--r-sm);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.inbox-record-filter-clear:hover {
+  color: var(--red);
+  background: var(--slate-100);
 }
 
-.comms-thread-from,
-.comms-thread-time,
-.comms-reply-count {
-  white-space: nowrap;
-}
-
-/* Status chip — mirrors existing submission-status tokens but subtle */
-.comms-status {
+/* Per-row source chip on inbox rows: "About: Smith Roofing" */
+.inbox-row-source-chip {
   display: inline-block;
   padding: 1px 7px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  border-radius: var(--r-round);
-  text-transform: uppercase;
-  background: var(--slate-100);
+  font-weight: 600;
   color: var(--slate-600);
+  background: var(--slate-100);
+  border-radius: var(--r-round);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
 }
-.comms-status-new          { background: var(--blue-pale);  color: var(--blue-hover); }
-.comms-status-in-review    { background: var(--amber-pale); color: #B45309; }
-.comms-status-needs-info   { background: var(--amber-pale); color: #B45309; }
-.comms-status-resolved     { background: var(--green-pale); color: #047857; }
+

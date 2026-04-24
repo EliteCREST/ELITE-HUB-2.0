@@ -1477,6 +1477,14 @@
           ${tabsHtml}
         </div>
 
+        <div class="inbox-record-filter" id="inbox-record-filter" style="display:${params.source_id ? 'flex' : 'none'};">
+          <span class="inbox-record-filter-label">Showing messages about:</span>
+          <span class="inbox-record-filter-pill">
+            <span id="inbox-record-filter-name">${params.source_id ? '…' : ''}</span>
+            <a class="inbox-record-filter-clear" href="#/inbox" title="Clear filter">✕</a>
+          </span>
+        </div>
+
         <div class="inbox-filters">
           <div class="inbox-filter">
             <label>Source</label>
@@ -1551,8 +1559,11 @@
     wireFilter('filter-region', 'region');
     wireFilter('filter-priority', 'priority');
 
-    // Fetch the scoped list
-    const res = await api({ resource: 'submissions', scope: scope });
+    // Fetch the scoped list — pass record filter params through to backend when present
+    const apiParams = { resource: 'submissions', scope: scope };
+    if (params.source_page) apiParams.source_page = params.source_page;
+    if (params.source_id)   apiParams.source_id   = params.source_id;
+    const res = await api(apiParams);
     if (!listEl) return;  // user navigated away
 
     if (res.error) {
@@ -1570,8 +1581,21 @@
 
     // Apply client-side filters
     if (params.source)   items = items.filter(s => s.source_page === params.source);
-    if (params.region)   items = items.filter(s => s.to_region === params.region);
+    if (params.region) {
+      const r = String(params.region).toLowerCase();
+      items = items.filter(s => String(s.to_region || '').toLowerCase().split(',').map(x => x.trim()).indexOf(r) >= 0);
+    }
     if (params.priority) items = items.filter(s => s.priority === params.priority);
+
+    // If the record-filter pill is visible, populate the label from the first result's source_label
+    if (params.source_id) {
+      const pillNameEl = $('#inbox-record-filter-name');
+      if (pillNameEl) {
+        const first = items[0];
+        if (first && first.source_label) pillNameEl.textContent = first.source_label;
+        else if (items.length === 0)     pillNameEl.textContent = '(no visible messages)';
+      }
+    }
 
     // Update subtitle
     if (subEl) {
@@ -1638,6 +1662,10 @@
       : '';
     const updated = formatRelativeTime(s.updated_at);
     const subject = s.subject || '(no subject)';
+    // Source record chip (Option C: every row shows which record the thread is about)
+    const sourceChip = s.source_label
+      ? `<span class="inbox-row-source-chip" title="${escapeAttr('About: ' + s.source_label)}">About: ${escapeHtml(s.source_label)}</span>`
+      : '';
 
     return `
       <a class="inbox-row ${unreadClass}" href="#/submission/${encodeURIComponent(s.id)}">
@@ -1647,6 +1675,7 @@
         <span class="inbox-row-meta">
           <span class="inbox-row-from">${escapeHtml(directionLabel)}</span>
           ${region ? `<span class="pill" style="padding:1px 6px;font-size:10px;">${escapeHtml(region)}</span>` : ''}
+          ${sourceChip}
           <span class="badge ${priorityClass}" style="font-size:10px;">${escapeHtml(priority.toUpperCase())}</span>
           ${replyBadge}
           <span class="inbox-row-time">${escapeHtml(updated)}</span>
@@ -4022,256 +4051,60 @@
     // Fire-and-forget — don't block the panel render on this.
     api({ resource: 'users' }).catch(() => {});
 
-    // Background: fetch and render the Communication threads for this contractor.
-    // Panel is already rendered and interactive; threads appear when they load.
-    loadContractorCommunication(_currentContractor.contractor_id);
+    // Background: fetch the message count and update the View Messages button.
+    // Panel is already rendered and interactive; button appears when count loads.
+    loadContractorCommunicationCount(_currentContractor.contractor_id);
   }
 
-  async function loadContractorCommunication(contractorId) {
+  /**
+   * Fetch the message-count for this contractor and update the View button.
+   * Called after the detail panel renders. Hides the button when count is 0.
+   */
+  async function loadContractorCommunicationCount(contractorId) {
     if (!contractorId) return;
-    // Pre-warm the user cache so author names/initials render correctly
-    ensureAllUsersCache();
     try {
       const res = await api({
-        resource: 'submissions_for_record',
+        resource: 'submission_counts',
         source_page: 'compliance',
-        source_id: contractorId,
+        source_ids: contractorId,
       });
-      // User may have closed the panel
       if (!_currentContractor || _currentContractor.contractor_id !== contractorId) return;
-      renderContractorCommunication(res && res.submissions ? res.submissions : []);
+      const c = res && res.counts && res.counts[contractorId];
+      updateContractorViewMessagesBtn(c);
     } catch (err) {
-      console.warn('[contractor-comms] load failed:', err);
-      const listEl = $('#ctr-comms-list');
-      if (listEl) listEl.innerHTML = `<div class="ctr-panel-empty">Couldn't load messages.</div>`;
+      console.warn('[contractor-comms] count fetch failed:', err);
     }
   }
 
-  function renderContractorCommunication(submissions) {
-    const listEl = $('#ctr-comms-list');
-    const countEl = $('#ctr-comms-count');
-    if (!listEl) return;
-
-    if (countEl) countEl.textContent = `(${submissions.length})`;
-
-    if (submissions.length === 0) {
-      listEl.innerHTML = `<div class="ctr-panel-empty">No messages about this contractor yet. Click "📨 Message about contractor" above to start one.</div>`;
+  function updateContractorViewMessagesBtn(count) {
+    const btn   = document.getElementById('ctr-view-messages-btn');
+    const label = document.getElementById('ctr-view-messages-label');
+    if (!btn || !label) return;
+    if (!count || count.total === 0) {
+      btn.style.display = 'none';
       return;
     }
-
-    listEl.innerHTML = submissions.map(s => renderContractorCommThread(s)).join('');
-  }
-
-  // One collapsed thread card. Header is always visible; clicking it expands
-  // to show the messages inline.
-  function renderContractorCommThread(s) {
-    const statusClass = `comms-status comms-status-${(s.status || 'new').toLowerCase().replace(/\s+/g,'-')}`;
-    const priorityDot = `<span class="comms-priority comms-priority-${escapeAttr(s.priority || 'med')}" title="${escapeAttr((s.priority || 'med') + ' priority')}"></span>`;
-
-    const replyCount = s.reply_count || 0;
-    const totalMsgs  = 1 + replyCount; // original + replies
-    const msgsLabel  = `${totalMsgs} ${totalMsgs === 1 ? 'message' : 'messages'}`;
-
-    const unreadDot = s.has_new_reply
-      ? `<span class="comms-unread-dot" title="New activity"></span>`
-      : '';
-
-    const lastActivity = s.updated_at ? formatRelativeTime(s.updated_at) : '';
-    const subject = s.subject || '(no subject)';
-
-    return `
-      <div class="comms-thread" id="comms-thread-${escapeAttr(s.id)}" data-thread-id="${escapeAttr(s.id)}" data-loaded="false">
-        <div class="comms-thread-header" onclick="toggleContractorCommThread('${escapeAttr(s.id)}')">
-          ${priorityDot}
-          <div class="comms-thread-main">
-            <div class="comms-thread-title">${unreadDot}${escapeHtml(subject)}</div>
-            <div class="comms-thread-meta">
-              <span class="${statusClass}">${escapeHtml(s.status || 'New')}</span>
-              <span class="comms-msg-count">${msgsLabel}</span>
-              ${lastActivity ? `<span class="comms-thread-time">${escapeHtml(lastActivity)}</span>` : ''}
-            </div>
-          </div>
-          <span class="comms-expand-chevron" aria-hidden="true">▸</span>
-        </div>
-        <div class="comms-thread-body" id="comms-thread-body-${escapeAttr(s.id)}" style="display:none;">
-          <div class="comms-thread-loading">Loading messages…</div>
-        </div>
-      </div>
-    `;
+    btn.style.display = '';
+    const total = count.total;
+    const noun  = total === 1 ? 'message' : 'messages';
+    label.textContent = `View ${total} ${noun}`;
+    // Red styling when there are unread, neutral when all read (matches list badge)
+    if (count.unread > 0) btn.classList.add('ctr-view-messages-unread');
+    else                  btn.classList.remove('ctr-view-messages-unread');
   }
 
   /**
-   * Expand/collapse a thread. On first expand: fetches the full submission +
-   * replies, renders the message list (newest first), shows the reply composer.
-   * Also marks the thread as seen.
+   * Navigate to the inbox, filtered to threads about this contractor.
+   * The inbox route honors source_page + source_id URL params.
    */
-  async function toggleContractorCommThread(submissionId) {
-    const card = document.getElementById('comms-thread-' + submissionId);
-    const body = document.getElementById('comms-thread-body-' + submissionId);
-    if (!card || !body) return;
-
-    const isOpen = card.classList.contains('comms-thread-open');
-    if (isOpen) {
-      card.classList.remove('comms-thread-open');
-      body.style.display = 'none';
-      return;
-    }
-
-    // Open this one
-    card.classList.add('comms-thread-open');
-    body.style.display = 'block';
-
-    // First-open: fetch and render
-    if (card.getAttribute('data-loaded') !== 'true') {
-      try {
-        const res = await api({ resource: 'submission', id: submissionId });
-        if (res && res.submission) {
-          renderContractorCommThreadBody(res.submission);
-          card.setAttribute('data-loaded', 'true');
-
-          // Mark as seen — clears the unread dot for this thread
-          api({}, 'POST', { action: 'marksubmissionseen', id: submissionId }).then(() => {
-            // Remove the unread dot from the header (without full re-render)
-            const dot = card.querySelector('.comms-unread-dot');
-            if (dot) dot.remove();
-          }).catch(() => {});
-        } else if (res && res.error) {
-          body.innerHTML = `<div class="comms-thread-error">Couldn't load: ${escapeHtml(res.error)}</div>`;
-        }
-      } catch (err) {
-        body.innerHTML = `<div class="comms-thread-error">Network error: ${escapeHtml(err.message || String(err))}</div>`;
-      }
-    }
+  function viewContractorMessages() {
+    if (!_currentContractor) return;
+    const id = _currentContractor.contractor_id;
+    location.hash = `#/inbox?source_page=compliance&source_id=${encodeURIComponent(id)}`;
   }
 
-  function renderContractorCommThreadBody(submission) {
-    const body = document.getElementById('comms-thread-body-' + submission.id);
-    if (!body) return;
-
-    // Build a unified message list: original message + replies, newest first.
-    // The original IS a message (sender = from_user, content = message, timestamp = created_at).
-    const messages = [];
-    messages.push({
-      author:     submission.from_user || '?',
-      created_at: submission.created_at || submission.updated_at,
-      message:    submission.message || '',
-      is_original: true,
-    });
-    (submission.replies || []).forEach(r => {
-      messages.push({
-        author:     r.author || '?',
-        created_at: r.created_at,
-        message:    r.message || '',
-        is_original: false,
-      });
-    });
-    // Newest first
-    messages.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
-
-    const messagesHtml = messages.map(m => renderContractorCommMessage(m)).join('');
-
-    // Reply composer
-    const composerHtml = submission.status === 'Resolved'
-      ? `<div class="comms-resolved-note">🔒 This conversation is resolved. Open in <a href="#/submission/${encodeURIComponent(submission.id)}">inbox</a> to reopen.</div>`
-      : `
-        <div class="comms-reply-composer">
-          <textarea class="comms-reply-input" id="comms-reply-${escapeAttr(submission.id)}" rows="2" placeholder="Reply… (Ctrl+Enter to send)" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();sendContractorCommReply('${escapeAttr(submission.id)}');}"></textarea>
-          <div class="comms-reply-actions">
-            <a class="comms-open-inbox" href="#/submission/${encodeURIComponent(submission.id)}" title="Open full thread in inbox">Open in inbox ↗</a>
-            <button class="btn btn-primary btn-sm" onclick="sendContractorCommReply('${escapeAttr(submission.id)}')">Send</button>
-          </div>
-        </div>
-      `;
-
-    body.innerHTML = `<div class="comms-msg-list">${messagesHtml}</div>${composerHtml}`;
-  }
-
-  function renderContractorCommMessage(m) {
-    const info = userDisplayInfo(m.author);
-    const time = m.created_at ? formatRelativeTime(m.created_at) : '';
-    const tagOriginal = m.is_original ? `<span class="comms-msg-tag">original</span>` : '';
-    return `
-      <div class="comms-msg">
-        <div class="comms-msg-avatar" style="background:${info.color};">${escapeHtml(info.initials)}</div>
-        <div class="comms-msg-bubble">
-          <div class="comms-msg-header">
-            <span class="comms-msg-author">${escapeHtml(info.name)}</span>
-            ${tagOriginal}
-            <span class="comms-msg-time">${escapeHtml(time)}</span>
-          </div>
-          <div class="comms-msg-body">${escapeHtml(m.message).replace(/\n/g,'<br>')}</div>
-        </div>
-      </div>
-    `;
-  }
-
-  /**
-   * Send an inline reply to a thread. On success: prepends the new message to
-   * the thread's message list (newest first) and refreshes badge counts.
-   * Doesn't navigate away.
-   */
-  async function sendContractorCommReply(submissionId) {
-    const input = document.getElementById('comms-reply-' + submissionId);
-    if (!input) return;
-    const text = input.value.trim();
-    if (!text) { showToast('Type a message first.', 'error'); input.focus(); return; }
-
-    // Find Send button to disable while sending
-    const card = document.getElementById('comms-thread-' + submissionId);
-    const sendBtn = card ? card.querySelector('.comms-reply-actions .btn-primary') : null;
-    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
-
-    const res = await api({}, 'POST', {
-      action: 'addreply',
-      submission_id: submissionId,
-      message: text,
-    });
-
-    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
-
-    if (res && res.error) {
-      showToast('Failed to send: ' + res.error, 'error');
-      return;
-    }
-    if (!res || !res.success) {
-      showToast('Failed to send (unknown error)', 'error');
-      return;
-    }
-
-    input.value = '';
-    showToast('Reply sent', 'success');
-
-    // Optimistic insert at top of message list — much faster than re-fetching
-    const me = getLoggedInUser();
-    const newMsgHtml = renderContractorCommMessage({
-      author:     me.username,
-      created_at: new Date().toISOString(),
-      message:    text,
-      is_original: false,
-    });
-    const list = card ? card.querySelector('.comms-msg-list') : null;
-    if (list) list.insertAdjacentHTML('afterbegin', newMsgHtml);
-
-    // Update message count in the thread header
-    const countEl = card ? card.querySelector('.comms-msg-count') : null;
-    if (countEl) {
-      const m = countEl.textContent.match(/(\d+)/);
-      if (m) {
-        const n = parseInt(m[1], 10) + 1;
-        countEl.textContent = `${n} ${n === 1 ? 'message' : 'messages'}`;
-      }
-    }
-
-    // Refresh row badge counts so the contractor list reflects the new message
-    invalidateApiCache(['submission_counts', 'submissions_for_record', 'submissions']);
-    if (_contractorsAll && _contractorsAll.length > 0) {
-      fetchContractorMessageCounts(_contractorsAll.map(x => x.contractor_id));
-    }
-  }
-
-  window.loadContractorCommunication = loadContractorCommunication;
-  window.toggleContractorCommThread  = toggleContractorCommThread;
-  window.sendContractorCommReply     = sendContractorCommReply;
+  window.loadContractorCommunicationCount = loadContractorCommunicationCount;
+  window.viewContractorMessages           = viewContractorMessages;
 
   function renderContractorPanelLoading(summary) {
     const name = summary ? summary.contractor_name : 'Loading…';
@@ -4365,20 +4198,11 @@
 
         <div class="ctr-panel-actions">
           <button class="btn btn-primary btn-sm" onclick="contractorSendNote()">📨 Message about contractor</button>
+          <button class="btn btn-secondary btn-sm" id="ctr-view-messages-btn" onclick="viewContractorMessages()" style="display:none;">💬 <span id="ctr-view-messages-label">View messages</span></button>
           ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openEditContractor()">✎ Edit</button>` : ''}
         </div>
 
         <div class="ctr-panel-body">
-
-          <!-- Communication (top of panel body — most relevant first) -->
-          <div class="ctr-panel-section ctr-comms-section">
-            <div class="ctr-panel-section-title">Communication <span class="ctr-panel-section-count" id="ctr-comms-count">…</span></div>
-            <div class="ctr-comms-scroll" id="ctr-comms-scroll">
-              <div class="ctr-comms-list" id="ctr-comms-list">
-                <div class="ctr-panel-empty">Loading messages…</div>
-              </div>
-            </div>
-          </div>
 
           <!-- Regions / Trades -->
           <div class="ctr-panel-section">
@@ -4703,9 +4527,9 @@
     showToast('Message sent', 'success');
     closeContractorMessage();
 
-    // Refresh the Communication section for this contractor so the new thread shows up
+    // Refresh the View Messages button count so the new thread shows up
     if (_currentContractor && _currentContractor.contractor_id === c.contractor_id) {
-      loadContractorCommunication(c.contractor_id);
+      loadContractorCommunicationCount(c.contractor_id);
     }
     // Bust count cache + re-fetch so the 💬 badge on list rows updates
     invalidateApiCache(['submission_counts', 'submissions_for_record']);
@@ -6050,7 +5874,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.9';
+  const APP_VERSION = '2.1.10';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
