@@ -4078,3 +4078,164 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   vertical-align: middle;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INBOX SEARCH — Stage 6.3 Chunk C.2 (v2.1.11)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.inbox-search-row {
+  position: relative;
+  margin-bottom: var(--sp-2);
+}
+
+.inbox-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--white);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-md);
+  padding: 0 var(--sp-2);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.inbox-search:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(31, 95, 173, 0.12);
+}
+
+.inbox-search-icon {
+  font-size: 13px;
+  color: var(--slate-400);
+  flex-shrink: 0;
+}
+
+.inbox-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 8px 0;
+  font-family: var(--font);
+  font-size: 14px;
+  color: var(--navy);
+}
+.inbox-search-input::placeholder {
+  color: var(--slate-400);
+}
+
+.inbox-search-clear,
+.inbox-search-help-btn {
+  border: none;
+  background: transparent;
+  color: var(--slate-500);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast), color var(--t-fast);
+  flex-shrink: 0;
+}
+.inbox-search-clear:hover,
+.inbox-search-help-btn:hover {
+  background: var(--slate-100);
+  color: var(--navy);
+}
+.inbox-search-help-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--slate-100);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Help popover */
+.inbox-search-help {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  padding: var(--sp-3);
+  width: 460px;
+  max-width: calc(100vw - var(--sp-4));
+}
+.inbox-search-help-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  margin-bottom: var(--sp-2);
+}
+.inbox-search-help-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  font-size: 12px;
+  color: var(--slate-700);
+}
+.inbox-search-help-grid code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: var(--slate-100);
+  color: var(--navy);
+  padding: 2px 6px;
+  border-radius: var(--r-sm);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.inbox-search-help-note {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--slate-100);
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+/* Deep-search affordance between filters and list */
+.inbox-deep-search {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 8px var(--sp-3);
+  background: var(--amber-pale);
+  border: 1px solid var(--amber);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-2);
+  font-size: 12px;
+  color: #B45309;
+}
+.inbox-deep-search-note {
+  font-weight: 600;
+}
+
+/* Separator shown within deep-search results between current-tab hits and older */
+.inbox-deep-separator {
+  margin: var(--sp-3) 0 var(--sp-2);
+  padding: 8px 0;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+  border-top: 1px dashed var(--slate-300);
+  border-bottom: 1px dashed var(--slate-300);
+}
+
+/* Source chip: clickable + prominent hover so users discover they can filter */
+.inbox-row-source-chip {
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.inbox-row-source-chip:hover {
+  background: var(--blue-pale);
+  color: var(--blue-hover);
+}

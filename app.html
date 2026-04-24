@@ -621,6 +621,22 @@
       if (cur) sessionStorage.removeItem('eh2_debug'); else sessionStorage.setItem('eh2_debug','1');
       location.reload();
     }
+
+    // '/' to focus the inbox search input when on /inbox and not already typing
+    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const target = e.target;
+      const tag = target && target.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+                       (target && target.isContentEditable);
+      if (!isTyping && location.hash.startsWith('#/inbox')) {
+        const searchEl = document.getElementById('inbox-search-input');
+        if (searchEl) {
+          e.preventDefault();
+          searchEl.focus();
+          searchEl.select();
+        }
+      }
+    }
   });
 
   // In-memory response cache. Key = request URL. Value = {data, timestamp}.
@@ -1462,6 +1478,7 @@
     const sourceValue   = params.source   || '';
     const regionValue   = params.region   || '';
     const priorityValue = params.priority || '';
+    const searchValue   = params.search   || '';
 
     return `
       <div class="view inbox-view">
@@ -1483,6 +1500,35 @@
             <span id="inbox-record-filter-name">${params.source_id ? '…' : ''}</span>
             <a class="inbox-record-filter-clear" href="#/inbox" title="Clear filter">✕</a>
           </span>
+        </div>
+
+        <div class="inbox-search-row">
+          <div class="inbox-search">
+            <span class="inbox-search-icon">🔎</span>
+            <input type="text" id="inbox-search-input" class="inbox-search-input"
+                   placeholder="Search subject, name, message… (/ to focus, Enter for deep search)"
+                   value="${escapeAttr(searchValue)}"
+                   autocomplete="off">
+            <button class="inbox-search-clear" id="inbox-search-clear" type="button" title="Clear search"
+                    style="display:${searchValue ? '' : 'none'};"
+                    onclick="clearInboxSearch()">✕</button>
+            <button class="inbox-search-help-btn" type="button" title="Search syntax help"
+                    onclick="toggleInboxSearchHelp()">?</button>
+          </div>
+          <div class="inbox-search-help" id="inbox-search-help" style="display:none;">
+            <div class="inbox-search-help-title">Search syntax</div>
+            <div class="inbox-search-help-grid">
+              <code>smith</code><span>any word in subject, name, sender, or body</span>
+              <code>from:emma</code><span>messages from a user</span>
+              <code>to:stl</code><span>messages to a user OR region</span>
+              <code>priority:high</code><span>high / med / low</span>
+              <code>status:resolved</code><span>new / in review / needs info / resolved</span>
+              <code>about:smith</code><span>match the "About: X" record name</span>
+              <code>source:reviews</code><span>fleet / legal / reviews / compliance / general</span>
+              <code>from:emma priority:high</code><span>combine filters (AND)</span>
+            </div>
+            <div class="inbox-search-help-note">Typing filters within your current tab instantly. Press Enter or use "Search all history" to search everything you can see.</div>
+          </div>
         </div>
 
         <div class="inbox-filters">
@@ -1515,6 +1561,11 @@
           </div>
         </div>
 
+        <div class="inbox-deep-search" id="inbox-deep-search-pill" style="display:none;">
+          <span class="inbox-deep-search-note" id="inbox-deep-search-note">Searching your current tab.</span>
+          <button class="btn btn-secondary btn-sm" id="inbox-deep-search-btn" onclick="triggerDeepInboxSearch()">Search all history</button>
+        </div>
+
         <div class="inbox-list" id="inbox-list">
           <div class="skeleton skeleton-line" style="height:52px;margin-bottom:6px;"></div>
           <div class="skeleton skeleton-line" style="height:52px;margin-bottom:6px;"></div>
@@ -1534,12 +1585,17 @@
      INBOX LOADER (Stage 4.1)
      ═══════════════════════════════════════════════════════════════ */
 
+  // Module-scoped state for inbox search
+  let _inboxAllItems = [];      // all items loaded for current scope/filters (pre-search)
+  let _inboxCurrentParams = {}; // last-used params, so deep-search can call with them
+
   async function loadInbox(params) {
     const scope = params.scope || 'inbox';
     const listEl = $('#inbox-list');
     const errEl  = $('#inbox-error');
     const subEl  = $('#inbox-sub');
     if (!listEl) return;
+    _inboxCurrentParams = params;
 
     // Wire up filter change handlers (only once per render)
     const wireFilter = (id, paramName) => {
@@ -1558,6 +1614,28 @@
     wireFilter('filter-source', 'source');
     wireFilter('filter-region', 'region');
     wireFilter('filter-priority', 'priority');
+
+    // Wire the search input with debounced client-side filter + Enter for deep search
+    const searchEl = $('#inbox-search-input');
+    if (searchEl) {
+      // Focus immediately if search has a value (e.g. bookmarked URL with ?search=)
+      let debounceTimer = null;
+      searchEl.oninput = () => {
+        const clearBtn = $('#inbox-search-clear');
+        if (clearBtn) clearBtn.style.display = searchEl.value ? '' : 'none';
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => applyInboxSearchClientSide(searchEl.value), 80);
+      };
+      searchEl.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          triggerDeepInboxSearch();
+        } else if (e.key === 'Escape') {
+          searchEl.value = '';
+          clearInboxSearch();
+        }
+      };
+    }
 
     // Fetch the scoped list — pass record filter params through to backend when present
     const apiParams = { resource: 'submissions', scope: scope };
@@ -1587,6 +1665,9 @@
     }
     if (params.priority) items = items.filter(s => s.priority === params.priority);
 
+    // Stash the filter-applied items as the base set for client-side search
+    _inboxAllItems = items;
+
     // If the record-filter pill is visible, populate the label from the first result's source_label
     if (params.source_id) {
       const pillNameEl = $('#inbox-record-filter-name');
@@ -1614,13 +1695,221 @@
     // Update tab counts from the response we just got — no extra API calls needed
     if (res.counts) applyInboxTabCounts(res.counts);
 
+    // If a search was passed in the URL, apply it now (client-side) rather than rendering all
+    if (params.search) {
+      applyInboxSearchClientSide(params.search);
+      return;
+    }
+
     if (items.length === 0) {
       listEl.innerHTML = renderInboxEmptyState(scope);
       return;
     }
 
-    listEl.innerHTML = items.map(s => renderInboxRow(s)).join('');
+    const isRecordFiltered = !!(params.source_page && params.source_id);
+    listEl.innerHTML = items.map(s => renderInboxRow(s, { isRecordFiltered })).join('');
   }
+
+  /* ─── Inbox search (Stage 6.3 Chunk C.2 v2.1.11) ──────────────────────
+     Mirror of backend parseSearchQuery / _submissionMatchesQuery so instant
+     client-side filter produces the same results the server would.       */
+
+  const INBOX_SEARCH_VALID_FIELDS = ['from','to','priority','status','about','source'];
+
+  function parseInboxSearchQuery(q) {
+    const result = { text: '', filters: {} };
+    const raw = String(q || '').trim();
+    if (!raw) return result;
+    const textParts = [];
+    raw.split(/\s+/).filter(Boolean).forEach(tok => {
+      const colonIdx = tok.indexOf(':');
+      if (colonIdx > 0 && colonIdx < tok.length - 1) {
+        const field = tok.slice(0, colonIdx).toLowerCase();
+        const value = tok.slice(colonIdx + 1).toLowerCase();
+        if (INBOX_SEARCH_VALID_FIELDS.indexOf(field) >= 0) {
+          result.filters[field] = value;
+          return;
+        }
+      }
+      textParts.push(tok);
+    });
+    result.text = textParts.join(' ').toLowerCase();
+    return result;
+  }
+
+  function inboxMatchesQuery(s, parsed) {
+    if (!parsed) return true;
+    const f = parsed.filters || {};
+    const toRegions = String(s.to_region || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
+    if (f.from     && String(s.from_user || '').toLowerCase().indexOf(f.from) < 0) return false;
+    if (f.to       && String(s.to_user || '').toLowerCase().indexOf(f.to) < 0 && toRegions.indexOf(f.to) < 0) return false;
+    if (f.priority && String(s.priority || '').toLowerCase() !== f.priority) return false;
+    if (f.status   && String(s.status || '').toLowerCase() !== f.status) return false;
+    if (f.about    && String(s.source_label || '').toLowerCase().indexOf(f.about) < 0) return false;
+    if (f.source   && String(s.source_page || '').toLowerCase() !== f.source) return false;
+    if (parsed.text) {
+      const hay = [s.subject, s.source_label, s.message, s.from_user, s.to_user]
+        .map(x => String(x || '')).join(' ').toLowerCase();
+      if (hay.indexOf(parsed.text) < 0) return false;
+    }
+    return true;
+  }
+
+  // Update the URL (without triggering a full re-render) so the search is bookmarkable.
+  function updateInboxSearchUrl(q) {
+    const p = { ..._inboxCurrentParams };
+    if (q && q.trim()) p.search = q.trim();
+    else delete p.search;
+    const qs = Object.entries(p)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+    const newHash = '#/inbox' + (qs ? '?' + qs : '');
+    // Replace URL without triggering hashchange-driven reload
+    if (location.hash !== newHash) {
+      history.replaceState(null, '', newHash);
+      _inboxCurrentParams = p;
+    }
+  }
+
+  /**
+   * Instant client-side filter: runs on every keystroke (debounced 80ms) on
+   * the already-loaded items. No network call.
+   */
+  function applyInboxSearchClientSide(q) {
+    const listEl = $('#inbox-list');
+    if (!listEl) return;
+    const subEl = $('#inbox-sub');
+    const pill = $('#inbox-deep-search-pill');
+    const pillNote = $('#inbox-deep-search-note');
+
+    updateInboxSearchUrl(q);
+
+    const parsed = parseInboxSearchQuery(q);
+    const hasQuery = !!(parsed.text || Object.keys(parsed.filters).length);
+
+    // No query → render all items as normal
+    if (!hasQuery) {
+      if (pill) pill.style.display = 'none';
+      const isRecordFiltered = !!(_inboxCurrentParams.source_page && _inboxCurrentParams.source_id);
+      if (_inboxAllItems.length === 0) {
+        listEl.innerHTML = renderInboxEmptyState(_inboxCurrentParams.scope || 'inbox');
+      } else {
+        listEl.innerHTML = _inboxAllItems.map(s => renderInboxRow(s, { isRecordFiltered })).join('');
+      }
+      if (subEl) {
+        subEl.textContent = _inboxAllItems.length === 0
+          ? 'No items.'
+          : `${_inboxAllItems.length} ${_inboxAllItems.length === 1 ? 'item' : 'items'}.`;
+      }
+      return;
+    }
+
+    const matches = _inboxAllItems.filter(s => inboxMatchesQuery(s, parsed));
+    const isRecordFiltered = !!(_inboxCurrentParams.source_page && _inboxCurrentParams.source_id);
+
+    if (matches.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">
+        <div class="empty-state-title">No matches in this tab</div>
+        <div class="empty-state-sub">Press Enter or click "Search all history" to search beyond your current tab.</div>
+      </div>`;
+    } else {
+      listEl.innerHTML = matches.map(s => renderInboxRow(s, { isRecordFiltered })).join('');
+    }
+
+    // Show the deep-search affordance whenever a query is active
+    if (pill) pill.style.display = 'flex';
+    if (pillNote) {
+      const n = matches.length;
+      pillNote.textContent = `${n} ${n === 1 ? 'match' : 'matches'} in your current tab.`;
+    }
+    if (subEl) {
+      subEl.textContent = matches.length === 0
+        ? 'No matches. Try broader text or "Search all history".'
+        : `${matches.length} ${matches.length === 1 ? 'match' : 'matches'}.`;
+    }
+  }
+
+  /**
+   * Server-side search across all scopes (deep_search=true). Called on Enter
+   * or explicit button click. Results marked with an "— Older results —"
+   * separator when they include items outside the current scope.
+   */
+  async function triggerDeepInboxSearch() {
+    const searchEl = $('#inbox-search-input');
+    const listEl   = $('#inbox-list');
+    const pillNote = $('#inbox-deep-search-note');
+    const deepBtn  = $('#inbox-deep-search-btn');
+    const subEl    = $('#inbox-sub');
+    if (!searchEl || !listEl) return;
+    const q = searchEl.value.trim();
+    if (!q) return;
+
+    if (deepBtn) { deepBtn.disabled = true; deepBtn.textContent = 'Searching…'; }
+
+    try {
+      const apiParams = {
+        resource: 'submissions',
+        scope: _inboxCurrentParams.scope || 'inbox',
+        search: q,
+        deep_search: 'true',
+      };
+      if (_inboxCurrentParams.source_page) apiParams.source_page = _inboxCurrentParams.source_page;
+      if (_inboxCurrentParams.source_id)   apiParams.source_id   = _inboxCurrentParams.source_id;
+
+      const res = await api(apiParams);
+      const items = (res && res.submissions) || [];
+      const isRecordFiltered = !!(_inboxCurrentParams.source_page && _inboxCurrentParams.source_id);
+
+      // Separate into "current tab matches" (which we already showed) and "older/other scopes"
+      const currentIds = new Set(_inboxAllItems.map(i => i.id));
+      const inTab = items.filter(s => currentIds.has(s.id));
+      const outOfTab = items.filter(s => !currentIds.has(s.id));
+
+      let html = '';
+      if (inTab.length > 0) {
+        html += inTab.map(s => renderInboxRow(s, { isRecordFiltered })).join('');
+      }
+      if (outOfTab.length > 0) {
+        html += `<div class="inbox-deep-separator">— Also found in other tabs / older history (${outOfTab.length}) —</div>`;
+        html += outOfTab.map(s => renderInboxRow(s, { isRecordFiltered })).join('');
+      }
+      if (items.length === 0) {
+        html = `<div class="empty-state">
+          <div class="empty-state-title">No matches anywhere</div>
+          <div class="empty-state-sub">Nothing you can see contains "${escapeHtml(q)}".</div>
+        </div>`;
+      }
+      listEl.innerHTML = html;
+
+      if (pillNote) pillNote.textContent = `${items.length} ${items.length === 1 ? 'match' : 'matches'} across your history.`;
+      if (subEl) subEl.textContent = `${items.length} ${items.length === 1 ? 'match' : 'matches'} across history.`;
+    } catch (err) {
+      console.warn('[inbox] deep search failed:', err);
+      if (pillNote) pillNote.textContent = 'Search failed — retry?';
+    } finally {
+      if (deepBtn) { deepBtn.disabled = false; deepBtn.textContent = 'Search all history'; }
+    }
+  }
+
+  function clearInboxSearch() {
+    const searchEl = $('#inbox-search-input');
+    const clearBtn = $('#inbox-search-clear');
+    if (searchEl) searchEl.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
+    applyInboxSearchClientSide('');
+    if (searchEl) searchEl.focus();
+  }
+
+  function toggleInboxSearchHelp() {
+    const el = $('#inbox-search-help');
+    if (!el) return;
+    el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+  }
+
+  window.applyInboxSearchClientSide = applyInboxSearchClientSide;
+  window.triggerDeepInboxSearch     = triggerDeepInboxSearch;
+  window.clearInboxSearch           = clearInboxSearch;
+  window.toggleInboxSearchHelp      = toggleInboxSearchHelp;
 
   function applyInboxTabCounts(counts) {
     Object.keys(counts).forEach(scope => {
@@ -1650,7 +1939,8 @@
     `;
   }
 
-  function renderInboxRow(s) {
+  function renderInboxRow(s, context) {
+    context = context || {};
     const srcIcon = { fleet: '🚚', legal: '⚖️', reviews: '⭐', compliance: '👷', general: '💬' }[s.source_page] || '💬';
     const priority = s.priority || 'med';
     const priorityClass = priority === 'high' ? 'badge-red' : (priority === 'low' ? '' : 'badge-amber');
@@ -1662,9 +1952,13 @@
       : '';
     const updated = formatRelativeTime(s.updated_at);
     const subject = s.subject || '(no subject)';
-    // Source record chip (Option C: every row shows which record the thread is about)
-    const sourceChip = s.source_label
-      ? `<span class="inbox-row-source-chip" title="${escapeAttr('About: ' + s.source_label)}">About: ${escapeHtml(s.source_label)}</span>`
+    // Source record chip (Option C): every row shows which record the thread is about.
+    // Hidden when inbox is already filtered to one record (redundant info).
+    // Clickable: navigates to record-filtered inbox without triggering the row anchor.
+    const sourceChip = (s.source_label && !context.isRecordFiltered)
+      ? `<span class="inbox-row-source-chip" title="${escapeAttr('Click to see all messages about ' + s.source_label)}"
+           onclick="event.preventDefault();event.stopPropagation();filterInboxByRecord('${escapeAttr(s.source_page)}','${escapeAttr(s.source_id)}');"
+         >About: ${escapeHtml(s.source_label)}</span>`
       : '';
 
     return `
@@ -1683,6 +1977,13 @@
       </a>
     `;
   }
+
+  // Click handler for source chips — navigates to the record-filtered inbox
+  function filterInboxByRecord(sourcePage, sourceId) {
+    if (!sourcePage || !sourceId) return;
+    location.hash = `#/inbox?source_page=${encodeURIComponent(sourcePage)}&source_id=${encodeURIComponent(sourceId)}`;
+  }
+  window.filterInboxByRecord = filterInboxByRecord;
 
   async function loadInboxTabCounts(params) {
     // DEPRECATED: tab counts now come back inline with the main submissions
@@ -4100,6 +4401,7 @@
   function viewContractorMessages() {
     if (!_currentContractor) return;
     const id = _currentContractor.contractor_id;
+    closeContractorPanel();
     location.hash = `#/inbox?source_page=compliance&source_id=${encodeURIComponent(id)}`;
   }
 
@@ -5874,7 +6176,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.10';
+  const APP_VERSION = '2.1.11';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
