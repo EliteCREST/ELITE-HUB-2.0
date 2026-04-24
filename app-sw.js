@@ -5,7 +5,7 @@
 
 // Bump this constant every time you ship a meaningful change to app.html/css.
 // The service worker detects the change on next install and swaps itself in.
-const APP_VERSION = '2.1.8';
+const APP_VERSION = '2.1.9';
 const CACHE_NAME = 'elite-hub-2.0-' + APP_VERSION;
 
 const PRECACHE = [

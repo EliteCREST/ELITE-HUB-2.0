@@ -4000,12 +4000,12 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   margin-left: 4px;
 }
 
-/* Row-level badge: 💬 N next to status pills on contractor list rows */
+/* Row-level badge: 💬 N at the LEFT of the contractor name (impossible to miss) */
 .comms-badge {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  margin-left: 6px;
+  margin-right: 6px;
   padding: 2px 7px;
   font-size: 10px;
   font-weight: 700;
@@ -4013,34 +4013,205 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   background: var(--slate-100);
   color: var(--slate-600);
   white-space: nowrap;
+  vertical-align: 1px;
 }
 .comms-badge-unread {
-  background: var(--blue-pale);
-  color: var(--blue-hover);
+  background: var(--red-pale);
+  color: var(--red);
 }
 
-/* Thread list inside the Communication section on the detail panel */
+/* Communication section gets a scroll cap so very long histories don't blow up the panel */
+.ctr-comms-section { /* layout — no overrides needed beyond defaults */ }
+.ctr-comms-scroll {
+  max-height: 500px;
+  overflow-y: auto;
+  margin-top: var(--sp-2);
+}
+
+/* Accordion thread cards (top-level list inside .ctr-comms-list) */
 .ctr-comms-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sp-2);
 }
 
-.comms-thread-row {
+.comms-thread {
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  background: var(--white);
+  overflow: hidden;
+  transition: border-color var(--t-fast);
+}
+.comms-thread.comms-thread-open {
+  border-color: var(--navy);
+}
+
+.comms-thread-header {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   padding: 10px var(--sp-3);
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.comms-thread-header:hover {
+  background: var(--slate-50);
+}
+
+.comms-expand-chevron {
+  font-size: 11px;
+  color: var(--slate-400);
+  flex-shrink: 0;
+  transition: transform var(--t-fast);
+}
+.comms-thread-open .comms-expand-chevron {
+  transform: rotate(90deg);
+}
+
+.comms-msg-count {
+  white-space: nowrap;
+}
+
+/* Body shown when expanded */
+.comms-thread-body {
+  border-top: 1px solid var(--slate-100);
+  padding: var(--sp-3);
+  background: var(--slate-50);
+}
+.comms-thread-loading {
+  font-size: 12px;
+  color: var(--slate-500);
+  padding: var(--sp-2);
+  text-align: center;
+}
+.comms-thread-error {
+  font-size: 12px;
+  color: var(--red);
+  padding: var(--sp-2);
+  text-align: center;
+}
+
+/* Message list inside an expanded thread */
+.comms-msg-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+/* Individual message: avatar + bubble */
+.comms-msg {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+}
+
+.comms-msg-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: 0.3px;
+}
+
+.comms-msg-bubble {
+  flex: 1;
+  min-width: 0;
+  background: var(--white);
   border: 1px solid var(--slate-200);
   border-radius: var(--r-md);
-  background: var(--white);
-  text-decoration: none;
-  color: inherit;
-  transition: background var(--t-fast), border-color var(--t-fast);
+  padding: 8px var(--sp-3);
 }
-.comms-thread-row:hover {
-  background: var(--slate-50);
-  border-color: var(--navy);
+
+.comms-msg-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.comms-msg-author {
+  font-weight: 700;
+  color: var(--navy);
+}
+.comms-msg-time {
+  color: var(--slate-500);
+}
+.comms-msg-tag {
+  background: var(--slate-100);
+  color: var(--slate-600);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: var(--r-round);
+}
+.comms-msg-body {
+  font-size: 13px;
+  color: var(--slate-800);
+  line-height: 1.45;
+  word-wrap: break-word;
+}
+
+/* Reply composer at the bottom of an expanded thread */
+.comms-reply-composer {
+  margin-top: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px dashed var(--slate-200);
+}
+.comms-reply-input {
+  width: 100%;
+  padding: 8px var(--sp-3);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-md);
+  font-family: var(--font);
+  font-size: 13px;
+  resize: vertical;
+  min-height: 56px;
+  background: var(--white);
+}
+.comms-reply-input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+.comms-reply-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+.comms-open-inbox {
+  font-size: 11px;
+  color: var(--slate-500);
+  text-decoration: none;
+}
+.comms-open-inbox:hover {
+  color: var(--blue-hover);
+  text-decoration: underline;
+}
+.comms-resolved-note {
+  margin-top: var(--sp-2);
+  padding: 8px var(--sp-3);
+  background: var(--slate-100);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--slate-600);
+  text-align: center;
+}
+.comms-resolved-note a {
+  color: var(--blue-hover);
+  text-decoration: none;
+}
+.comms-resolved-note a:hover {
+  text-decoration: underline;
 }
 
 /* Priority dot on the left of each thread row */

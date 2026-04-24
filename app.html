@@ -776,6 +776,55 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
+  // Cache of users fetched via api({resource:'users'}) — populated on first call.
+  // Used to resolve usernames to display names + colors for messaging UI.
+  let _allUsersCache = null;
+
+  /**
+   * Resolve a username to display info: { name, initials, color }.
+   * Order of resolution:
+   *   1. TEAM_USERS roster (compliance team — has hardcoded initials + colors)
+   *   2. _allUsersCache (loaded from backend via getAllUsersForDisplay below)
+   *   3. Fallback: synthesize from username
+   * Always returns an object — never null.
+   */
+  function userDisplayInfo(username) {
+    const u = String(username || '').toLowerCase().trim();
+    if (!u) return { name: '?', initials: '?', color: 'var(--slate-500)' };
+
+    const team = TEAM_USERS.find(x => x.username === u);
+    if (team) return { name: team.name, initials: team.initials, color: team.color };
+
+    if (_allUsersCache) {
+      const all = _allUsersCache.find(x => String(x.username || '').toLowerCase() === u);
+      if (all) {
+        const displayName = all.name || all.display_name || u;
+        return {
+          name: displayName,
+          initials: initialsFromName(displayName),
+          color: all.color || 'var(--slate-600)',
+        };
+      }
+    }
+
+    // Last resort — username only. At least don't return "AN" for "angel".
+    return {
+      name: u,
+      initials: u.length >= 2 ? u.slice(0, 2).toUpperCase() : (u || '?').toUpperCase(),
+      color: 'var(--slate-500)',
+    };
+  }
+
+  // Background populator for the user cache. Safe to call multiple times.
+  async function ensureAllUsersCache() {
+    if (_allUsersCache) return _allUsersCache;
+    try {
+      const res = await api({ resource: 'users' });
+      if (res && res.users) _allUsersCache = res.users;
+    } catch (e) { /* silent */ }
+    return _allUsersCache;
+  }
+
   /**
    * Returns the user whose data is currently being displayed.
    * If view-as is active, returns the viewed user.
@@ -3881,12 +3930,12 @@
     return `
       <div class="ctr-row" onclick="openContractorDetail('${escapeAttr(c.contractor_id)}')">
         <div class="ctr-row-name">
-          <div class="ctr-row-name-text">${escapeHtml(c.contractor_name)}</div>
+          <div class="ctr-row-name-text">${commsBadge}${escapeHtml(c.contractor_name)}</div>
           <div class="ctr-row-pay-id">PAY ID ${escapeHtml(c.pay_id || '—')}</div>
         </div>
         <div class="ctr-row-regions">${regionChips}</div>
         <div class="ctr-row-gl">${glPill}</div>
-        <div class="ctr-row-wc">${wcPill}${commsBadge}</div>
+        <div class="ctr-row-wc">${wcPill}</div>
         <div class="ctr-row-headline">${headline}</div>
         <div class="ctr-row-updated">${escapeHtml(lastUpdated)}${updatedBy}</div>
       </div>
@@ -3980,6 +4029,8 @@
 
   async function loadContractorCommunication(contractorId) {
     if (!contractorId) return;
+    // Pre-warm the user cache so author names/initials render correctly
+    ensureAllUsersCache();
     try {
       const res = await api({
         resource: 'submissions_for_record',
@@ -4008,18 +4059,18 @@
       return;
     }
 
-    listEl.innerHTML = submissions.map(s => renderContractorCommRow(s)).join('');
+    listEl.innerHTML = submissions.map(s => renderContractorCommThread(s)).join('');
   }
 
-  function renderContractorCommRow(s) {
-    // Status styling reuses existing submission status logic
+  // One collapsed thread card. Header is always visible; clicking it expands
+  // to show the messages inline.
+  function renderContractorCommThread(s) {
     const statusClass = `comms-status comms-status-${(s.status || 'new').toLowerCase().replace(/\s+/g,'-')}`;
     const priorityDot = `<span class="comms-priority comms-priority-${escapeAttr(s.priority || 'med')}" title="${escapeAttr((s.priority || 'med') + ' priority')}"></span>`;
 
     const replyCount = s.reply_count || 0;
-    const replyBadge = replyCount > 0
-      ? `<span class="comms-reply-count">${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>`
-      : '';
+    const totalMsgs  = 1 + replyCount; // original + replies
+    const msgsLabel  = `${totalMsgs} ${totalMsgs === 1 ? 'message' : 'messages'}`;
 
     const unreadDot = s.has_new_reply
       ? `<span class="comms-unread-dot" title="New activity"></span>`
@@ -4029,22 +4080,198 @@
     const subject = s.subject || '(no subject)';
 
     return `
-      <a class="comms-thread-row" href="#/submission/${encodeURIComponent(s.id)}">
-        ${priorityDot}
-        <div class="comms-thread-main">
-          <div class="comms-thread-title">${unreadDot}${escapeHtml(subject)}</div>
-          <div class="comms-thread-meta">
-            <span class="${statusClass}">${escapeHtml(s.status || 'New')}</span>
-            ${replyBadge}
-            <span class="comms-thread-from">${escapeHtml(s.from_user || '—')}</span>
-            ${lastActivity ? `<span class="comms-thread-time">${escapeHtml(lastActivity)}</span>` : ''}
+      <div class="comms-thread" id="comms-thread-${escapeAttr(s.id)}" data-thread-id="${escapeAttr(s.id)}" data-loaded="false">
+        <div class="comms-thread-header" onclick="toggleContractorCommThread('${escapeAttr(s.id)}')">
+          ${priorityDot}
+          <div class="comms-thread-main">
+            <div class="comms-thread-title">${unreadDot}${escapeHtml(subject)}</div>
+            <div class="comms-thread-meta">
+              <span class="${statusClass}">${escapeHtml(s.status || 'New')}</span>
+              <span class="comms-msg-count">${msgsLabel}</span>
+              ${lastActivity ? `<span class="comms-thread-time">${escapeHtml(lastActivity)}</span>` : ''}
+            </div>
           </div>
+          <span class="comms-expand-chevron" aria-hidden="true">▸</span>
         </div>
-      </a>
+        <div class="comms-thread-body" id="comms-thread-body-${escapeAttr(s.id)}" style="display:none;">
+          <div class="comms-thread-loading">Loading messages…</div>
+        </div>
+      </div>
     `;
   }
 
+  /**
+   * Expand/collapse a thread. On first expand: fetches the full submission +
+   * replies, renders the message list (newest first), shows the reply composer.
+   * Also marks the thread as seen.
+   */
+  async function toggleContractorCommThread(submissionId) {
+    const card = document.getElementById('comms-thread-' + submissionId);
+    const body = document.getElementById('comms-thread-body-' + submissionId);
+    if (!card || !body) return;
+
+    const isOpen = card.classList.contains('comms-thread-open');
+    if (isOpen) {
+      card.classList.remove('comms-thread-open');
+      body.style.display = 'none';
+      return;
+    }
+
+    // Open this one
+    card.classList.add('comms-thread-open');
+    body.style.display = 'block';
+
+    // First-open: fetch and render
+    if (card.getAttribute('data-loaded') !== 'true') {
+      try {
+        const res = await api({ resource: 'submission', id: submissionId });
+        if (res && res.submission) {
+          renderContractorCommThreadBody(res.submission);
+          card.setAttribute('data-loaded', 'true');
+
+          // Mark as seen — clears the unread dot for this thread
+          api({}, 'POST', { action: 'marksubmissionseen', id: submissionId }).then(() => {
+            // Remove the unread dot from the header (without full re-render)
+            const dot = card.querySelector('.comms-unread-dot');
+            if (dot) dot.remove();
+          }).catch(() => {});
+        } else if (res && res.error) {
+          body.innerHTML = `<div class="comms-thread-error">Couldn't load: ${escapeHtml(res.error)}</div>`;
+        }
+      } catch (err) {
+        body.innerHTML = `<div class="comms-thread-error">Network error: ${escapeHtml(err.message || String(err))}</div>`;
+      }
+    }
+  }
+
+  function renderContractorCommThreadBody(submission) {
+    const body = document.getElementById('comms-thread-body-' + submission.id);
+    if (!body) return;
+
+    // Build a unified message list: original message + replies, newest first.
+    // The original IS a message (sender = from_user, content = message, timestamp = created_at).
+    const messages = [];
+    messages.push({
+      author:     submission.from_user || '?',
+      created_at: submission.created_at || submission.updated_at,
+      message:    submission.message || '',
+      is_original: true,
+    });
+    (submission.replies || []).forEach(r => {
+      messages.push({
+        author:     r.author || '?',
+        created_at: r.created_at,
+        message:    r.message || '',
+        is_original: false,
+      });
+    });
+    // Newest first
+    messages.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+    const messagesHtml = messages.map(m => renderContractorCommMessage(m)).join('');
+
+    // Reply composer
+    const composerHtml = submission.status === 'Resolved'
+      ? `<div class="comms-resolved-note">🔒 This conversation is resolved. Open in <a href="#/submission/${encodeURIComponent(submission.id)}">inbox</a> to reopen.</div>`
+      : `
+        <div class="comms-reply-composer">
+          <textarea class="comms-reply-input" id="comms-reply-${escapeAttr(submission.id)}" rows="2" placeholder="Reply… (Ctrl+Enter to send)" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){event.preventDefault();sendContractorCommReply('${escapeAttr(submission.id)}');}"></textarea>
+          <div class="comms-reply-actions">
+            <a class="comms-open-inbox" href="#/submission/${encodeURIComponent(submission.id)}" title="Open full thread in inbox">Open in inbox ↗</a>
+            <button class="btn btn-primary btn-sm" onclick="sendContractorCommReply('${escapeAttr(submission.id)}')">Send</button>
+          </div>
+        </div>
+      `;
+
+    body.innerHTML = `<div class="comms-msg-list">${messagesHtml}</div>${composerHtml}`;
+  }
+
+  function renderContractorCommMessage(m) {
+    const info = userDisplayInfo(m.author);
+    const time = m.created_at ? formatRelativeTime(m.created_at) : '';
+    const tagOriginal = m.is_original ? `<span class="comms-msg-tag">original</span>` : '';
+    return `
+      <div class="comms-msg">
+        <div class="comms-msg-avatar" style="background:${info.color};">${escapeHtml(info.initials)}</div>
+        <div class="comms-msg-bubble">
+          <div class="comms-msg-header">
+            <span class="comms-msg-author">${escapeHtml(info.name)}</span>
+            ${tagOriginal}
+            <span class="comms-msg-time">${escapeHtml(time)}</span>
+          </div>
+          <div class="comms-msg-body">${escapeHtml(m.message).replace(/\n/g,'<br>')}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Send an inline reply to a thread. On success: prepends the new message to
+   * the thread's message list (newest first) and refreshes badge counts.
+   * Doesn't navigate away.
+   */
+  async function sendContractorCommReply(submissionId) {
+    const input = document.getElementById('comms-reply-' + submissionId);
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) { showToast('Type a message first.', 'error'); input.focus(); return; }
+
+    // Find Send button to disable while sending
+    const card = document.getElementById('comms-thread-' + submissionId);
+    const sendBtn = card ? card.querySelector('.comms-reply-actions .btn-primary') : null;
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+
+    const res = await api({}, 'POST', {
+      action: 'addreply',
+      submission_id: submissionId,
+      message: text,
+    });
+
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+
+    if (res && res.error) {
+      showToast('Failed to send: ' + res.error, 'error');
+      return;
+    }
+    if (!res || !res.success) {
+      showToast('Failed to send (unknown error)', 'error');
+      return;
+    }
+
+    input.value = '';
+    showToast('Reply sent', 'success');
+
+    // Optimistic insert at top of message list — much faster than re-fetching
+    const me = getLoggedInUser();
+    const newMsgHtml = renderContractorCommMessage({
+      author:     me.username,
+      created_at: new Date().toISOString(),
+      message:    text,
+      is_original: false,
+    });
+    const list = card ? card.querySelector('.comms-msg-list') : null;
+    if (list) list.insertAdjacentHTML('afterbegin', newMsgHtml);
+
+    // Update message count in the thread header
+    const countEl = card ? card.querySelector('.comms-msg-count') : null;
+    if (countEl) {
+      const m = countEl.textContent.match(/(\d+)/);
+      if (m) {
+        const n = parseInt(m[1], 10) + 1;
+        countEl.textContent = `${n} ${n === 1 ? 'message' : 'messages'}`;
+      }
+    }
+
+    // Refresh row badge counts so the contractor list reflects the new message
+    invalidateApiCache(['submission_counts', 'submissions_for_record', 'submissions']);
+    if (_contractorsAll && _contractorsAll.length > 0) {
+      fetchContractorMessageCounts(_contractorsAll.map(x => x.contractor_id));
+    }
+  }
+
   window.loadContractorCommunication = loadContractorCommunication;
+  window.toggleContractorCommThread  = toggleContractorCommThread;
+  window.sendContractorCommReply     = sendContractorCommReply;
 
   function renderContractorPanelLoading(summary) {
     const name = summary ? summary.contractor_name : 'Loading…';
@@ -4143,6 +4370,16 @@
 
         <div class="ctr-panel-body">
 
+          <!-- Communication (top of panel body — most relevant first) -->
+          <div class="ctr-panel-section ctr-comms-section">
+            <div class="ctr-panel-section-title">Communication <span class="ctr-panel-section-count" id="ctr-comms-count">…</span></div>
+            <div class="ctr-comms-scroll" id="ctr-comms-scroll">
+              <div class="ctr-comms-list" id="ctr-comms-list">
+                <div class="ctr-panel-empty">Loading messages…</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Regions / Trades -->
           <div class="ctr-panel-section">
             <div class="ctr-panel-section-title">Regions & Trades</div>
@@ -4194,14 +4431,6 @@
               <div><div class="ctr-panel-label">Ins. phone</div>${renderCopyable(c.wc_ins_phone)}</div>
               <div><div class="ctr-panel-label">Ins. email</div>${renderCopyable(c.wc_ins_email)}</div>
               <div><div class="ctr-panel-label">Coverage for</div><div class="ctr-panel-value">${escapeHtml(c.wc_coverage_for || '—')}</div></div>
-            </div>
-          </div>
-
-          <!-- Communication -->
-          <div class="ctr-panel-section">
-            <div class="ctr-panel-section-title">Communication <span class="ctr-panel-section-count" id="ctr-comms-count">…</span></div>
-            <div class="ctr-comms-list" id="ctr-comms-list">
-              <div class="ctr-panel-empty">Loading messages…</div>
             </div>
           </div>
 
@@ -5821,7 +6050,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.8';
+  const APP_VERSION = '2.1.9';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
