@@ -2847,9 +2847,9 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
 }
 .ctr-row {
   display: grid;
-  grid-template-columns: minmax(200px, 2fr) minmax(100px, 1fr) 110px 110px 130px minmax(120px, 1fr);
+  grid-template-columns: minmax(220px, 2.2fr) minmax(100px, 1fr) 130px 130px 90px minmax(110px, 1fr);
   gap: var(--sp-3);
-  padding: 10px var(--sp-3);
+  padding: 12px var(--sp-3);
   border-bottom: 1px solid var(--slate-100);
   cursor: pointer;
   align-items: center;
@@ -2862,28 +2862,95 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   min-width: 0;
 }
 .ctr-row-name-text {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--navy);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.ctr-row-contact {
+  font-size: 12px;
+  color: var(--slate-600);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ctr-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
 .ctr-row-pay-id {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--slate-500);
-  margin-top: 1px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 .ctr-row-regions {
   display: flex;
-  gap: 2px;
+  gap: 3px;
   flex-wrap: wrap;
   min-width: 0;
 }
-.ctr-row-headline {
-  font-size: 12px;
-  color: var(--slate-600);
+.ctr-region-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  background: var(--slate-100);
+  color: var(--slate-700);
+  border-radius: var(--r-round);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
+
+/* Expiry date under the GL/WC pills */
+.ctr-row-gl, .ctr-row-wc {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+.ctr-row-expiry-date {
+  font-size: 11px;
+  line-height: 1.2;
+}
+.ctr-exp-ok      { color: var(--slate-600); }
+.ctr-exp-soon    { color: #B45309; font-weight: 700; }
+.ctr-exp-expired { color: var(--red); font-weight: 700; }
+.ctr-exp-missing,
+.ctr-exp-none    { color: var(--slate-400); font-style: italic; }
+.ctr-exp-exempt  { color: var(--slate-500); font-weight: 600; }
+
+.ctr-row-status {
+  display: flex;
+  align-items: center;
+}
+.ctr-status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--r-round);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+.ctr-status-active   { background: #DCFCE7; color: #15803D; }
+.ctr-status-inactive { background: var(--slate-200); color: var(--slate-600); }
+.ctr-status-on_hold  { background: var(--amber-pale); color: #B45309; }
+
+.ctr-trade-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--slate-300);
+  color: var(--slate-600);
+  border-radius: var(--r-round);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+}
+
 .ctr-row-updated {
   font-size: 11px;
   color: var(--slate-500);
@@ -2892,6 +2959,7 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   white-space: nowrap;
 }
 
+/* Headline styles kept for any non-list-view usage, but not used in new row layout */
 .ctr-headline {
   display: inline-block;
   padding: 2px 8px;

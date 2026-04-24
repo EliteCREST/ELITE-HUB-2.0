@@ -4208,7 +4208,7 @@
               <div class="ctr-row-regions"><div class="skeleton skeleton-line" style="height:14px;width:80px;"></div></div>
               <div class="ctr-row-gl"><div class="skeleton skeleton-line" style="height:16px;width:60px;border-radius:9999px;"></div></div>
               <div class="ctr-row-wc"><div class="skeleton skeleton-line" style="height:16px;width:60px;border-radius:9999px;"></div></div>
-              <div class="ctr-row-headline"><div class="skeleton skeleton-line" style="height:12px;width:80px;"></div></div>
+              <div class="ctr-row-status"><div class="skeleton skeleton-line" style="height:16px;width:60px;border-radius:9999px;"></div></div>
               <div class="ctr-row-updated"><div class="skeleton skeleton-line" style="height:12px;width:90px;"></div></div>
             </div>
           `).join('')}
@@ -4381,14 +4381,46 @@
   }
 
   function renderContractorRow(c) {
-    const regionChips = (c.regions || []).map(r => `<span class="pill" style="padding:1px 6px;font-size:10px;">${escapeHtml(r)}</span>`).join(' ');
+    const regionChips = (c.regions || []).map(r =>
+      `<span class="ctr-region-chip">${escapeHtml(r)}</span>`
+    ).join(' ');
+
     const glPill = renderStatusPill('GL', c.gl_status, c.gl_expiry);
     const wcPill = renderStatusPill('WC', c.wc_status, c.wc_expiry);
     const commsBadge = renderCommsBadge(_contractorMessageCounts[c.contractor_id]);
 
-    const headline = c.headline_expiry
-      ? `<span class="ctr-headline ctr-headline-${getExpiryUrgency(c.headline_expiry.date)}">${escapeHtml(c.headline_expiry.type)} ${escapeHtml(formatFriendlyDate(c.headline_expiry.date))}</span>`
-      : '<span class="ctr-headline-none">—</span>';
+    // Active/Inactive pill based on contractor status
+    const status = String(c.status || 'active').toLowerCase();
+    const statusLabel = status === 'inactive' ? 'INACTIVE'
+                      : status === 'on_hold' ? 'ON HOLD'
+                      : 'ACTIVE';
+    const statusPill = `<span class="ctr-status-pill ctr-status-${escapeAttr(status)}">${escapeHtml(statusLabel)}</span>`;
+
+    // Trade pill (first non-empty trade)
+    const tradePill = c.trade
+      ? `<span class="ctr-trade-pill">${escapeHtml(String(c.trade).toUpperCase())}</span>`
+      : '';
+
+    // Contact name line (underneath company name)
+    const contactLine = c.contact_name
+      ? `<div class="ctr-row-contact">${escapeHtml(c.contact_name)}</div>`
+      : '';
+
+    // Expiry date rendering — kind-agnostic
+    const fmtExpiry = (iso, status) => {
+      if (!iso) {
+        return status === 'missing'
+          ? `<span class="ctr-exp-missing">Not on file</span>`
+          : `<span class="ctr-exp-none">—</span>`;
+      }
+      const urgency = getExpiryUrgency(iso);
+      return `<span class="ctr-exp ctr-exp-${urgency}">${escapeHtml(formatFriendlyDate(iso))}</span>`;
+    };
+
+    const glDate = fmtExpiry(c.gl_expiry, c.gl_status);
+    const wcDate = c.wc_exempt
+      ? `<span class="ctr-exp-exempt">Exempt</span>`
+      : fmtExpiry(c.wc_expiry, c.wc_status);
 
     const lastUpdated = c.last_updated ? formatRelativeTime(c.last_updated) : '—';
     const updatedBy = c.updated_by && c.updated_by !== 'migration' && c.updated_by !== 'system'
@@ -4398,12 +4430,16 @@
       <div class="ctr-row" onclick="openContractorDetail('${escapeAttr(c.contractor_id)}')">
         <div class="ctr-row-name">
           <div class="ctr-row-name-text">${commsBadge}${escapeHtml(c.contractor_name)}</div>
-          <div class="ctr-row-pay-id">PAY ID ${escapeHtml(c.pay_id || '—')}</div>
+          ${contactLine}
+          <div class="ctr-row-meta">
+            <span class="ctr-row-pay-id">PAY ${escapeHtml(c.pay_id || '—')}</span>
+            ${tradePill}
+          </div>
         </div>
         <div class="ctr-row-regions">${regionChips}</div>
-        <div class="ctr-row-gl">${glPill}</div>
-        <div class="ctr-row-wc">${wcPill}</div>
-        <div class="ctr-row-headline">${headline}</div>
+        <div class="ctr-row-gl">${glPill}<div class="ctr-row-expiry-date">${glDate}</div></div>
+        <div class="ctr-row-wc">${wcPill}<div class="ctr-row-expiry-date">${wcDate}</div></div>
+        <div class="ctr-row-status">${statusPill}</div>
         <div class="ctr-row-updated">${escapeHtml(lastUpdated)}${updatedBy}</div>
       </div>
     `;
@@ -6497,7 +6533,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.17';
+  const APP_VERSION = '2.1.18';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
