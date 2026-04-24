@@ -3985,3 +3985,132 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   justify-content: flex-end;
   padding-top: var(--sp-2);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   COMMUNICATION — Stage 6.3 Chunk C.2
+   Used on contractor detail panel (and, later, review/fleet/legal panels).
+   Thread rows link to existing #/submission/:id route for full detail.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Small count indicator in section titles, e.g. "Communication (3)" */
+.ctr-panel-section-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--slate-500);
+  margin-left: 4px;
+}
+
+/* Row-level badge: 💬 N next to status pills on contractor list rows */
+.comms-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: var(--r-round);
+  background: var(--slate-100);
+  color: var(--slate-600);
+  white-space: nowrap;
+}
+.comms-badge-unread {
+  background: var(--blue-pale);
+  color: var(--blue-hover);
+}
+
+/* Thread list inside the Communication section on the detail panel */
+.ctr-comms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.comms-thread-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 10px var(--sp-3);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  background: var(--white);
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.comms-thread-row:hover {
+  background: var(--slate-50);
+  border-color: var(--navy);
+}
+
+/* Priority dot on the left of each thread row */
+.comms-priority {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--slate-300);
+}
+.comms-priority-high { background: var(--red); }
+.comms-priority-med  { background: var(--amber); }
+.comms-priority-low  { background: var(--slate-300); }
+
+.comms-thread-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.comms-thread-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comms-unread-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+  flex-shrink: 0;
+}
+
+.comms-thread-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--slate-500);
+  flex-wrap: wrap;
+}
+
+.comms-thread-from,
+.comms-thread-time,
+.comms-reply-count {
+  white-space: nowrap;
+}
+
+/* Status chip — mirrors existing submission-status tokens but subtle */
+.comms-status {
+  display: inline-block;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  border-radius: var(--r-round);
+  text-transform: uppercase;
+  background: var(--slate-100);
+  color: var(--slate-600);
+}
+.comms-status-new          { background: var(--blue-pale);  color: var(--blue-hover); }
+.comms-status-in-review    { background: var(--amber-pale); color: #B45309; }
+.comms-status-needs-info   { background: var(--amber-pale); color: #B45309; }
+.comms-status-resolved     { background: var(--green-pale); color: #047857; }
