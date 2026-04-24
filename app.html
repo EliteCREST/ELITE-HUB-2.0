@@ -630,7 +630,7 @@
   const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
 
   // Resources that should be cached on GET. Writes invalidate relevant caches.
-  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_summary','reviews_individual'];
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_summary','reviews_individual','submissions_for_record','submission_counts'];
 
   // Which resources to invalidate when an action happens
   const INVALIDATE_MAP = {
@@ -638,9 +638,9 @@
     deletetask:            ['tasks','dashboard'],
     savewidget:            ['widgets'],
     deletewidget:          ['widgets'],
-    savesubmission:        ['submissions','dashboard'],
-    updatesubmissionstatus:['submissions','dashboard'],
-    addreply:              ['submissions','submission','dashboard'],
+    savesubmission:        ['submissions','dashboard','submissions_for_record','submission_counts'],
+    updatesubmissionstatus:['submissions','dashboard','submissions_for_record','submission_counts'],
+    addreply:              ['submissions','submission','dashboard','submissions_for_record','submission_counts'],
     savecontractor:        ['contractors','contractor'],
     addcontractornote:     ['contractor'],
     deletecontractornote:  ['contractor'],
@@ -3747,6 +3747,31 @@
     _contractorsThresholds = res.thresholds || { gl_expiring_days: 30, wc_expiring_days: 30 };
 
     applyContractorFilters();
+
+    // Background: fetch message counts for all loaded contractors (non-blocking)
+    fetchContractorMessageCounts(_contractorsAll.map(c => c.contractor_id));
+  }
+
+  // Module-scoped map: contractor_id → { total, unread }. Populated by the
+  // background counts fetch, consumed by renderContractorRow + renderContractorsList.
+  let _contractorMessageCounts = {};
+
+  async function fetchContractorMessageCounts(ids) {
+    if (!ids || ids.length === 0) return;
+    try {
+      const res = await api({
+        resource: 'submission_counts',
+        source_page: 'compliance',
+        source_ids: ids.join(','),
+      });
+      if (res && res.counts) {
+        _contractorMessageCounts = res.counts;
+        // Re-render if the list is still visible (user may have navigated away)
+        if ($('#contractors-list')) applyContractorFilters();
+      }
+    } catch (err) {
+      console.warn('[contractors] message-count fetch failed:', err);
+    }
   }
 
   /**
@@ -3843,6 +3868,7 @@
     const regionChips = (c.regions || []).map(r => `<span class="pill" style="padding:1px 6px;font-size:10px;">${escapeHtml(r)}</span>`).join(' ');
     const glPill = renderStatusPill('GL', c.gl_status, c.gl_expiry);
     const wcPill = renderStatusPill('WC', c.wc_status, c.wc_expiry);
+    const commsBadge = renderCommsBadge(_contractorMessageCounts[c.contractor_id]);
 
     const headline = c.headline_expiry
       ? `<span class="ctr-headline ctr-headline-${getExpiryUrgency(c.headline_expiry.date)}">${escapeHtml(c.headline_expiry.type)} ${escapeHtml(formatFriendlyDate(c.headline_expiry.date))}</span>`
@@ -3860,11 +3886,25 @@
         </div>
         <div class="ctr-row-regions">${regionChips}</div>
         <div class="ctr-row-gl">${glPill}</div>
-        <div class="ctr-row-wc">${wcPill}</div>
+        <div class="ctr-row-wc">${wcPill}${commsBadge}</div>
         <div class="ctr-row-headline">${headline}</div>
         <div class="ctr-row-updated">${escapeHtml(lastUpdated)}${updatedBy}</div>
       </div>
     `;
+  }
+
+  /**
+   * Tiny badge: 💬 N. Unread-styled when any of the threads has new activity
+   * since the user last saw them. Returns '' when count is 0 (no clutter).
+   */
+  function renderCommsBadge(count) {
+    if (!count || count.total === 0) return '';
+    const hasUnread = count.unread > 0;
+    const cls = hasUnread ? 'comms-badge comms-badge-unread' : 'comms-badge';
+    const title = hasUnread
+      ? `${count.unread} unread of ${count.total} message${count.total === 1 ? '' : 's'}`
+      : `${count.total} message${count.total === 1 ? '' : 's'}`;
+    return `<span class="${cls}" title="${escapeAttr(title)}">💬 ${count.total}</span>`;
   }
 
   function renderStatusPill(kind, status, expiry) {
@@ -3932,7 +3972,79 @@
     // Pre-warm the users cache so the Message modal opens instantly if clicked.
     // Fire-and-forget — don't block the panel render on this.
     api({ resource: 'users' }).catch(() => {});
+
+    // Background: fetch and render the Communication threads for this contractor.
+    // Panel is already rendered and interactive; threads appear when they load.
+    loadContractorCommunication(_currentContractor.contractor_id);
   }
+
+  async function loadContractorCommunication(contractorId) {
+    if (!contractorId) return;
+    try {
+      const res = await api({
+        resource: 'submissions_for_record',
+        source_page: 'compliance',
+        source_id: contractorId,
+      });
+      // User may have closed the panel
+      if (!_currentContractor || _currentContractor.contractor_id !== contractorId) return;
+      renderContractorCommunication(res && res.submissions ? res.submissions : []);
+    } catch (err) {
+      console.warn('[contractor-comms] load failed:', err);
+      const listEl = $('#ctr-comms-list');
+      if (listEl) listEl.innerHTML = `<div class="ctr-panel-empty">Couldn't load messages.</div>`;
+    }
+  }
+
+  function renderContractorCommunication(submissions) {
+    const listEl = $('#ctr-comms-list');
+    const countEl = $('#ctr-comms-count');
+    if (!listEl) return;
+
+    if (countEl) countEl.textContent = `(${submissions.length})`;
+
+    if (submissions.length === 0) {
+      listEl.innerHTML = `<div class="ctr-panel-empty">No messages about this contractor yet. Click "📨 Message about contractor" above to start one.</div>`;
+      return;
+    }
+
+    listEl.innerHTML = submissions.map(s => renderContractorCommRow(s)).join('');
+  }
+
+  function renderContractorCommRow(s) {
+    // Status styling reuses existing submission status logic
+    const statusClass = `comms-status comms-status-${(s.status || 'new').toLowerCase().replace(/\s+/g,'-')}`;
+    const priorityDot = `<span class="comms-priority comms-priority-${escapeAttr(s.priority || 'med')}" title="${escapeAttr((s.priority || 'med') + ' priority')}"></span>`;
+
+    const replyCount = s.reply_count || 0;
+    const replyBadge = replyCount > 0
+      ? `<span class="comms-reply-count">${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>`
+      : '';
+
+    const unreadDot = s.has_new_reply
+      ? `<span class="comms-unread-dot" title="New activity"></span>`
+      : '';
+
+    const lastActivity = s.updated_at ? formatRelativeTime(s.updated_at) : '';
+    const subject = s.subject || '(no subject)';
+
+    return `
+      <a class="comms-thread-row" href="#/submission/${encodeURIComponent(s.id)}">
+        ${priorityDot}
+        <div class="comms-thread-main">
+          <div class="comms-thread-title">${unreadDot}${escapeHtml(subject)}</div>
+          <div class="comms-thread-meta">
+            <span class="${statusClass}">${escapeHtml(s.status || 'New')}</span>
+            ${replyBadge}
+            <span class="comms-thread-from">${escapeHtml(s.from_user || '—')}</span>
+            ${lastActivity ? `<span class="comms-thread-time">${escapeHtml(lastActivity)}</span>` : ''}
+          </div>
+        </div>
+      </a>
+    `;
+  }
+
+  window.loadContractorCommunication = loadContractorCommunication;
 
   function renderContractorPanelLoading(summary) {
     const name = summary ? summary.contractor_name : 'Loading…';
@@ -4082,6 +4194,14 @@
               <div><div class="ctr-panel-label">Ins. phone</div>${renderCopyable(c.wc_ins_phone)}</div>
               <div><div class="ctr-panel-label">Ins. email</div>${renderCopyable(c.wc_ins_email)}</div>
               <div><div class="ctr-panel-label">Coverage for</div><div class="ctr-panel-value">${escapeHtml(c.wc_coverage_for || '—')}</div></div>
+            </div>
+          </div>
+
+          <!-- Communication -->
+          <div class="ctr-panel-section">
+            <div class="ctr-panel-section-title">Communication <span class="ctr-panel-section-count" id="ctr-comms-count">…</span></div>
+            <div class="ctr-comms-list" id="ctr-comms-list">
+              <div class="ctr-panel-empty">Loading messages…</div>
             </div>
           </div>
 
@@ -4332,7 +4452,7 @@
       to_user: toUser,
       to_region: toRegion,
       direction: direction,
-      related_contractor_id: c.contractor_id,
+      source_id: c.contractor_id,
     };
 
     const res = await api({}, 'POST', { action: 'savesubmission', submission: submission });
@@ -4353,6 +4473,16 @@
 
     showToast('Message sent', 'success');
     closeContractorMessage();
+
+    // Refresh the Communication section for this contractor so the new thread shows up
+    if (_currentContractor && _currentContractor.contractor_id === c.contractor_id) {
+      loadContractorCommunication(c.contractor_id);
+    }
+    // Bust count cache + re-fetch so the 💬 badge on list rows updates
+    invalidateApiCache(['submission_counts', 'submissions_for_record']);
+    if (_contractorsAll && _contractorsAll.length > 0) {
+      fetchContractorMessageCounts(_contractorsAll.map(x => x.contractor_id));
+    }
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -5691,7 +5821,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.7';
+  const APP_VERSION = '2.1.8';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
