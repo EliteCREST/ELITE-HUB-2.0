@@ -630,7 +630,7 @@
   const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
 
   // Resources that should be cached on GET. Writes invalidate relevant caches.
-  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_summary','reviews_individual','submissions_for_record','submission_counts'];
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_individual','submissions_for_record','submission_counts'];
 
   // Which resources to invalidate when an action happens
   const INVALIDATE_MAP = {
@@ -5751,14 +5751,39 @@
   window.submitReviewMessage = submitReviewMessage;
 
   /* ═══════════════════════════════════════════════════════════════
-     REVIEWS — CSV Import Modal (Stage 6.3 Chunk D)
+  /* ═══════════════════════════════════════════════════════════════
+     REVIEWS — CSV Import Modal (Stage 6.3, simplified v2.1.13)
      ───────────────────────────────────────────────────────────────
-     Drag-drop modal that accepts both Removify CSVs, auto-detects which
-     is which from headers, previews row counts, and submits both
-     imports atomically when the user clicks "Import Both".
+     Single-CSV modal for the Removify individual reviews export.
+     The previous dual-CSV (summary + individual) flow is retired —
+     per-location summary data now comes from aggregating individual
+     reviews when scoring is built. One drop zone, one date cutoff,
+     one submit.
+     Angel-only. Default cutoff: 2026-01-01, remembered in
+     localStorage across sessions.
      ═══════════════════════════════════════════════════════════════ */
 
-  // State for the open import modal (exists only while modal is visible)
+  const REVIEWS_DEFAULT_CUTOFF = '2026-01-01';
+  const REVIEWS_CUTOFF_STORAGE_KEY = 'eh_reviews_cutoff_date';
+
+  function _getStoredCutoffDate() {
+    try {
+      const v = localStorage.getItem(REVIEWS_CUTOFF_STORAGE_KEY);
+      return (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : REVIEWS_DEFAULT_CUTOFF;
+    } catch (e) {
+      return REVIEWS_DEFAULT_CUTOFF;
+    }
+  }
+
+  function _setStoredCutoffDate(v) {
+    try {
+      if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        localStorage.setItem(REVIEWS_CUTOFF_STORAGE_KEY, v);
+      }
+    } catch (e) { /* ignore — localStorage may be disabled */ }
+  }
+
+  // Module state while the modal is open
   let _importModalState = null;
 
   function openImportReviewsModal() {
@@ -5768,326 +5793,257 @@
       return;
     }
 
-    // If a modal already exists, remove it first (safety)
-    const existing = document.getElementById('import-reviews-backdrop');
-    if (existing) existing.remove();
+    // Close any previously-open modal
+    closeImportReviewsModal();
+
+    const initialCutoff = _getStoredCutoffDate();
 
     _importModalState = {
-      summaryFile:    null,   // { name, text, rowCount, valid, error }
-      individualFile: null,   // same shape
-      keepDays: 90,
-      running:  false,
+      file:   null,
+      cutoff: initialCutoff,
+      running: false,
+      done: false,
     };
 
     const backdrop = document.createElement('div');
+    backdrop.className = 'import-reviews-backdrop';
     backdrop.id = 'import-reviews-backdrop';
-    backdrop.className = 'modal-backdrop open import-reviews-backdrop';
     backdrop.innerHTML = `
-      <div class="import-reviews-modal" role="dialog" aria-labelledby="ir-title" onclick="event.stopPropagation()">
+      <div class="import-reviews-modal" onclick="event.stopPropagation()">
         <div class="import-reviews-header">
           <div>
-            <h2 class="import-reviews-title" id="ir-title">Import Removify CSVs</h2>
-            <p class="import-reviews-sub">Drop both exports. They'll be auto-detected and imported together.</p>
+            <div class="import-reviews-title">Import reviews</div>
+            <div class="import-reviews-sub">Upload your individual reviews CSV from Removify.</div>
           </div>
           <button class="import-reviews-close" type="button" aria-label="Close" onclick="closeImportReviewsModal()">×</button>
         </div>
-
-        <div class="import-reviews-body">
-          <div class="import-dropzones">
-            ${renderImportDropZone('summary',    'Summary CSV',         'report-reviews-export_*.csv')}
-            ${renderImportDropZone('individual', 'Individual reviews',  'reviews_*.csv')}
-          </div>
+        <div class="import-reviews-body" id="import-reviews-body">
+          ${_renderImportDropZone()}
 
           <div class="import-options">
-            <label class="import-option-label" for="ir-keep-days">
-              Keep individual reviews from the last
-              <input type="number" id="ir-keep-days" class="import-keep-days" min="1" max="99999" value="90" oninput="updateImportKeepDays(this.value)">
-              days
+            <label class="import-option-label" for="ir-cutoff-date">
+              Skip reviews dated before
+              <input type="date" id="ir-cutoff-date" class="import-cutoff-date"
+                     value="${escapeAttr(initialCutoff)}"
+                     onchange="updateImportCutoffDate(this.value)">
+              <span class="import-option-hint">Default: ${escapeHtml(REVIEWS_DEFAULT_CUTOFF)}. Remembered across imports.</span>
             </label>
-            <div class="import-option-hint">Older reviews will not be imported. Default 90. Set to 99999 to import everything.</div>
           </div>
 
-          <div class="import-preview" id="import-preview">
-            <div class="import-preview-empty">Drop both CSVs above to see a preview.</div>
+          <div class="import-preview" id="import-preview">${_renderImportPreview()}</div>
+          <div class="import-running" id="import-running" style="display:none;">
+            <div class="spinner"></div>
+            <div>Importing reviews… don't close this window.</div>
           </div>
-
           <div class="import-result" id="import-result" style="display:none;"></div>
         </div>
-
         <div class="import-reviews-footer">
           <button class="btn btn-ghost" type="button" onclick="closeImportReviewsModal()">Close</button>
           <button class="btn btn-primary" type="button" id="ir-submit" onclick="submitImportReviews()" disabled>
-            Import Both
+            Import reviews
           </button>
         </div>
       </div>
     `;
-    document.body.appendChild(backdrop);
-
-    // Close on backdrop click
     backdrop.addEventListener('click', (e) => {
       if (e.target === backdrop) closeImportReviewsModal();
     });
+    document.body.appendChild(backdrop);
 
-    // Wire the two drop zones
-    wireImportDropZone('summary');
-    wireImportDropZone('individual');
+    // Wire drag-drop on the single drop zone
+    _wireImportDropZone();
+    _updateImportSubmitEnabled();
   }
 
-  function renderImportDropZone(which, title, hint) {
+  function _renderImportDropZone() {
     return `
-      <div class="import-dropzone" id="ir-dz-${which}" data-slot="${which}">
-        <input type="file" id="ir-file-${which}" accept=".csv,text/csv" style="display:none;" onchange="handleImportFilePicked('${which}', this.files)">
-        <div class="import-dz-body" id="ir-dz-body-${which}">
-          <div class="import-dz-icon">📄</div>
-          <div class="import-dz-title">${escapeHtml(title)}</div>
-          <div class="import-dz-hint">${escapeHtml(hint)}</div>
-          <button class="btn btn-ghost import-dz-pick" type="button" onclick="document.getElementById('ir-file-${which}').click()">Choose file…</button>
+      <div class="import-dropzones-single">
+        <div class="import-dropzone" id="ir-dz" data-ready="false">
+          <div class="import-dz-body">
+            <div class="import-dz-icon">📄</div>
+            <div class="import-dz-title">Individual reviews CSV</div>
+            <div class="import-dz-hint">Drop the <code>reviews_*.csv</code> file here, or</div>
+            <button class="btn btn-secondary btn-sm import-dz-pick" type="button"
+                    onclick="document.getElementById('ir-file').click()">Choose file…</button>
+            <input type="file" id="ir-file" accept=".csv,text/csv" style="display:none;"
+                   onchange="handleImportFilePicked(this.files)">
+          </div>
         </div>
       </div>
     `;
   }
 
-  function wireImportDropZone(which) {
-    const dz = document.getElementById('ir-dz-' + which);
+  function _wireImportDropZone() {
+    const dz = document.getElementById('ir-dz');
     if (!dz) return;
-    ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, (e) => {
-      e.preventDefault(); e.stopPropagation();
+    dz.addEventListener('dragover', (e) => {
+      e.preventDefault();
       dz.classList.add('import-dz-hover');
-    }));
-    ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, (e) => {
-      e.preventDefault(); e.stopPropagation();
+    });
+    dz.addEventListener('dragleave', () => {
       dz.classList.remove('import-dz-hover');
-    }));
+    });
     dz.addEventListener('drop', (e) => {
-      const files = e.dataTransfer && e.dataTransfer.files;
-      if (files && files.length > 0) handleImportFileDropped(files);
+      e.preventDefault();
+      dz.classList.remove('import-dz-hover');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleImportFilePicked(e.dataTransfer.files);
+      }
     });
   }
 
-  // File-pick handler: respect which drop zone the user clicked.
-  // Still runs auto-detect — if the file actually looks like the OTHER type,
-  // we re-route it to the correct slot and warn.
-  function handleImportFilePicked(targetSlot, fileList) {
-    if (!fileList || fileList.length === 0) return;
-    _processFileForImport(fileList[0], targetSlot);
-  }
-
-  // Drop handler (may get multiple files): auto-route each by content detection.
-  function handleImportFileDropped(fileList) {
-    const files = Array.from(fileList || []);
-    files.slice(0, 2).forEach(f => _processFileForImport(f, null));
-  }
-
-  function _processFileForImport(file, preferredSlot) {
-    if (!file) return;
-    if (!/\.csv$/i.test(file.name) && file.type && file.type.indexOf('csv') < 0) {
-      showToast(`"${file.name}" doesn't look like a CSV.`, 'error');
+  async function handleImportFilePicked(fileList) {
+    if (!_importModalState || !fileList || fileList.length === 0) return;
+    const file = fileList[0];
+    const name = (file.name || '').toLowerCase();
+    if (!name.endsWith('.csv')) {
+      showToast('Please choose a .csv file', 'error');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = String(e.target.result || '');
-      const detected = _detectCsvType(text);   // 'summary' | 'individual' | 'unknown'
-
-      let slot = detected;
-      // If we couldn't detect and user picked a specific slot, trust them.
-      if (detected === 'unknown' && preferredSlot) slot = preferredSlot;
-      // If we did detect but user put it in the wrong slot, route correctly and warn.
-      if (preferredSlot && detected !== 'unknown' && detected !== preferredSlot) {
-        showToast(`That looks like the ${detected} CSV — moved it to the correct slot.`, 'default');
-      }
-
-      if (slot === 'unknown') {
-        showToast(`Couldn't detect CSV type. Make sure you're using the Removify export files.`, 'error');
+    try {
+      const text = await _readFileAsText(file);
+      // Validate: has headers that look like individual reviews CSV
+      if (!_looksLikeIndividualReviewsCsv(text)) {
+        showToast('This does not look like an individual reviews CSV (missing required columns: monitor, platform, rating, review_date).', 'error');
         return;
       }
-
       const rowCount = _countCsvRows(text);
-      _importModalState[slot + 'File'] = {
-        name: file.name,
-        text: text,
-        rowCount: rowCount,
-        valid: true,
-      };
-      _renderImportDropZoneState(slot);
-      _renderImportPreview();
+      _importModalState.file = { name: file.name, text, rowCount, size: file.size };
+      _renderImportDropZoneReady();
+      _refreshImportPreview();
       _updateImportSubmitEnabled();
-    };
-    reader.onerror = () => {
-      showToast(`Failed to read "${file.name}".`, 'error');
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      console.warn('[import] file read failed:', err);
+      showToast('Could not read file: ' + (err.message || String(err)), 'error');
+    }
   }
 
-  // Detect CSV type from the first header line. Returns 'summary' | 'individual' | 'unknown'.
-  function _detectCsvType(text) {
-    const firstLine = String(text || '').split(/\r?\n/, 1)[0].toLowerCase();
-    const hasSummaryCols = firstLine.indexOf('group_name') >= 0 &&
-                           firstLine.indexOf('publisher') >= 0 &&
-                           firstLine.indexOf('rating_current') >= 0;
-    const hasIndividualCols = firstLine.indexOf('monitor') >= 0 &&
-                              firstLine.indexOf('platform') >= 0 &&
-                              firstLine.indexOf('review_date') >= 0 &&
-                              firstLine.indexOf('review_text') >= 0;
-    if (hasSummaryCols)    return 'summary';
-    if (hasIndividualCols) return 'individual';
-    return 'unknown';
+  function _readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('FileReader error'));
+      reader.readAsText(file);
+    });
   }
 
-  // Quick row count (for preview). Not exact for CSVs with embedded newlines
-  // in quoted fields, but good enough for "about N rows" UI hint.
+  function _looksLikeIndividualReviewsCsv(text) {
+    const firstLine = String(text).split(/\r?\n/)[0] || '';
+    const headers = firstLine.toLowerCase();
+    return ['monitor', 'platform', 'rating', 'review_date'].every(h => headers.indexOf(h) >= 0);
+  }
+
   function _countCsvRows(text) {
-    if (!text) return 0;
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-    return Math.max(0, lines.length - 1);  // minus header
+    // Rough count of non-empty lines minus header
+    let count = 0;
+    const lines = String(text).split(/\r?\n/);
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim()) count++;
+    }
+    return count;
   }
 
-  function _renderImportDropZoneState(slot) {
-    const body = document.getElementById('ir-dz-body-' + slot);
-    if (!body) return;
-    const state = _importModalState[slot + 'File'];
-    if (state && state.valid) {
-      body.innerHTML = `
+  function _renderImportDropZoneReady() {
+    const dz = document.getElementById('ir-dz');
+    if (!dz || !_importModalState || !_importModalState.file) return;
+    const f = _importModalState.file;
+    dz.setAttribute('data-ready', 'true');
+    dz.innerHTML = `
+      <div class="import-dz-body">
         <div class="import-dz-icon import-dz-icon-ok">✓</div>
-        <div class="import-dz-title">${escapeHtml(state.name)}</div>
-        <div class="import-dz-hint">${state.rowCount.toLocaleString()} rows detected</div>
-        <button class="btn btn-ghost import-dz-pick" type="button" onclick="clearImportSlot('${slot}')">Remove</button>
-      `;
-      const dz = document.getElementById('ir-dz-' + slot);
-      if (dz) dz.classList.add('import-dz-ready');
-    }
+        <div class="import-dz-title">${escapeHtml(f.name)}</div>
+        <div class="import-dz-hint">${f.rowCount.toLocaleString()} rows · ${Math.round(f.size/1024).toLocaleString()} KB</div>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="clearImportSlot()">Clear</button>
+      </div>
+    `;
   }
 
-  function clearImportSlot(slot) {
+  function clearImportSlot() {
     if (!_importModalState) return;
-    _importModalState[slot + 'File'] = null;
-    const dz = document.getElementById('ir-dz-' + slot);
-    if (dz) dz.classList.remove('import-dz-ready');
-    const body = document.getElementById('ir-dz-body-' + slot);
-    if (body) {
-      const title = slot === 'summary' ? 'Summary CSV' : 'Individual reviews';
-      const hint  = slot === 'summary' ? 'report-reviews-export_*.csv' : 'reviews_*.csv';
-      body.innerHTML = `
-        <div class="import-dz-icon">📄</div>
-        <div class="import-dz-title">${escapeHtml(title)}</div>
-        <div class="import-dz-hint">${escapeHtml(hint)}</div>
-        <button class="btn btn-ghost import-dz-pick" type="button" onclick="document.getElementById('ir-file-${slot}').click()">Choose file…</button>
+    _importModalState.file = null;
+    const dz = document.getElementById('ir-dz');
+    if (dz) {
+      dz.setAttribute('data-ready', 'false');
+      dz.innerHTML = `
+        <div class="import-dz-body">
+          <div class="import-dz-icon">📄</div>
+          <div class="import-dz-title">Individual reviews CSV</div>
+          <div class="import-dz-hint">Drop the <code>reviews_*.csv</code> file here, or</div>
+          <button class="btn btn-secondary btn-sm import-dz-pick" type="button"
+                  onclick="document.getElementById('ir-file').click()">Choose file…</button>
+          <input type="file" id="ir-file" accept=".csv,text/csv" style="display:none;"
+                 onchange="handleImportFilePicked(this.files)">
+        </div>
       `;
     }
-    _renderImportPreview();
+    _refreshImportPreview();
     _updateImportSubmitEnabled();
   }
 
   function _renderImportPreview() {
-    const el = document.getElementById('import-preview');
-    if (!el) return;
     const s = _importModalState;
-    if (!s.summaryFile && !s.individualFile) {
-      el.innerHTML = `<div class="import-preview-empty">Drop both CSVs above to see a preview.</div>`;
-      return;
+    if (!s || !s.file) {
+      return `<div class="import-preview-empty">Drop the reviews CSV above to see a preview.</div>`;
     }
-
-    const rows = [];
-    if (s.summaryFile) {
-      rows.push(`<div class="import-preview-row">
-        <div class="import-preview-label">Summary:</div>
-        <div class="import-preview-val"><strong>${s.summaryFile.rowCount.toLocaleString()}</strong> location rows</div>
-      </div>`);
-    } else {
-      rows.push(`<div class="import-preview-row import-preview-missing">
-        <div class="import-preview-label">Summary:</div>
-        <div class="import-preview-val">Not yet loaded</div>
-      </div>`);
-    }
-    if (s.individualFile) {
-      rows.push(`<div class="import-preview-row">
-        <div class="import-preview-label">Individual:</div>
-        <div class="import-preview-val"><strong>${s.individualFile.rowCount.toLocaleString()}</strong> total rows (will filter to last ${s.keepDays} days on import)</div>
-      </div>`);
-    } else {
-      rows.push(`<div class="import-preview-row import-preview-missing">
-        <div class="import-preview-label">Individual:</div>
-        <div class="import-preview-val">Not yet loaded</div>
-      </div>`);
-    }
-
-    el.innerHTML = rows.join('');
+    return `
+      <div class="import-preview-row">
+        <div class="import-preview-label">Ready to import</div>
+        <div class="import-preview-val">
+          <strong>${s.file.rowCount.toLocaleString()}</strong> total rows in this CSV ·
+          skipping anything dated before <strong>${escapeHtml(s.cutoff)}</strong>
+        </div>
+      </div>
+    `;
   }
 
-  function updateImportKeepDays(val) {
+  function _refreshImportPreview() {
+    const el = document.getElementById('import-preview');
+    if (el) el.innerHTML = _renderImportPreview();
+  }
+
+  function updateImportCutoffDate(val) {
     if (!_importModalState) return;
-    const n = Math.max(1, Math.min(99999, Number(val) || 90));
-    _importModalState.keepDays = n;
-    _renderImportPreview();
+    const cleaned = String(val || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) return;   // browser should prevent; defensive
+    _importModalState.cutoff = cleaned;
+    _setStoredCutoffDate(cleaned);
+    _refreshImportPreview();
   }
 
   function _updateImportSubmitEnabled() {
     const btn = document.getElementById('ir-submit');
-    if (!btn || !_importModalState) return;
-    const ready = !!(_importModalState.summaryFile && _importModalState.individualFile) && !_importModalState.running;
-    btn.disabled = !ready;
+    if (!btn) return;
+    const s = _importModalState;
+    const ok = s && s.file && !s.running && !s.done;
+    btn.disabled = !ok;
   }
 
   async function submitImportReviews() {
-    if (!_importModalState) return;
-    const { summaryFile, individualFile, keepDays } = _importModalState;
-    if (!summaryFile || !individualFile) {
-      showToast('Both files are required.', 'error');
-      return;
-    }
-
+    if (!_importModalState || !_importModalState.file) return;
     _importModalState.running = true;
     _updateImportSubmitEnabled();
+    document.getElementById('import-running').style.display = '';
+    document.getElementById('import-preview').style.display = 'none';
     const resultEl = document.getElementById('import-result');
-    const previewEl = document.getElementById('import-preview');
-    if (previewEl) previewEl.style.display = 'none';
-    if (resultEl) {
-      resultEl.style.display = 'block';
-      resultEl.innerHTML = `
-        <div class="import-running">
-          <div class="skeleton-spinner"></div>
-          <div>Importing both CSVs… this may take up to a minute.</div>
-        </div>
-      `;
-    }
+    resultEl.style.display = 'none';
+    resultEl.innerHTML = '';
 
-    // Run both imports. Summary first (small, fast), then individual (larger).
-    let summaryRes = null, individualRes = null, aborted = false;
-    try {
-      summaryRes = await api({}, 'POST', {
-        action: 'importreviewssummary',
-        csv_text: summaryFile.text,
-      });
-      if (summaryRes && summaryRes.error) {
-        // Don't abort on summary error — individual is independent. Log and continue.
-        console.warn('[import] summary failed:', summaryRes.error);
-      }
-    } catch (err) {
-      summaryRes = { error: err.message || 'Network error during summary import' };
-    }
-
-    try {
-      individualRes = await api({}, 'POST', {
-        action: 'importreviewsindividual',
-        csv_text: individualFile.text,
-        options: { keepDays: keepDays },
-      });
-      if (individualRes && individualRes.error) {
-        console.warn('[import] individual failed:', individualRes.error);
-      }
-    } catch (err) {
-      individualRes = { error: err.message || 'Network error during individual import' };
-    }
+    const res = await api({}, 'POST', {
+      action: 'importreviewsindividual',
+      csv_text: _importModalState.file.text,
+      options: { cutoffDate: _importModalState.cutoff },
+    });
 
     _importModalState.running = false;
-    _renderImportResult(summaryRes, individualRes);
+    _importModalState.done = true;
+    document.getElementById('import-running').style.display = 'none';
+    resultEl.style.display = '';
+    resultEl.innerHTML = _renderImportResult(res);
+    _updateImportSubmitEnabled();
 
-    // Any success → invalidate frontend cache for reviews & refresh the table
-    const anySuccess = (summaryRes && !summaryRes.error) || (individualRes && !individualRes.error);
-    if (anySuccess) {
-      invalidateApiCache(['reviews_summary', 'reviews_individual', 'submission_counts']);
-      // If we're on the reviews page, reload data
+    // Any success: invalidate caches + refresh the visible reviews page
+    if (res && !res.error) {
+      invalidateApiCache(['reviews_individual', 'submission_counts']);
       if (typeof loadReviewsIndividual === 'function' && document.getElementById('reviews-list')) {
         loadReviewsIndividual({
           region: _reviewsCurrentParams.region,
@@ -6102,50 +6058,48 @@
     }
   }
 
-  function _renderImportResult(summaryRes, individualRes) {
-    const el = document.getElementById('import-result');
-    if (!el) return;
-    const block = (title, res) => {
-      if (!res) return `<div class="import-result-block import-result-error">
-        <div class="import-result-title">${escapeHtml(title)}</div>
-        <div class="import-result-detail">No response received.</div>
+  function _renderImportResult(res) {
+    if (!res) {
+      return `<div class="import-result-block import-result-error">
+        <div class="import-result-title">⚠ Import failed</div>
+        <div class="import-result-detail">No response from server.</div>
+        <div class="import-result-footer">
+          <button class="btn btn-primary btn-sm" onclick="closeImportReviewsModal()">Done</button>
+        </div>
       </div>`;
-      if (res.error) return `<div class="import-result-block import-result-error">
-        <div class="import-result-title">❌ ${escapeHtml(title)} — failed</div>
+    }
+    if (res.error) {
+      return `<div class="import-result-block import-result-error">
+        <div class="import-result-title">⚠ Import did not run</div>
         <div class="import-result-detail">${escapeHtml(res.error)}</div>
+        <div class="import-result-footer">
+          <button class="btn btn-primary btn-sm" onclick="closeImportReviewsModal()">Done</button>
+        </div>
       </div>`;
+    }
+    // Success
+    const breakdown = res.region_breakdown || {};
+    const breakdownHtml = Object.keys(breakdown).sort().map(r =>
+      `<span class="import-result-region">${escapeHtml(r.toUpperCase())}: ${breakdown[r]}</span>`
+    ).join(' ');
+    const skipNote = [];
+    if (res.skipped_by_date > 0) skipNote.push(`${res.skipped_by_date.toLocaleString()} skipped (before ${escapeHtml(res.cutoff_date)})`);
+    if (res.skipped_dedupe > 0)  skipNote.push(`${res.skipped_dedupe.toLocaleString()} duplicates skipped`);
 
-      // Success — different shape depending on which import
-      const parts = [];
-      if (typeof res.imported === 'number')        parts.push(`<strong>${res.imported}</strong> imported`);
-      if (typeof res.updated === 'number' && res.updated > 0)          parts.push(`${res.updated} updated`);
-      if (typeof res.skipped === 'number' && res.skipped > 0)          parts.push(`${res.skipped} skipped`);
-      if (typeof res.skipped_dedupe === 'number' && res.skipped_dedupe > 0)   parts.push(`${res.skipped_dedupe} duplicates skipped`);
-      if (typeof res.skipped_by_date === 'number' && res.skipped_by_date > 0) parts.push(`${res.skipped_by_date} older than ${res.keep_days || 90} days`);
-      if (Array.isArray(res.errors) && res.errors.length > 0)          parts.push(`<span class="import-result-warn">${res.errors.length} row-level errors</span>`);
-
-      const regionLine = res.region_breakdown
-        ? Object.entries(res.region_breakdown).map(([r, c]) => `${(r || '?').toUpperCase()}: ${c}`).join(' · ')
-        : '';
-
-      return `<div class="import-result-block import-result-ok">
-        <div class="import-result-title">✓ ${escapeHtml(title)}</div>
-        <div class="import-result-detail">${parts.join(' · ')}</div>
-        ${regionLine ? `<div class="import-result-regions">${escapeHtml(regionLine)}</div>` : ''}
-      </div>`;
-    };
-
-    el.innerHTML = `
-      ${block('Summary CSV', summaryRes)}
-      ${block('Individual reviews CSV', individualRes)}
-      <div class="import-result-footer">
-        <button class="btn btn-primary" type="button" onclick="closeImportReviewsModal()">Done</button>
+    return `
+      <div class="import-result-block import-result-ok">
+        <div class="import-result-title">✓ Import complete</div>
+        <div class="import-result-detail">
+          <strong>${(res.imported || 0).toLocaleString()}</strong> new reviews imported.
+          ${skipNote.length ? '<br>' + skipNote.join(' · ') : ''}
+        </div>
+        ${breakdownHtml ? `<div class="import-result-regions">${breakdownHtml}</div>` : ''}
+        ${(res.errors && res.errors.length) ? `<div class="import-result-warn">${res.errors.length} row${res.errors.length === 1 ? '' : 's'} had errors.</div>` : ''}
+        <div class="import-result-footer">
+          <button class="btn btn-primary btn-sm" onclick="closeImportReviewsModal()">Done</button>
+        </div>
       </div>
     `;
-
-    // Hide the submit button — job is done
-    const btn = document.getElementById('ir-submit');
-    if (btn) btn.style.display = 'none';
   }
 
   function closeImportReviewsModal() {
@@ -6155,15 +6109,13 @@
   }
 
   // Expose to inline handlers
-  window.debouncedLoadReviews    = debouncedLoadReviews;
-  window.applyReviewsFilters     = applyReviewsFilters;
   window.openImportReviewsModal  = openImportReviewsModal;
   window.closeImportReviewsModal = closeImportReviewsModal;
   window.handleImportFilePicked  = handleImportFilePicked;
-  window.handleImportFileDropped = handleImportFileDropped;
   window.clearImportSlot         = clearImportSlot;
-  window.updateImportKeepDays    = updateImportKeepDays;
+  window.updateImportCutoffDate  = updateImportCutoffDate;
   window.submitImportReviews     = submitImportReviews;
+
 
   route('/legal', () => placeholder('Legal', 'Stage 6',
     'Legal cases across all regions.',
@@ -6378,7 +6330,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.12';
+  const APP_VERSION = '2.1.13';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
