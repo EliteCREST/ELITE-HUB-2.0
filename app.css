@@ -3736,7 +3736,16 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
    ═══════════════════════════════════════════════════════════════════════ */
 
 .import-reviews-backdrop {
-  /* Uses existing .modal-backdrop base; this is just a marker class */
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  animation: fadeIn 150ms ease-out;
 }
 
 .import-reviews-modal {
