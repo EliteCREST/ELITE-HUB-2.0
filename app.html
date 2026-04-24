@@ -621,22 +621,6 @@
       if (cur) sessionStorage.removeItem('eh2_debug'); else sessionStorage.setItem('eh2_debug','1');
       location.reload();
     }
-
-    // '/' to focus the inbox search input when on /inbox and not already typing
-    if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const target = e.target;
-      const tag = target && target.tagName;
-      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
-                       (target && target.isContentEditable);
-      if (!isTyping && location.hash.startsWith('#/inbox')) {
-        const searchEl = document.getElementById('inbox-search-input');
-        if (searchEl) {
-          e.preventDefault();
-          searchEl.focus();
-          searchEl.select();
-        }
-      }
-    }
   });
 
   // In-memory response cache. Key = request URL. Value = {data, timestamp}.
@@ -1506,7 +1490,7 @@
           <div class="inbox-search">
             <span class="inbox-search-icon">🔎</span>
             <input type="text" id="inbox-search-input" class="inbox-search-input"
-                   placeholder="Search subject, name, message… (/ to focus, Enter for deep search)"
+                   placeholder="Search subject, name, message… (Enter for deep search)"
                    value="${escapeAttr(searchValue)}"
                    autocomplete="off">
             <button class="inbox-search-clear" id="inbox-search-clear" type="button" title="Clear search"
@@ -3978,6 +3962,7 @@
     onAfterRender: (params) => {
       const tab = params.tab || 'overview';
       if (tab === 'compliance') loadContractorsTable({ region: params.code.toUpperCase() });
+      else if (tab === 'reviews') loadReviewsIndividual({ region: params.code, params: params || {} });
     }
   });
 
@@ -3985,11 +3970,13 @@
     if (tab === 'compliance') {
       return renderContractorsBody({ regionCode: regionCode });
     }
+    if (tab === 'reviews') {
+      return renderReviewsBody({ scopedRegion: regionCode });
+    }
     // other tabs — placeholders until later stages
     const labels = {
       overview: 'Overview',
       fleet:    'Fleet',
-      reviews:  'Reviews',
       legal:    'Legal',
     };
     return `<div class="view-section">
@@ -5280,22 +5267,38 @@
   ), { title: 'Fleet' });
 
   /* ═══════════════════════════════════════════════════════════════
-     REVIEWS — admin page (Stage 6.3 Chunk B)
+     REVIEWS — individual reviews workflow (Stage 6.3 Chunk C.3)
+     ───────────────────────────────────────────────────────────────
+     Replaces the previous summary-per-location admin page. Individual
+     reviews are the unit of work; each review is a card with the same
+     communication pattern as contractors:
+       - 💬 N badge when messages exist about this review
+       - "Message about this review" button (creates a submission)
+       - "View N messages" button (deep-links to filtered inbox)
+     The summary-per-location dataset still exists in the backend and
+     will feed the future scoring system — just no longer rendered here.
      ═══════════════════════════════════════════════════════════════ */
 
-  let _reviewsSummaryCache = [];    // filtered view (currently displayed)
-  let _reviewsSummaryAll = [];      // everything fetched once
-  let _reviewsSearchTimer = null;
-  let _reviewsScopedRegion = null;  // when on a region page, fixed to that region
+  // Module-scoped state for the individual-reviews workspace
+  let _reviewsIndividualAll = [];    // all reviews loaded from backend
+  let _reviewsCurrentParams  = {};   // params we loaded with (for re-render)
+  let _reviewsMessageCounts  = {};   // review_hash → { total, unread }
+  let _reviewsSearchTimer    = null;
+  let _reviewsExpandedHashes = new Set();  // which cards have "Read more" expanded
 
   function debouncedLoadReviews() {
     if (_reviewsSearchTimer) clearTimeout(_reviewsSearchTimer);
     _reviewsSearchTimer = setTimeout(() => applyReviewsFilters(), 80);
   }
 
-  route('/reviews', () => {
+  route('/reviews', (params) => {
     const me = getLoggedInUser();
     const canImport = me && me.username === 'angel';
+    const ratingFilter  = params.rating_filter  || 'all';  // 'all' or 'negative' (1-3)
+    const regionFilter  = params.region_filter  || '';
+    const platformFilter= params.platform_filter|| '';
+    const searchValue   = params.search         || '';
+
     return `
       <div class="view reviews-view">
         <div class="contractors-header">
@@ -5303,258 +5306,449 @@
             <h1 class="view-title">Reviews</h1>
             <p class="view-sub" id="reviews-sub">Loading…</p>
           </div>
-          ${canImport ? `<button class="btn btn-primary" onclick="openImportReviewsModal()">📥 Import CSV</button>` : ''}
+          <div style="display:flex; gap: var(--sp-2);">
+            ${canImport ? `<button class="btn btn-secondary" onclick="openImportReviewsModal()">📥 Import CSV</button>` : ''}
+          </div>
         </div>
-        ${renderReviewsBody({})}
+
+        ${renderReviewsBody({ regionFilter, ratingFilter, platformFilter, searchValue, scopedRegion: null })}
       </div>
     `;
   }, {
     title: 'Reviews',
-    onAfterRender: () => loadReviewsSummary({})
+    onAfterRender: (params) => loadReviewsIndividual({ region: undefined, params: params || {} })
   });
 
   /**
-   * Returns the HTML for the reviews summary table section.
-   * Used on the admin /reviews page; will be reused on region reviews tab (Chunk C).
-   * options.regionCode → pin to a single region
+   * Renders the reviews body (toolbar + card list). Shared between the
+   * admin /reviews page and the region /region/:code?tab=reviews tab.
+   * opts.scopedRegion — when present, pins to one region (region tab view)
    */
-  function renderReviewsBody(options) {
-    options = options || {};
-    const isRegionScoped = !!options.regionCode;
+  function renderReviewsBody(opts) {
+    opts = opts || {};
+    const isRegionScoped = !!opts.scopedRegion;
+    const ratingFilter   = opts.ratingFilter   || 'all';
+    const regionFilter   = opts.regionFilter   || '';
+    const platformFilter = opts.platformFilter || '';
+    const searchValue    = opts.searchValue    || '';
+
+    const regionOptions = REGIONS.map(r =>
+      `<option value="${r.code}" ${regionFilter === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`
+    ).join('');
+
     return `
-      <div class="contractors-toolbar">
-        <input type="text" id="rev-search" class="ctr-filter-input" placeholder="Search by location name or group…" oninput="debouncedLoadReviews()">
-        ${!isRegionScoped ? `
-          <select id="rev-region" class="ctr-filter-select" onchange="applyReviewsFilters()">
-            <option value="">All regions</option>
-            ${REGIONS.map(r => `<option value="${r.code}">${escapeHtml(r.name)}</option>`).join('')}
-            <option value="ot">Other</option>
-          </select>
-        ` : `<input type="hidden" id="rev-region" value="${escapeAttr(options.regionCode)}">`}
-        <select id="rev-publisher" class="ctr-filter-select" onchange="applyReviewsFilters()">
-          <option value="">All publishers</option>
-          <option value="Google My Business">Google My Business</option>
-          <option value="Google Maps">Google Maps</option>
-          <option value="Facebook">Facebook</option>
-        </select>
-        <select id="rev-rating" class="ctr-filter-select" onchange="applyReviewsFilters()">
-          <option value="">All ratings</option>
-          <option value="5">5★ only</option>
-          <option value="4+">4★ and up</option>
-          <option value="below4">Below 4★</option>
-          <option value="negatives">Has new negatives</option>
-        </select>
-      </div>
+      <div class="reviews-toolbar">
+        <input type="text" id="rev-search" class="ctr-filter-input"
+               placeholder="Search reviewer, text, or platform…"
+               value="${escapeAttr(searchValue)}"
+               oninput="debouncedLoadReviews()">
 
-      <div class="contractors-summary" id="reviews-summary-strip">
-        <span class="skeleton skeleton-line" style="height:22px;width:90px;border-radius:9999px;display:inline-block;"></span>
-        <span class="skeleton skeleton-line" style="height:22px;width:110px;border-radius:9999px;display:inline-block;"></span>
-        <span class="skeleton skeleton-line" style="height:22px;width:120px;border-radius:9999px;display:inline-block;"></span>
-      </div>
-
-      <div class="contractors-list-wrap">
-        <div class="reviews-table" id="reviews-table">
-          ${[0,1,2,3,4,5].map(() => `
-            <div class="rev-row rev-row-skeleton">
-              <div class="rev-cell-name">
-                <div class="skeleton skeleton-line" style="height:14px;width:70%;margin-bottom:4px;"></div>
-                <div class="skeleton skeleton-line" style="height:10px;width:40%;"></div>
-              </div>
-              <div class="rev-cell-rating"><div class="skeleton skeleton-line" style="height:14px;width:60px;"></div></div>
-              <div class="rev-cell-change"><div class="skeleton skeleton-line" style="height:14px;width:40px;"></div></div>
-              <div class="rev-cell-total"><div class="skeleton skeleton-line" style="height:14px;width:50px;"></div></div>
-              <div class="rev-cell-new"><div class="skeleton skeleton-line" style="height:14px;width:40px;"></div></div>
-              <div class="rev-cell-neg"><div class="skeleton skeleton-line" style="height:16px;width:40px;border-radius:9999px;"></div></div>
-            </div>
-          `).join('')}
+        <div class="rev-toggle" role="tablist" aria-label="Rating filter">
+          <button class="rev-toggle-btn ${ratingFilter === 'all' ? 'active' : ''}"
+                  onclick="setReviewsRatingFilter('all')" type="button">All</button>
+          <button class="rev-toggle-btn ${ratingFilter === 'negative' ? 'active' : ''}"
+                  onclick="setReviewsRatingFilter('negative')" type="button">1–3★ only</button>
         </div>
+
+        ${!isRegionScoped ? `
+        <select id="rev-region-filter" class="ctr-filter-input" onchange="setReviewsRegionFilter(this.value)">
+          <option value="" ${regionFilter === '' ? 'selected' : ''}>All regions</option>
+          ${regionOptions}
+        </select>
+        ` : ''}
+
+        <select id="rev-platform-filter" class="ctr-filter-input" onchange="setReviewsPlatformFilter(this.value)">
+          <option value="" ${platformFilter === '' ? 'selected' : ''}>All platforms</option>
+          <option value="google"  ${platformFilter === 'google'  ? 'selected' : ''}>Google</option>
+          <option value="facebook"${platformFilter === 'facebook'? 'selected' : ''}>Facebook</option>
+          <option value="yelp"    ${platformFilter === 'yelp'    ? 'selected' : ''}>Yelp</option>
+          <option value="bbb"     ${platformFilter === 'bbb'     ? 'selected' : ''}>BBB</option>
+        </select>
+      </div>
+
+      <div class="reviews-list" id="reviews-list">
+        <div class="skeleton skeleton-line" style="height:120px;margin-bottom:8px;"></div>
+        <div class="skeleton skeleton-line" style="height:120px;margin-bottom:8px;"></div>
+        <div class="skeleton skeleton-line" style="height:120px;margin-bottom:8px;"></div>
       </div>
     `;
   }
 
   /**
-   * Fetch all summary snapshots ONCE (latest-only, optionally region-scoped),
-   * then filter client-side for instant response on filter/search changes.
+   * Load individual reviews. If opts.region is set, pins to one region.
+   * opts.params passes the URL-level filters (rating/region/platform/search)
+   * so they survive a fresh render.
    */
-  async function loadReviewsSummary(overrides) {
-    overrides = overrides || {};
-    const listEl = $('#reviews-table');
-    if (!listEl) return;
-    _reviewsScopedRegion = overrides.region || null;
+  async function loadReviewsIndividual(opts) {
+    opts = opts || {};
+    const params = opts.params || {};
+    _reviewsCurrentParams = {
+      region:          opts.region || '',    // scoped region (from region tab)
+      ratingFilter:    params.rating_filter   || 'all',
+      regionFilter:    params.region_filter   || '',
+      platformFilter:  params.platform_filter || '',
+      searchValue:     params.search          || '',
+    };
 
-    const params = { resource: 'reviews_summary', latest_only: 'true' };
-    if (overrides.region) params.region = overrides.region;
+    const listEl = document.getElementById('reviews-list');
+    if (!listEl) return;
 
     try {
-      const res = await api(params);
-      if (res && res.error) {
-        listEl.innerHTML = `<div class="empty-state"><div class="empty-state-title">Couldn't load reviews</div><div class="empty-state-sub">${escapeHtml(res.error)}</div></div>`;
-        const sub = $('#reviews-sub'); if (sub) sub.textContent = 'Error loading reviews.';
-        return;
-      }
-      _reviewsSummaryAll = (res && res.items) || [];
+      // Backend expects region param. Scoped region from region tab wins over filter dropdown.
+      const apiParams = { resource: 'reviews_individual' };
+      const effectiveRegion = _reviewsCurrentParams.region || _reviewsCurrentParams.regionFilter;
+      if (effectiveRegion) apiParams.region = effectiveRegion;
+
+      const res = await api(apiParams);
+      _reviewsIndividualAll = (res && res.reviews) || [];
+
+      // Fire-and-forget batch count fetch for badges
+      fetchReviewMessageCounts(_reviewsIndividualAll.map(r => r.review_hash).filter(Boolean));
+
       applyReviewsFilters();
     } catch (err) {
-      console.error('[reviews] loadReviewsSummary failed:', err);
-      listEl.innerHTML = `<div class="empty-state"><div class="empty-state-title">Network error</div><div class="empty-state-sub">${escapeHtml(err.message || String(err))}</div></div>`;
+      console.warn('[reviews] load failed:', err);
+      listEl.innerHTML = `<div class="card" style="border-color:var(--red);">
+        <div style="color:var(--red);">⚠ ${escapeHtml(String(err.message || err))}</div>
+      </div>`;
+    }
+  }
+
+  async function fetchReviewMessageCounts(hashes) {
+    if (!hashes || hashes.length === 0) return;
+    try {
+      const res = await api({
+        resource: 'submission_counts',
+        source_page: 'reviews',
+        source_ids: hashes.join(','),
+      });
+      if (res && res.counts) {
+        _reviewsMessageCounts = res.counts;
+        // Re-render if list is still visible
+        if (document.getElementById('reviews-list')) applyReviewsFilters();
+      }
+    } catch (err) {
+      console.warn('[reviews] count fetch failed:', err);
     }
   }
 
   /**
-   * Client-side filtering: uses _reviewsSummaryAll as source, writes filtered rows to _reviewsSummaryCache,
-   * renders table + summary strip. Fast — no API calls.
+   * Apply client-side filters + render the card list. Uses _reviewsIndividualAll
+   * as source. Keeps current filters from _reviewsCurrentParams.
    */
   function applyReviewsFilters() {
-    const searchEl    = $('#rev-search');
-    const regionEl    = $('#rev-region');
-    const publisherEl = $('#rev-publisher');
-    const ratingEl    = $('#rev-rating');
-    if (!$('#reviews-table')) return;
+    const listEl = document.getElementById('reviews-list');
+    const subEl  = document.getElementById('reviews-sub');
+    if (!listEl) return;
 
-    const search    = (searchEl    && searchEl.value    || '').trim().toLowerCase();
-    const region    = (regionEl    && regionEl.value    || '').trim().toLowerCase();
-    const publisher = (publisherEl && publisherEl.value || '').trim();
-    const rating    = (ratingEl    && ratingEl.value    || '').trim();
+    const p = _reviewsCurrentParams;
+    // Update search value from the live input (oninput already debounces)
+    const searchEl = document.getElementById('rev-search');
+    const searchQ  = searchEl ? String(searchEl.value || '').toLowerCase().trim() : (p.searchValue || '').toLowerCase().trim();
 
-    let rows = _reviewsSummaryAll.slice();
+    let rows = _reviewsIndividualAll.slice();
 
-    if (region) {
-      rows = rows.filter(r => (r.region || '').toLowerCase() === region);
+    // Rating filter: 'negative' = 1-3 stars, 'all' = all
+    if (p.ratingFilter === 'negative') {
+      rows = rows.filter(r => Number(r.rating) >= 1 && Number(r.rating) <= 3);
     }
-    if (publisher) {
-      rows = rows.filter(r => r.publisher === publisher);
+    // Platform filter
+    if (p.platformFilter) {
+      rows = rows.filter(r => String(r.platform || '').toLowerCase() === p.platformFilter);
     }
-    if (rating) {
-      if (rating === '5')        rows = rows.filter(r => r.rating_current >= 4.95);
-      else if (rating === '4+')  rows = rows.filter(r => r.rating_current >= 4);
-      else if (rating === 'below4') rows = rows.filter(r => r.rating_current > 0 && r.rating_current < 4);
-      else if (rating === 'negatives') rows = rows.filter(r => r.negative_reviews_new > 0);
+    // Region filter (only applies if not already scoped at fetch time)
+    if (!p.region && p.regionFilter) {
+      rows = rows.filter(r => String(r.region || '').toLowerCase() === p.regionFilter);
     }
-    if (search) {
-      rows = rows.filter(r =>
-        (r.name || '').toLowerCase().indexOf(search) >= 0 ||
-        (r.group_name || '').toLowerCase().indexOf(search) >= 0
-      );
+    // Search — substring across author_name, review_text, platform, monitor_name
+    if (searchQ) {
+      rows = rows.filter(r => {
+        const hay = [r.author_name, r.review_text, r.platform, r.monitor_name]
+          .map(x => String(x || '').toLowerCase()).join(' ');
+        return hay.indexOf(searchQ) >= 0;
+      });
     }
+    // Newest first
+    rows.sort((a, b) => new Date(b.review_date || 0) - new Date(a.review_date || 0));
 
-    // Sort: region, then publisher, then name
-    rows.sort((a, b) => {
-      const ra = (a.region || '').localeCompare(b.region || '');
-      if (ra) return ra;
-      const pa = (a.publisher || '').localeCompare(b.publisher || '');
-      if (pa) return pa;
-      return (a.name || '').localeCompare(b.name || '');
-    });
-
-    _reviewsSummaryCache = rows;
-    renderReviewsTable(rows);
-    renderReviewsSummaryStrip(rows);
-  }
-
-  function renderReviewsSummaryStrip(rows) {
-    const el = $('#reviews-summary-strip');
-    if (!el) return;
+    if (subEl) {
+      subEl.textContent = rows.length === 0
+        ? 'No reviews match your filters.'
+        : `${rows.length} ${rows.length === 1 ? 'review' : 'reviews'}${p.ratingFilter === 'negative' ? ' (1–3★ only)' : ''}.`;
+    }
 
     if (rows.length === 0) {
-      el.innerHTML = `<span class="ctr-summary-item">0 locations</span>`;
-      const sub = $('#reviews-sub');
-      if (sub) sub.textContent = 'No reviews yet. Import a CSV to get started.';
-      return;
-    }
-
-    const totalLocations = rows.length;
-    const totalReviews   = rows.reduce((sum, r) => sum + (r.review_counts_total || 0), 0);
-    const newReviews     = rows.reduce((sum, r) => sum + (r.review_counts_new || 0), 0);
-    const newNegatives   = rows.reduce((sum, r) => sum + (r.negative_reviews_new || 0), 0);
-    const newFiveStars   = rows.reduce((sum, r) => sum + (r.five_star_reviews_new || 0), 0);
-
-    // Weighted avg rating (weight by review_counts_total; skip 0-count rows)
-    let weightedSum = 0, weightTotal = 0;
-    rows.forEach(r => {
-      if (r.rating_current > 0 && r.review_counts_total > 0) {
-        weightedSum += r.rating_current * r.review_counts_total;
-        weightTotal += r.review_counts_total;
-      }
-    });
-    const avgRating = weightTotal > 0 ? (weightedSum / weightTotal).toFixed(2) : '—';
-
-    el.innerHTML = `
-      <span class="ctr-summary-item"><strong>${totalLocations}</strong> location${totalLocations === 1 ? '' : 's'}</span>
-      <span class="ctr-summary-item">Avg <strong>${avgRating}</strong>★</span>
-      <span class="ctr-summary-item"><strong>${totalReviews.toLocaleString()}</strong> total reviews</span>
-      <span class="ctr-summary-item">${newReviews} new</span>
-      ${newNegatives > 0 ? `<span class="ctr-summary-item ctr-summary-red"><strong>${newNegatives}</strong> new 1-3★</span>` : ''}
-      ${newFiveStars > 0 ? `<span class="ctr-summary-item rev-summary-green">${newFiveStars} new 5★</span>` : ''}
-    `;
-
-    const sub = $('#reviews-sub');
-    if (sub) {
-      const latest = rows.reduce((acc, r) => (r.import_date > acc ? r.import_date : acc), '');
-      sub.textContent = latest
-        ? `${totalLocations} location${totalLocations === 1 ? '' : 's'} · last import ${latest}`
-        : `${totalLocations} location${totalLocations === 1 ? '' : 's'}`;
-    }
-  }
-
-  function renderReviewsTable(rows) {
-    const el = $('#reviews-table');
-    if (!el) return;
-    if (rows.length === 0) {
-      el.innerHTML = `<div class="empty-state">
+      listEl.innerHTML = `<div class="empty-state">
         <div class="empty-state-title">No reviews match your filters</div>
-        <div class="empty-state-sub">Try clearing filters or importing a Removify CSV.</div>
+        <div class="empty-state-sub">Try changing the filters above, or click "All" to see everything.</div>
       </div>`;
       return;
     }
 
-    const regionName = code => {
-      const r = REGIONS.find(x => x.code === code);
-      return r ? r.name : (code === 'ot' ? 'Other' : (code || '—').toUpperCase());
-    };
-
-    el.innerHTML = `
-      <div class="rev-row rev-row-head">
-        <div class="rev-cell-name">Location</div>
-        <div class="rev-cell-rating">Rating</div>
-        <div class="rev-cell-change">Change</div>
-        <div class="rev-cell-total">Total</div>
-        <div class="rev-cell-new">New</div>
-        <div class="rev-cell-neg">New 1-3★</div>
-      </div>
-      ${rows.map(r => renderReviewRow(r, regionName)).join('')}
-    `;
+    listEl.innerHTML = rows.map(r => renderReviewCard(r)).join('');
   }
 
-  function renderReviewRow(r, regionName) {
-    const rating = r.rating_current > 0 ? r.rating_current.toFixed(1) : '—';
-    const ratingClass = r.rating_current >= 4.5 ? 'rev-rating-good'
-      : r.rating_current >= 4.0 ? 'rev-rating-mid'
-      : r.rating_current > 0   ? 'rev-rating-bad'
-      : 'rev-rating-none';
+  // Filter toggle actions — update URL without triggering a full route re-render
+  function _updateReviewsUrlParam(name, value) {
+    const h = location.hash || '#/reviews';
+    const [path, qs] = h.split('?');
+    const params = new URLSearchParams(qs || '');
+    if (value) params.set(name, value); else params.delete(name);
+    const newHash = path + (params.toString() ? '?' + params.toString() : '');
+    history.replaceState(null, '', newHash);
+  }
 
-    let changeDisplay = '';
-    if (r.rating_change > 0) changeDisplay = `<span class="rev-change-up">▲ +${r.rating_change.toFixed(1)}</span>`;
-    else if (r.rating_change < 0) changeDisplay = `<span class="rev-change-down">▼ ${r.rating_change.toFixed(1)}</span>`;
-    else changeDisplay = `<span class="rev-change-flat">—</span>`;
+  function setReviewsRatingFilter(value) {
+    _reviewsCurrentParams.ratingFilter = value;
+    _updateReviewsUrlParam('rating_filter', value === 'all' ? '' : value);
+    // Update button active states without full re-render
+    document.querySelectorAll('.rev-toggle-btn').forEach(btn => btn.classList.remove('active'));
+    const activeBtn = Array.from(document.querySelectorAll('.rev-toggle-btn')).find(btn =>
+      btn.textContent.includes(value === 'all' ? 'All' : '1–3★')
+    );
+    if (activeBtn) activeBtn.classList.add('active');
+    applyReviewsFilters();
+  }
 
-    const negBadge = r.negative_reviews_new > 0
-      ? `<span class="rev-badge rev-badge-negative">${r.negative_reviews_new}</span>`
-      : `<span class="rev-cell-muted">0</span>`;
+  function setReviewsRegionFilter(value) {
+    _reviewsCurrentParams.regionFilter = value;
+    _updateReviewsUrlParam('region_filter', value);
+    // If we're on the admin /reviews page with no scoped region, and the region
+    // filter changed, refetch with the new scope (server-side filter is cheaper).
+    if (!_reviewsCurrentParams.region) {
+      loadReviewsIndividual({ params: {
+        rating_filter: _reviewsCurrentParams.ratingFilter,
+        region_filter: value,
+        platform_filter: _reviewsCurrentParams.platformFilter,
+        search: _reviewsCurrentParams.searchValue,
+      }});
+    } else {
+      applyReviewsFilters();
+    }
+  }
+
+  function setReviewsPlatformFilter(value) {
+    _reviewsCurrentParams.platformFilter = value;
+    _updateReviewsUrlParam('platform_filter', value);
+    applyReviewsFilters();
+  }
+
+  // Render a single review as a card with the "Message about this review" pattern
+  function renderReviewCard(r) {
+    const rating   = Number(r.rating) || 0;
+    const stars    = '★'.repeat(rating) + '☆'.repeat(Math.max(0, 5 - rating));
+    const ratingClass = rating <= 2 ? 'rev-rating-bad' : (rating === 3 ? 'rev-rating-ok' : 'rev-rating-good');
+
+    const platform = String(r.platform || '').toLowerCase();
+    const platformLabel = platform
+      ? platform[0].toUpperCase() + platform.slice(1)
+      : '—';
+
+    const dateStr  = r.review_date ? formatFriendlyDate(r.review_date) : '';
+    const author   = r.author_name || 'Anonymous';
+    const regionUp = String(r.region || '').toUpperCase();
+    const text     = String(r.review_text || '');
+
+    // Truncation: show ~320 chars max unless expanded
+    const TRUNC = 320;
+    const isExpanded = _reviewsExpandedHashes.has(r.review_hash);
+    const needsTruncation = text.length > TRUNC;
+    const shownText = (needsTruncation && !isExpanded) ? text.slice(0, TRUNC) + '…' : text;
+
+    const badge   = renderCommsBadge(_reviewsMessageCounts[r.review_hash]);
+    const count   = _reviewsMessageCounts[r.review_hash];
+    const hasMsgs = count && count.total > 0;
+    const btnUnread = count && count.unread > 0 ? 'ctr-view-messages-unread' : '';
+
+    const reviewUrl = r.review_url
+      ? `<a class="rev-card-url" href="${escapeAttr(r.review_url)}" target="_blank" rel="noopener">View on ${escapeHtml(platformLabel)} ↗</a>`
+      : '';
 
     return `
-      <div class="rev-row">
-        <div class="rev-cell-name">
-          <div class="rev-name-main">${escapeHtml(r.name)}</div>
-          <div class="rev-name-meta">${escapeHtml(regionName(r.region))} · ${escapeHtml(r.publisher)}</div>
+      <div class="rev-card" data-review-hash="${escapeAttr(r.review_hash)}">
+        <div class="rev-card-header">
+          <div class="rev-card-stars ${ratingClass}">${stars}</div>
+          <div class="rev-card-meta">
+            <span class="rev-card-platform">${escapeHtml(platformLabel)}</span>
+            ${regionUp ? `<span class="rev-card-region">${escapeHtml(regionUp)}</span>` : ''}
+            ${dateStr ? `<span class="rev-card-date">${escapeHtml(dateStr)}</span>` : ''}
+          </div>
         </div>
-        <div class="rev-cell-rating ${ratingClass}">${rating}${r.rating_current > 0 ? '★' : ''}</div>
-        <div class="rev-cell-change">${changeDisplay}</div>
-        <div class="rev-cell-total">${(r.review_counts_total || 0).toLocaleString()}</div>
-        <div class="rev-cell-new">${r.review_counts_new > 0 ? `<strong>+${r.review_counts_new}</strong>` : '0'}</div>
-        <div class="rev-cell-neg">${negBadge}</div>
+
+        <div class="rev-card-author">${badge}${escapeHtml(author)}</div>
+
+        <div class="rev-card-text">${escapeHtml(shownText).replace(/\n/g, '<br>')}</div>
+        ${needsTruncation ? `<button class="rev-card-expand" onclick="toggleReviewExpand('${escapeAttr(r.review_hash)}')">${isExpanded ? 'Show less' : 'Read more'}</button>` : ''}
+
+        <div class="rev-card-actions">
+          <button class="btn btn-primary btn-sm" onclick="openReviewMessage('${escapeAttr(r.review_hash)}')">📨 Message about this review</button>
+          ${hasMsgs ? `<button class="btn btn-secondary btn-sm ${btnUnread}" onclick="viewReviewMessages('${escapeAttr(r.review_hash)}')">💬 View ${count.total} ${count.total === 1 ? 'message' : 'messages'}</button>` : ''}
+          ${reviewUrl}
+        </div>
       </div>
     `;
   }
+
+  function toggleReviewExpand(hash) {
+    if (_reviewsExpandedHashes.has(hash)) _reviewsExpandedHashes.delete(hash);
+    else _reviewsExpandedHashes.add(hash);
+    applyReviewsFilters();
+  }
+
+  // Navigate to filtered inbox for this review's messages
+  function viewReviewMessages(hash) {
+    if (!hash) return;
+    location.hash = `#/inbox?source_page=reviews&source_id=${encodeURIComponent(hash)}`;
+  }
+
+  // Open the compose modal for a review. Prefills subject with review info.
+  function openReviewMessage(hash) {
+    const review = _reviewsIndividualAll.find(r => r.review_hash === hash);
+    if (!review) {
+      showToast('Review not found', 'error');
+      return;
+    }
+    _reviewMessageTarget = review;
+    renderReviewMessageModal(review);
+  }
+
+  window.debouncedLoadReviews      = debouncedLoadReviews;
+  window.setReviewsRatingFilter    = setReviewsRatingFilter;
+  window.setReviewsRegionFilter    = setReviewsRegionFilter;
+  window.setReviewsPlatformFilter  = setReviewsPlatformFilter;
+  window.toggleReviewExpand        = toggleReviewExpand;
+  window.viewReviewMessages        = viewReviewMessages;
+  window.openReviewMessage         = openReviewMessage;
+
+  /* ─── Review compose-message modal ──────────────────────────────── */
+
+  let _reviewMessageTarget = null;
+
+  function renderReviewMessageModal(review) {
+    const me = getLoggedInUser();
+    const rating = Number(review.rating) || 0;
+    const platformLabel = (String(review.platform || '').toLowerCase())[0]
+      ? String(review.platform).charAt(0).toUpperCase() + String(review.platform).slice(1)
+      : 'Review';
+    const author = review.author_name || 'Anonymous';
+    const defaultSubject = `Re: ${rating}★ ${platformLabel} review from ${author}`;
+    const regionUp = String(review.region || '').toUpperCase();
+
+    ensureAllUsersCache();
+    const users = (_allUsersCache || TEAM_USERS).filter(u =>
+      String(u.username || '').toLowerCase() !== String(me.username || '').toLowerCase()
+    );
+    const userOpts = users.map(u =>
+      `<option value="${escapeAttr(u.username)}">${escapeHtml(u.name || u.display_name || u.username)}</option>`
+    ).join('');
+
+    const modalHtml = `
+      <div class="ctr-msg-backdrop" onclick="closeReviewMessage()">
+        <div class="ctr-msg-modal" onclick="event.stopPropagation()">
+          <form id="rev-msg-form" onsubmit="event.preventDefault(); submitReviewMessage();">
+            <div class="ctr-msg-header">
+              <h2 class="ctr-msg-title">Message about review</h2>
+              <button type="button" class="ctr-msg-close" onclick="closeReviewMessage()">×</button>
+            </div>
+            <div class="ctr-msg-body">
+              <div class="ctr-msg-context">
+                <div class="ctr-msg-context-label">About this review</div>
+                <div class="ctr-msg-context-value">
+                  <strong>${rating}★ ${escapeHtml(platformLabel)}</strong> from ${escapeHtml(author)}${regionUp ? ` · ${escapeHtml(regionUp)}` : ''}
+                </div>
+              </div>
+
+              <label class="ctr-msg-label">To
+                <select id="rev-msg-to" class="ctr-msg-input" required>
+                  <option value="">Choose a person…</option>
+                  ${userOpts}
+                </select>
+              </label>
+
+              <label class="ctr-msg-label">Priority
+                <select id="rev-msg-priority" class="ctr-msg-input">
+                  <option value="high">High</option>
+                  <option value="med" selected>Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+
+              <label class="ctr-msg-label">Subject
+                <input id="rev-msg-subject" class="ctr-msg-input" type="text" value="${escapeAttr(defaultSubject)}" required>
+              </label>
+
+              <label class="ctr-msg-label">Message
+                <textarea id="rev-msg-body" class="ctr-msg-input ctr-msg-textarea" rows="5" required placeholder="What do you want to say?"></textarea>
+              </label>
+            </div>
+            <div class="ctr-msg-footer">
+              <button type="button" class="btn btn-secondary" onclick="closeReviewMessage()">Cancel</button>
+              <button type="submit" class="btn btn-primary">📨 Send message</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    `;
+    const mount = document.createElement('div');
+    mount.id = 'rev-msg-mount';
+    mount.innerHTML = modalHtml;
+    document.body.appendChild(mount);
+    setTimeout(() => { const el = document.getElementById('rev-msg-to'); if (el) el.focus(); }, 50);
+  }
+
+  function closeReviewMessage() {
+    const m = document.getElementById('rev-msg-mount');
+    if (m) m.remove();
+    _reviewMessageTarget = null;
+  }
+
+  async function submitReviewMessage() {
+    if (!_reviewMessageTarget) return;
+    const review = _reviewMessageTarget;
+
+    const toEl       = document.getElementById('rev-msg-to');
+    const priorityEl = document.getElementById('rev-msg-priority');
+    const subjectEl  = document.getElementById('rev-msg-subject');
+    const bodyEl     = document.getElementById('rev-msg-body');
+
+    const to       = toEl ? String(toEl.value || '').trim() : '';
+    const priority = priorityEl ? priorityEl.value : 'med';
+    const subject  = subjectEl ? String(subjectEl.value || '').trim() : '';
+    const message  = bodyEl ? String(bodyEl.value || '').trim() : '';
+
+    if (!to) { showToast('Choose a recipient.', 'error'); return; }
+    if (!message) { showToast('Write a message.', 'error'); return; }
+
+    // Compose the submission payload. source_id = review_hash; source_page = 'reviews'.
+    // to_region derived from the review's region (enables region visibility rules).
+    const payload = {
+      action: 'savesubmission',
+      source_page: 'reviews',
+      source_id:   review.review_hash,
+      to_user:     to,
+      to_region:   String(review.region || ''),
+      priority:    priority,
+      subject:     subject,
+      message:     message,
+    };
+
+    const res = await api({}, 'POST', payload);
+    if (res && res.error) {
+      showToast('Failed to send: ' + res.error, 'error');
+      return;
+    }
+    showToast('Message sent', 'success');
+    closeReviewMessage();
+
+    // Refresh count + re-render cards
+    invalidateApiCache(['submission_counts', 'submissions_for_record', 'submissions']);
+    if (_reviewsIndividualAll.length > 0) {
+      fetchReviewMessageCounts(_reviewsIndividualAll.map(r => r.review_hash).filter(Boolean));
+    }
+  }
+
+  window.closeReviewMessage  = closeReviewMessage;
+  window.submitReviewMessage = submitReviewMessage;
 
   /* ═══════════════════════════════════════════════════════════════
      REVIEWS — CSV Import Modal (Stage 6.3 Chunk D)
@@ -5892,10 +6086,18 @@
     // Any success → invalidate frontend cache for reviews & refresh the table
     const anySuccess = (summaryRes && !summaryRes.error) || (individualRes && !individualRes.error);
     if (anySuccess) {
-      invalidateApiCache(['reviews_summary', 'reviews_individual']);
+      invalidateApiCache(['reviews_summary', 'reviews_individual', 'submission_counts']);
       // If we're on the reviews page, reload data
-      if (typeof loadReviewsSummary === 'function' && document.getElementById('reviews-table')) {
-        loadReviewsSummary({ region: _reviewsScopedRegion || undefined }).catch(() => {});
+      if (typeof loadReviewsIndividual === 'function' && document.getElementById('reviews-list')) {
+        loadReviewsIndividual({
+          region: _reviewsCurrentParams.region,
+          params: {
+            rating_filter:   _reviewsCurrentParams.ratingFilter,
+            region_filter:   _reviewsCurrentParams.regionFilter,
+            platform_filter: _reviewsCurrentParams.platformFilter,
+            search:          _reviewsCurrentParams.searchValue,
+          }
+        }).catch(() => {});
       }
     }
   }
@@ -6176,7 +6378,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.11';
+  const APP_VERSION = '2.1.12';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
