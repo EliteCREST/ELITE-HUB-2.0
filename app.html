@@ -5400,7 +5400,7 @@
       if (effectiveRegion) apiParams.region = effectiveRegion;
 
       const res = await api(apiParams);
-      _reviewsIndividualAll = (res && res.reviews) || [];
+      _reviewsIndividualAll = (res && res.items) || [];
 
       // Fire-and-forget batch count fetch for badges
       fetchReviewMessageCounts(_reviewsIndividualAll.map(r => r.review_hash).filter(Boolean));
@@ -5463,7 +5463,7 @@
     // Search — substring across author_name, review_text, platform, monitor_name
     if (searchQ) {
       rows = rows.filter(r => {
-        const hay = [r.author_name, r.review_text, r.platform, r.monitor_name]
+        const hay = [r.author_name, r.review_text, r.platform, r.monitor]
           .map(x => String(x || '').toLowerCase()).join(' ');
         return hay.indexOf(searchQ) >= 0;
       });
@@ -6330,7 +6330,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.14';
+  const APP_VERSION = '2.1.15';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
