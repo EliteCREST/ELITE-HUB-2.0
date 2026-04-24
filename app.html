@@ -888,6 +888,90 @@
     return { mode: 'list', regions: regionObjs };
   }
 
+  /**
+   * Returns the list of message recipients a given sender can pick from,
+   * given the context (review's region, contractor's regions, etc.).
+   *
+   * Behavior:
+   *   - Compliance team (isPrivileged): sees the Compliance pool + ALL users
+   *     (minus self)
+   *   - Field user: sees the Compliance pool + only eligible users whose role
+   *     is admin/OM/GM AND whose regions intersect contextRegions (minus self)
+   *
+   * contextRegions: array of region codes (lowercase) the message is about.
+   *   - Review modal: [reviewRegion]
+   *   - Contractor modal: contractor.regions (the full array)
+   *
+   * Returns:
+   *   {
+   *     includePool: true,               // always true — pool option is always available
+   *     users: [{ username, display_name, role, regions }]
+   *   }
+   *
+   * Requires _allUsersCache to be populated (call ensureAllUsersCache() first).
+   */
+  function getMessageRecipients(contextRegions, sessionUser) {
+    const me = sessionUser || getLoggedInUser();
+    const isPrivileged = isComplianceTeam(me);
+    const all = _allUsersCache || TEAM_USERS || [];
+
+    const myUsername = String(me && me.username || '').toLowerCase();
+
+    // Normalize contextRegions to a Set of lowercase codes
+    const ctxSet = new Set((contextRegions || []).map(r => String(r || '').toLowerCase().trim()).filter(Boolean));
+
+    // Role eligibility for field users: only admin/OM/GM can be picked
+    const FIELD_VISIBLE_ROLES = new Set(['office_admin', 'office_manager', 'gm']);
+
+    // Parse a user's regions string into a set of lowercase codes
+    const parseRegionSet = (regionsStr) => {
+      if (!regionsStr) return new Set();
+      const s = String(regionsStr).toLowerCase().trim();
+      if (s === 'all' || s === '*') {
+        return new Set(['cle','phx','abq','min','stl','chi','ind','pit','mil']);
+      }
+      const set = new Set();
+      s.split(',').forEach(r => { const t = r.trim(); if (t) set.add(t); });
+      return set;
+    };
+
+    let eligible = all.filter(u => {
+      const uname = String(u.username || '').toLowerCase();
+      if (!uname || uname === myUsername) return false;
+
+      if (isPrivileged) {
+        // Compliance sees everyone (except self)
+        return true;
+      }
+
+      // Field users: role must be admin/OM/GM AND region must overlap
+      const role = String(u.role || '').toLowerCase();
+      if (!FIELD_VISIBLE_ROLES.has(role)) return false;
+
+      // No region context → allow any eligible-role user
+      if (ctxSet.size === 0) return true;
+
+      const userRegions = parseRegionSet(u.regions);
+      // Intersect: at least one user region must be in contextRegions
+      for (const r of userRegions) {
+        if (ctxSet.has(r)) return true;
+      }
+      return false;
+    });
+
+    // Sort: compliance team first (within privileged view), then alphabetical by display name
+    eligible.sort((a, b) => {
+      const aName = String(a.display_name || a.name || a.username || '').toLowerCase();
+      const bName = String(b.display_name || b.name || b.username || '').toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
+    return {
+      includePool: true,
+      users: eligible,
+    };
+  }
+
   async function signOut() {
     const token = getToken();
     if (token) {
@@ -4694,43 +4778,33 @@
   }
 
   /**
-   * Compose a message about this contractor to a specific user or region.
+   * Compose a message about this contractor to a specific user, region, or the Compliance pool.
    * Opens a modal with role-aware recipient list.
-   *   - Field users → can message Compliance team + users in their own region(s)
-   *   - Privileged users → can message anyone (all 27)
+   *   - Field users → Compliance (pool) + admin/OM/GM whose regions intersect the contractor's
+   *   - Privileged users → Compliance (pool) + everyone
    */
   async function contractorSendNote() {
     if (!_currentContractor) return;
     const c = _currentContractor;
 
-    // Fetch all users (cached client-side via _apiCache)
-    const usersRes = await api({ resource: 'users' });
-    const allUsers = (usersRes && usersRes.users) ? usersRes.users : [];
+    // Make sure users cache is loaded (used by getMessageRecipients)
+    await ensureAllUsersCache();
+
     const me = getLoggedInUser();
-    const meIsPrivileged = ['angel','sam','sara','emma','carlynn','jaida'].includes(me.username);
-    const myRegions = (me.regions || 'all').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-    const COMPLIANCE = ['angel','sam','sara','emma','carlynn'];
 
-    // Filter recipient list based on current user's role
-    const eligible = allUsers.filter(u => {
-      if (!u.is_active) return false;
-      if (u.username === me.username) return false;  // can't message yourself
-      if (meIsPrivileged) return true;  // privileged sees everyone
-      // Field user: can message compliance team OR users sharing at least one region
-      if (COMPLIANCE.includes(u.username)) return true;
-      const theirRegions = String(u.regions || 'all').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-      if (theirRegions.includes('all') || myRegions.includes('all')) return false; // don't match against "all"
-      return theirRegions.some(r => myRegions.includes(r));
-    });
+    // Contractor regions: array of uppercase codes; normalize to lowercase for the helper
+    const contractorRegions = Array.isArray(c.regions)
+      ? c.regions.map(r => String(r || '').toLowerCase())
+      : [];
 
-    // Group by region for the dropdown
-    const groupCompliance = eligible.filter(u => COMPLIANCE.includes(u.username));
-    const groupOther      = eligible.filter(u => !COMPLIANCE.includes(u.username));
-
-    // Sort groups alphabetically within
-    const byName = (a, b) => (a.display_name || a.username).localeCompare(b.display_name || b.username);
-    groupCompliance.sort(byName);
-    groupOther.sort(byName);
+    const recipients = getMessageRecipients(contractorRegions, me);
+    const poolOptHtml = recipients.includePool
+      ? `<option value="__compliance_pool__">📥 Compliance (pool)</option>`
+      : '';
+    const userOptsHtml = recipients.users.map(u => {
+      const regionHint = u.regions && u.regions !== 'all' ? ` (${String(u.regions).toUpperCase()})` : '';
+      return `<option value="${escapeAttr(u.username)}">${escapeHtml(u.display_name || u.name || u.username)}${escapeHtml(regionHint)}</option>`;
+    }).join('');
 
     // Build the modal
     const modalEl = document.createElement('div');
@@ -4749,19 +4823,8 @@
               <label class="ctr-edit-label">To <span class="ctr-required">*</span></label>
               <select class="ctr-edit-input" name="to_user" required>
                 <option value="">Select recipient…</option>
-                ${groupCompliance.length ? `
-                  <optgroup label="Compliance Team">
-                    ${groupCompliance.map(u => `<option value="${escapeAttr(u.username)}">${escapeHtml(u.display_name || u.username)}</option>`).join('')}
-                  </optgroup>
-                ` : ''}
-                ${groupOther.length ? `
-                  <optgroup label="${meIsPrivileged ? 'Field Users' : 'Your Region'}">
-                    ${groupOther.map(u => {
-                      const regionHint = u.regions && u.regions !== 'all' ? ` (${u.regions.toUpperCase()})` : '';
-                      return `<option value="${escapeAttr(u.username)}">${escapeHtml(u.display_name || u.username)}${escapeHtml(regionHint)}</option>`;
-                    }).join('')}
-                  </optgroup>
-                ` : ''}
+                ${poolOptHtml}
+                ${userOptsHtml}
               </select>
             </div>
 
@@ -4831,10 +4894,13 @@
 
     const subject = `Re: ${c.contractor_name} (PAY ID ${c.pay_id || '—'})`;
 
-    // Look up recipient to determine direction + region
+    // Detect Compliance (pool) sentinel — sent unassigned, any compliance member can grab
+    const isPool = (toUser === '__compliance_pool__');
+
+    // Look up recipient to determine direction + region (skipped for pool)
     const usersRes = await api({ resource: 'users' });
     const allUsers = (usersRes && usersRes.users) ? usersRes.users : [];
-    const recipient = allUsers.find(u => u.username === toUser);
+    const recipient = isPool ? null : allUsers.find(u => u.username === toUser);
     const COMPLIANCE = ['angel','sam','sara','emma','carlynn'];
     const recipientIsCompliance = recipient && COMPLIANCE.includes(recipient.username);
 
@@ -4843,21 +4909,31 @@
     if (recipient && recipient.regions && recipient.regions !== 'all') {
       toRegion = String(recipient.regions).split(',')[0].trim().toLowerCase();
     } else if (c.regions && c.regions.length) {
-      toRegion = c.regions[0].toLowerCase();
+      toRegion = String(c.regions[0]).toLowerCase();
     }
 
     const me = getLoggedInUser();
     const meIsCompliance = COMPLIANCE.includes(me.username);
-    const direction = meIsCompliance && !recipientIsCompliance
-      ? 'compliance_to_field'
-      : (recipientIsCompliance ? 'field_to_compliance' : 'field_to_field');
+
+    // Direction: pool always = field_to_compliance (even if compliance sending to pool,
+    // so the item lands in the unassigned pool view)
+    let direction;
+    if (isPool) {
+      direction = 'field_to_compliance';
+    } else if (meIsCompliance && !recipientIsCompliance) {
+      direction = 'compliance_to_field';
+    } else if (recipientIsCompliance) {
+      direction = 'field_to_compliance';
+    } else {
+      direction = 'field_to_field';
+    }
 
     const submission = {
       subject: subject,
       message: message,
       source_page: 'compliance',
       priority: priority,
-      to_user: toUser,
+      to_user: isPool ? '' : toUser,
       to_region: toRegion,
       direction: direction,
       source_id: c.contractor_id,
@@ -5674,14 +5750,19 @@
   }
 
   // Open the compose modal for a review. Prefills subject with review info.
-  function openReviewMessage(hash) {
+  async function openReviewMessage(hash) {
     const review = _reviewsIndividualAll.find(r => r.review_hash === hash);
     if (!review) {
       showToast('Review not found', 'error');
       return;
     }
     _reviewMessageTarget = review;
-    renderReviewMessageModal(review);
+    try {
+      await renderReviewMessageModal(review);
+    } catch (err) {
+      console.warn('[reviews] open message modal failed:', err);
+      showToast('Could not open message: ' + (err.message || String(err)), 'error');
+    }
   }
 
   window.debouncedLoadReviews      = debouncedLoadReviews;
@@ -5696,7 +5777,7 @@
 
   let _reviewMessageTarget = null;
 
-  function renderReviewMessageModal(review) {
+  async function renderReviewMessageModal(review) {
     const me = getLoggedInUser();
     const rating = Number(review.rating) || 0;
     const platformLabel = (String(review.platform || '').toLowerCase())[0]
@@ -5706,12 +5787,16 @@
     const defaultSubject = `Re: ${rating}★ ${platformLabel} review from ${author}`;
     const regionUp = String(review.region || '').toUpperCase();
 
-    ensureAllUsersCache();
-    const users = (_allUsersCache || TEAM_USERS).filter(u =>
-      String(u.username || '').toLowerCase() !== String(me.username || '').toLowerCase()
-    );
-    const userOpts = users.map(u =>
-      `<option value="${escapeAttr(u.username)}">${escapeHtml(u.name || u.display_name || u.username)}</option>`
+    // Await the users cache so filtering sees fresh data
+    await ensureAllUsersCache();
+
+    // Filter recipients based on sender role + review's region
+    const recipients = getMessageRecipients([review.region], me);
+    const poolOpt = recipients.includePool
+      ? `<option value="__compliance_pool__">📥 Compliance (pool)</option>`
+      : '';
+    const userOpts = recipients.users.map(u =>
+      `<option value="${escapeAttr(u.username)}">${escapeHtml(u.display_name || u.name || u.username)}</option>`
     ).join('');
 
     const modalHtml = `
@@ -5732,7 +5817,8 @@
 
               <label class="ctr-msg-label">To
                 <select id="rev-msg-to" class="ctr-msg-input" required>
-                  <option value="">Choose a person…</option>
+                  <option value="">Choose a recipient…</option>
+                  ${poolOpt}
                   ${userOpts}
                 </select>
               </label>
@@ -5791,22 +5877,31 @@
     if (!to) { showToast('Choose a recipient.', 'error'); return; }
     if (!message) { showToast('Write a message.', 'error'); return; }
 
-    // Compose the submission payload. source_id = review_hash; source_page = 'reviews'.
+    // Detect Compliance (pool) sentinel and translate to backend pool semantics
+    const isPool = (to === '__compliance_pool__');
+
+    // Compose the submission. source_id = review_hash; source_page = 'reviews'.
     // to_region derived from the review's region (enables region visibility rules).
-    const payload = {
-      action: 'savesubmission',
+    // For pool: to_user blank + explicit direction so backend doesn't route to an individual.
+    const submission = {
       source_page: 'reviews',
       source_id:   review.review_hash,
-      to_user:     to,
+      to_user:     isPool ? '' : to,
       to_region:   String(review.region || ''),
       priority:    priority,
       subject:     subject,
       message:     message,
     };
+    if (isPool) submission.direction = 'field_to_compliance';
 
-    const res = await api({}, 'POST', payload);
+    const res = await api({}, 'POST', { action: 'savesubmission', submission: submission });
     if (res && res.error) {
       showToast('Failed to send: ' + res.error, 'error');
+      return;
+    }
+    if (!res || !res.success) {
+      showToast('Failed to send (unknown error)', 'error');
+      console.error('[reviewMessage] unexpected response:', res);
       return;
     }
     showToast('Message sent', 'success');
@@ -6402,7 +6497,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.16';
+  const APP_VERSION = '2.1.17';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
