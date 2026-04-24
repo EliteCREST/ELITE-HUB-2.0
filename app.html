@@ -841,6 +841,53 @@
     return ['angel','sam','sara','emma','carlynn','jaida'].includes(user.username);
   }
 
+  // Compliance team: can see all regions, cross-region admin capabilities.
+  // Matches backend isComplianceMember() — keep in sync if roster changes.
+  function isComplianceTeam(user) {
+    if (!user || !user.username) return false;
+    return ['angel','sam','sara','emma','carlynn'].includes(user.username);
+  }
+
+  // Parses a user's .regions field (comma-separated region codes from USERS sheet)
+  // into an array of lowercase codes. Empty/blank → empty array.
+  function getCurrentUserRegions(user) {
+    if (!user || !user.regions) return [];
+    const seen = Object.create(null);
+    const out = [];
+    String(user.regions).toLowerCase().split(',').forEach(r => {
+      const t = r.trim();
+      if (t && !seen[t]) { seen[t] = true; out.push(t); }
+    });
+    return out;
+  }
+
+  /**
+   * Returns what regions the current user can see, for dropdown rendering.
+   * Shape: { mode: 'all' | 'list' | 'single' | 'none', regions: [<REGION>...] }
+   *   - 'all'    → compliance team; dropdown shows all 9 regions + "All regions"
+   *   - 'list'   → field user with multiple regions (Chris, Jake, Kody);
+   *                dropdown shows their regions + "All my regions"
+   *   - 'single' → field user with exactly one region;
+   *                no dropdown (implicit scope — they only see their region anyway)
+   *   - 'none'   → user has no regions configured; no dropdown, nothing to show
+   * The REGIONS list uses canonical REGIONS array objects (with .code/.name).
+   */
+  function getEffectiveUserRegions() {
+    const me = getLoggedInUser();
+    if (!me) return { mode: 'none', regions: [] };
+    if (isComplianceTeam(me)) {
+      return { mode: 'all', regions: REGIONS.slice() };
+    }
+    const allowed = getCurrentUserRegions(me);
+    if (allowed.length === 0) return { mode: 'none', regions: [] };
+    if (allowed.length === 1) {
+      const r = REGIONS.find(x => x.code === allowed[0]);
+      return { mode: 'single', regions: r ? [r] : [] };
+    }
+    const regionObjs = allowed.map(code => REGIONS.find(x => x.code === code)).filter(Boolean);
+    return { mode: 'list', regions: regionObjs };
+  }
+
   async function signOut() {
     const token = getToken();
     if (token) {
@@ -4015,15 +4062,34 @@
   function renderContractorsBody(options) {
     options = options || {};
     const isRegionScoped = !!options.regionCode;
+
+    // Determine what region control to render based on user permissions.
+    // If we're already scoped (region tab), nothing changes. Otherwise, the
+    // dropdown is filtered — or hidden with a pinned value — based on role.
+    let regionControlHtml;
+    if (isRegionScoped) {
+      regionControlHtml = `<input type="hidden" id="ctr-region" value="${escapeAttr(options.regionCode.toUpperCase())}">`;
+    } else {
+      const userRegions = getEffectiveUserRegions();
+      if (userRegions.mode === 'single') {
+        // Pin single-region user to their region — no UI, filtering still works
+        regionControlHtml = `<input type="hidden" id="ctr-region" value="${escapeAttr(userRegions.regions[0].code.toUpperCase())}">`;
+      } else if (userRegions.mode === 'none') {
+        regionControlHtml = `<input type="hidden" id="ctr-region" value="">`;
+      } else {
+        const allLabel = userRegions.mode === 'all' ? 'All regions' : 'All my regions';
+        regionControlHtml = `
+          <select id="ctr-region" class="ctr-filter-select" onchange="applyContractorFilters()">
+            <option value="">${escapeHtml(allLabel)}</option>
+            ${userRegions.regions.map(r => `<option value="${r.code.toUpperCase()}">${escapeHtml(r.name)}</option>`).join('')}
+          </select>`;
+      }
+    }
+
     return `
       <div class="contractors-toolbar">
         <input type="text" id="ctr-search" class="ctr-filter-input" placeholder="Search by name, PAY ID, or contact…" oninput="debouncedLoadContractors()">
-        ${!isRegionScoped ? `
-          <select id="ctr-region" class="ctr-filter-select" onchange="applyContractorFilters()">
-            <option value="">All regions</option>
-            ${REGIONS.map(r => `<option value="${r.code.toUpperCase()}">${escapeHtml(r.name)}</option>`).join('')}
-          </select>
-        ` : `<input type="hidden" id="ctr-region" value="${escapeAttr(options.regionCode.toUpperCase())}">`}
+        ${regionControlHtml}
         <select id="ctr-gl-status" class="ctr-filter-select" onchange="applyContractorFilters()">
           <option value="">All GL</option>
           <option value="expired">Expired</option>
@@ -5332,9 +5398,20 @@
     const platformFilter = opts.platformFilter || '';
     const searchValue    = opts.searchValue    || '';
 
-    const regionOptions = REGIONS.map(r =>
-      `<option value="${r.code}" ${regionFilter === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`
-    ).join('');
+    // Determine what region dropdown to render (if any) based on user permissions
+    const userRegions = getEffectiveUserRegions();
+    const showRegionDropdown = !isRegionScoped && (userRegions.mode === 'all' || userRegions.mode === 'list');
+    const regionDropdownHtml = showRegionDropdown ? (() => {
+      const allLabel = userRegions.mode === 'all' ? 'All regions' : 'All my regions';
+      const regionOptions = userRegions.regions.map(r =>
+        `<option value="${r.code}" ${regionFilter === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`
+      ).join('');
+      return `
+        <select id="rev-region-filter" class="ctr-filter-input" onchange="setReviewsRegionFilter(this.value)">
+          <option value="" ${regionFilter === '' ? 'selected' : ''}>${escapeHtml(allLabel)}</option>
+          ${regionOptions}
+        </select>`;
+    })() : '';
 
     return `
       <div class="reviews-toolbar">
@@ -5350,12 +5427,7 @@
                   onclick="setReviewsRatingFilter('negative')" type="button">1–3★ only</button>
         </div>
 
-        ${!isRegionScoped ? `
-        <select id="rev-region-filter" class="ctr-filter-input" onchange="setReviewsRegionFilter(this.value)">
-          <option value="" ${regionFilter === '' ? 'selected' : ''}>All regions</option>
-          ${regionOptions}
-        </select>
-        ` : ''}
+        ${regionDropdownHtml}
 
         <select id="rev-platform-filter" class="ctr-filter-input" onchange="setReviewsPlatformFilter(this.value)">
           <option value="" ${platformFilter === '' ? 'selected' : ''}>All platforms</option>
@@ -6330,7 +6402,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.15';
+  const APP_VERSION = '2.1.16';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
