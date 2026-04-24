@@ -4093,6 +4093,7 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  max-width: 560px;
   background: var(--white);
   border: 1px solid var(--slate-300);
   border-radius: var(--r-md);
@@ -4238,4 +4239,178 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
 .inbox-row-source-chip:hover {
   background: var(--blue-pale);
   color: var(--blue-hover);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INDIVIDUAL REVIEWS — card list (Stage 6.3 Chunk C.3)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.reviews-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-bottom: var(--sp-3);
+}
+.reviews-toolbar > .ctr-filter-input {
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+}
+
+/* Rating toggle (All / 1-3★ only) */
+.rev-toggle {
+  display: inline-flex;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-round);
+  overflow: hidden;
+  background: var(--white);
+}
+.rev-toggle-btn {
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-600);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.rev-toggle-btn:hover {
+  background: var(--slate-50);
+  color: var(--navy);
+}
+.rev-toggle-btn.active {
+  background: var(--navy);
+  color: var(--white);
+}
+
+/* Review list container */
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* Individual review card */
+.rev-card {
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+  transition: border-color var(--t-fast);
+}
+.rev-card:hover {
+  border-color: var(--slate-300);
+}
+
+.rev-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-bottom: 4px;
+}
+
+.rev-card-stars {
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+.rev-rating-good { color: var(--green); }
+.rev-rating-ok   { color: var(--amber); }
+.rev-rating-bad  { color: var(--red); }
+
+.rev-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--slate-500);
+}
+.rev-card-platform {
+  font-weight: 700;
+  color: var(--slate-600);
+}
+.rev-card-region {
+  padding: 1px 7px;
+  background: var(--slate-100);
+  border-radius: var(--r-round);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--slate-700);
+}
+
+.rev-card-author {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+}
+
+.rev-card-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--slate-700);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin-bottom: var(--sp-2);
+}
+
+.rev-card-expand {
+  border: none;
+  background: transparent;
+  color: var(--blue-hover);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: var(--sp-2);
+}
+.rev-card-expand:hover {
+  text-decoration: underline;
+}
+
+.rev-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--slate-100);
+}
+
+.rev-card-url {
+  font-size: 12px;
+  color: var(--slate-500);
+  text-decoration: none;
+  margin-left: auto;
+}
+.rev-card-url:hover {
+  color: var(--blue-hover);
+  text-decoration: underline;
+}
+
+/* Context block inside the message-about-review modal (reuses ctr-msg-* shell) */
+.ctr-msg-context {
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  margin-bottom: var(--sp-3);
+}
+.ctr-msg-context-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--slate-500);
+  margin-bottom: 4px;
+}
+.ctr-msg-context-value {
+  font-size: 13px;
+  color: var(--navy);
 }
