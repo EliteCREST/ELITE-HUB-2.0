@@ -662,6 +662,39 @@
   }
   window.tagTimingSession = tagTimingSession;
 
+  /**
+   * Test helper for the new bootstrap endpoint (added v2.1.33).
+   * Call from browser console: testBootstrap()
+   * Logs the response shape, timing breakdown, and approximate payload size.
+   */
+  async function testBootstrap() {
+    console.log('%c[bootstrap test] Starting…', 'color:#38bdf8;font-weight:bold');
+    const t0 = performance.now();
+    const res = await api({ resource: 'bootstrap' });
+    const ms = Math.round(performance.now() - t0);
+
+    if (res && res.error) {
+      console.error('[bootstrap test] FAILED:', res.error);
+      return res;
+    }
+
+    const sizeKb = Math.round(JSON.stringify(res).length / 1024);
+    console.log('%c[bootstrap test] Total round-trip: ' + ms + 'ms', 'color:#15803d;font-weight:bold');
+    console.log('[bootstrap test] Payload size: ~' + sizeKb + ' KB');
+    console.log('[bootstrap test] Backend timing breakdown:', res._timing);
+    console.log('[bootstrap test] Sections returned:', Object.keys(res));
+    console.log('[bootstrap test] Counts:', {
+      contractors: (res.contractors_full && res.contractors_full.items || []).length,
+      submissions: (res.submissions && res.submissions.submissions || []).length,
+      tasks: (res.tasks && res.tasks.tasks || []).length,
+      widgets: (res.widgets && res.widgets.widgets || []).length,
+      users: (res.users && res.users.users || []).length,
+    });
+    console.log('[bootstrap test] Full response:', res);
+    return res;
+  }
+  window.testBootstrap = testBootstrap;
+
   function _computeTimingAggregates() {
     // Group API calls by resource name. Compute count, avg, p50, p95, max.
     const byKey = {};
@@ -7224,7 +7257,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.32';
+  const APP_VERSION = '2.1.33';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
