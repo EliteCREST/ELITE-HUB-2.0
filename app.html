@@ -630,7 +630,7 @@
   const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
 
   // Resources that should be cached on GET. Writes invalidate relevant caches.
-  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_individual','submissions_for_record','submission_counts','crews_counts','contractor_crews'];
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractors_full','contractor','contractor_crews','contractor_crews_full','users','regions','reviews_individual','submissions_for_record','submission_counts','crews_counts'];
 
   // Which resources to invalidate when an action happens
   const INVALIDATE_MAP = {
@@ -2426,6 +2426,17 @@
     const dt = new Date(d);
     if (isNaN(dt)) return String(d);
     return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  /** Short non-padded M/D/YY format for compact table cells (e.g. "3/17/27"). */
+  function formatShortDate(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    if (isNaN(dt)) return String(d);
+    const m  = dt.getMonth() + 1;
+    const dd = dt.getDate();
+    const yy = String(dt.getFullYear()).slice(-2);
+    return `${m}/${dd}/${yy}`;
   }
 
   function wireControlHandlers(sub) {
@@ -4297,7 +4308,9 @@
       _contractorsScopedRegion = overrides.region || null;
     }
 
-    const params = { resource: 'contractors' };
+    // Use the combined endpoint so we get contractors + message counts + crews counts
+    // in a single round-trip instead of fanning out into 3 separate calls.
+    const params = { resource: 'contractors_full' };
     if (_contractorsScopedRegion) params.region = _contractorsScopedRegion;
 
     const res = await api(params);
@@ -4312,13 +4325,11 @@
 
     _contractorsAll = res.items || [];
     _contractorsThresholds = res.thresholds || { gl_expiring_days: 30, wc_expiring_days: 30 };
+    // Counts come bundled in the same payload — no need to fire follow-up calls
+    _contractorMessageCounts = res.message_counts || {};
+    _crewsCounts = res.crews_counts || {};
 
     applyContractorFilters();
-
-    // Background: fetch message counts for all loaded contractors (non-blocking)
-    fetchContractorMessageCounts(_contractorsAll.map(c => c.contractor_id));
-    // Background: fetch crew counts for all loaded contractors (non-blocking)
-    fetchCrewsCounts(_contractorsAll.map(c => c.contractor_id));
   }
 
   // Module-scoped map: contractor_id → { total, unread }. Populated by the
@@ -4491,7 +4502,7 @@
       if (exempt) return `<span class="ctr-exp-exempt">Exempt</span>`;
       if (!iso) return `<span class="ctr-exp-missing">Not on file</span>`;
       const urgency = getExpiryUrgency(iso);
-      return `<span class="ctr-exp ctr-exp-${urgency}">${escapeHtml(formatFriendlyDate(iso))}</span>`;
+      return `<span class="ctr-exp ctr-exp-${urgency}">${escapeHtml(formatShortDate(iso))}</span>`;
     };
     const glDate = fmtExpiryDate(c.gl_expiry, c.gl_status, false);
     const wcDate = fmtExpiryDate(c.wc_expiry, c.wc_status, c.wc_exempt);
@@ -4924,7 +4935,7 @@
     _renderCrewsModal({ loading: true });
 
     try {
-      const res = await api({ resource: 'contractor_crews', contractor_id: contractorId });
+      const res = await api({ resource: 'contractor_crews_full', contractor_id: contractorId });
       if (res && res.error) {
         showToast(res.error, 'error');
         closeCrewsModal();
@@ -5098,7 +5109,7 @@
     // Bump global count + invalidate caches so the row badge AND the next
     // modal open both reflect the change
     _crewsCounts[ctx.contractorId] = (_crewsCounts[ctx.contractorId] || 0) + 1;
-    invalidateApiCache(['crews_counts', 'contractor_crews']);
+    invalidateApiCache(['crews_counts', 'contractor_crews', 'contractor_crews_full', 'contractors_full']);
     if ($('#contractors-list')) applyContractorFilters();
   }
 
@@ -5131,7 +5142,7 @@
     if (_crewsCounts[ctx.contractorId] && _crewsCounts[ctx.contractorId] > 0) {
       _crewsCounts[ctx.contractorId]--;
     }
-    invalidateApiCache(['crews_counts', 'contractor_crews']);
+    invalidateApiCache(['crews_counts', 'contractor_crews', 'contractor_crews_full', 'contractors_full']);
     if ($('#contractors-list')) applyContractorFilters();
   }
 
@@ -5195,7 +5206,7 @@
 
     showToast('Crew updated', 'success');
     _renderCrewsModal({ loading: false });
-    invalidateApiCache(['contractor_crews']);
+    invalidateApiCache(['contractor_crews', 'contractor_crews_full']);
   }
 
   function closeCrewsModal() {
@@ -5398,9 +5409,10 @@
       loadContractorCommunicationCount(c.contractor_id);
     }
     // Bust count cache + re-fetch so the 💬 badge on list rows updates
-    invalidateApiCache(['submission_counts', 'submissions_for_record']);
+    invalidateApiCache(['submission_counts', 'submissions_for_record', 'contractors_full']);
     if (_contractorsAll && _contractorsAll.length > 0) {
-      fetchContractorMessageCounts(_contractorsAll.map(x => x.contractor_id));
+      // Refetch via the combined endpoint so message_counts comes through fresh
+      loadContractorsTable({ region: _contractorsScopedRegion || undefined });
     }
   }
 
@@ -6931,7 +6943,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.23';
+  const APP_VERSION = '2.1.24';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).

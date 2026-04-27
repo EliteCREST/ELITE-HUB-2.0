@@ -2910,8 +2910,8 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
     minmax(200px, 2fr)         /* CONTRACTOR (name + contact + meta) */
     100px                      /* TRADE */
     90px                       /* CREWS */
-    100px                      /* GL EXPIRY */
-    100px                      /* WC EXPIRY */
+    75px                       /* GL EXPIRY */
+    75px                       /* WC EXPIRY */
     100px                      /* CONTRACT */
     80px                       /* PAYLOCITY */
     80px                       /* BLAZE */
