@@ -1005,13 +1005,34 @@
 
     const callDetail = method + ' ' + (mergedParams.resource || (body && body.action) || '?');
     const t0 = performance.now();
-    try {
-      const res = await fetch(url, opts);
-      const tFetch = performance.now();
-      const data = await res.json();
-      const tParse = performance.now();
 
-      _logTiming('api', callDetail + ' (fetch ' + Math.round(tFetch - t0) + 'ms, parse ' + Math.round(tParse - tFetch) + 'ms)', tParse - t0);
+    // v2.1.35: One-time retry on transient network failures.
+    // Apps Script can intermittently return "Failed to fetch" when invocations
+    // queue up. A single retry after 1 sec resolves most of these without
+    // bothering the user. We do NOT retry POSTs to avoid double-writes.
+    async function attempt() {
+      const res = await fetch(url, opts);
+      const data = await res.json();
+      return data;
+    }
+
+    try {
+      let data;
+      try {
+        data = await attempt();
+      } catch (err) {
+        const isFailedToFetch = method === 'GET' && /Failed to fetch|NetworkError/i.test(String(err.message || err));
+        if (isFailedToFetch) {
+          _logTiming('api', callDetail + ' RETRY after: ' + err.message, performance.now() - t0);
+          await new Promise(r => setTimeout(r, 1000));
+          data = await attempt();
+        } else {
+          throw err;
+        }
+      }
+      const tDone = performance.now();
+
+      _logTiming('api', callDetail + ' (' + Math.round(tDone - t0) + 'ms)', tDone - t0);
 
       // If server says auth expired/missing, kick to login
       if (data && data.code === 'AUTH_REQUIRED') {
@@ -1030,6 +1051,35 @@
         const actionKey = String(body.action).toLowerCase();
         const toInvalidate = INVALIDATE_MAP[actionKey];
         if (toInvalidate) invalidateApiCache(toInvalidate);
+
+        // v2.1.35: After a successful write, refresh the bootstrap cache so
+        // user immediately sees their change reflected in cached pages.
+        // Fire-and-forget — we don't want to slow down the user's perceived
+        // write latency. Only fires for actions that affect bootstrap data.
+        if (data && !data.error && _ACTIONS_AFFECTING_BOOTSTRAP[actionKey]) {
+          // Tiny delay so the backend write fully commits before the read.
+          setTimeout(() => {
+            BOOTSTRAP_CACHE.forceRefresh().then((fresh) => {
+              // After refresh completes, if user is still on a cache-driven
+              // list view, re-render so they see their update without having
+              // to navigate away/back. Only do this for list views — detail
+              // views and modals manage their own re-render to avoid
+              // clobbering user input.
+              if (fresh && typeof resolveRoute === 'function') {
+                const hash = (location.hash || '').replace(/^#/, '').split('?')[0];
+                const safeToRerender = ['/home', '/workspace', '/inbox', '/contractors', ''].indexOf(hash) >= 0
+                  || /^\/region\//.test(hash);
+                // Don't rerender if the user is mid-action:
+                //   - any open modal — wasted work, can disrupt focus
+                //   - any focused input/textarea/select — would lose their typing
+                const modalOpen = !!document.querySelector('.modal-backdrop.open');
+                const ae = document.activeElement;
+                const inputFocused = ae && ['INPUT','TEXTAREA','SELECT'].indexOf(ae.tagName) >= 0;
+                if (safeToRerender && !modalOpen && !inputFocused) resolveRoute();
+              }
+            }).catch(() => {});
+          }, 150);
+        }
       }
 
       return data;
@@ -1039,6 +1089,30 @@
       return { error: err.message || 'Network error' };
     }
   }
+
+  // v2.1.35: Actions whose successful completion should refresh the bootstrap cache.
+  // Anything that mutates data the user can SEE in a cached page belongs here.
+  // After the write succeeds, we fire a background bootstrap refresh so the user's
+  // next navigation reflects the change without waiting for the 30-sec timer.
+  const _ACTIONS_AFFECTING_BOOTSTRAP = {
+    savesubmission:        true,
+    addreply:              true,
+    updatesubmissionstatus:true,
+    assignsubmission:      true,
+    marksubmissionseen:    true,
+    savetask:              true,
+    deletetask:            true,
+    savewidget:            true,
+    deletewidget:          true,
+    savecontractor:        true,
+    deletecontractor:      true,
+    addcontractornote:     true,
+    deletecontractornote:  true,
+    savecrew:              true,
+    updatecrew:            true,
+    deletecrew:            true,
+    savenotification:      true,
+  };
 
   /* ─── Global helpers ──────────────────────────────────────────── */
   const $  = (sel, root = document) => root.querySelector(sel);
@@ -2086,7 +2160,32 @@
     const apiParams = { resource: 'submissions', scope: scope };
     if (params.source_page) apiParams.source_page = params.source_page;
     if (params.source_id)   apiParams.source_id   = params.source_id;
-    const res = await api(apiParams);
+
+    // v2.1.35: Try bootstrap cache first.
+    // The bootstrap stores submissions with scope='all' — every submission the
+    // user can see, annotated with _scope_inbox/_scope_pool/_scope_sent/_scope_assigned
+    // membership flags. We filter client-side for the requested scope.
+    // Falls back to direct API if cache miss OR if a record-specific filter
+    // (source_page/source_id) is set, since those aren't pre-computed.
+    let res;
+    const bootstrapSubs = BOOTSTRAP_CACHE.getSection('submissions');
+    const canUseCache = bootstrapSubs &&
+                        Array.isArray(bootstrapSubs.submissions) &&
+                        !apiParams.source_page &&
+                        !apiParams.source_id;
+    if (canUseCache) {
+      const all = bootstrapSubs.submissions;
+      let scoped;
+      if (scope === 'inbox')         scoped = all.filter(s => s._scope_inbox);
+      else if (scope === 'pool')     scoped = all.filter(s => s._scope_pool);
+      else if (scope === 'sent')     scoped = all.filter(s => s._scope_sent);
+      else if (scope === 'assigned') scoped = all.filter(s => s._scope_assigned);
+      else if (scope === 'resolved') scoped = all.filter(s => s.status === 'Resolved');
+      else                           scoped = all;
+      res = { submissions: scoped, counts: bootstrapSubs.counts || {} };
+    } else {
+      res = await api(apiParams);
+    }
     if (!listEl) return;  // user navigated away
 
     if (res.error) {
@@ -4722,7 +4821,29 @@
     const params = { resource: 'contractors_full' };
     if (_contractorsScopedRegion) params.region = _contractorsScopedRegion;
 
-    const res = await api(params);
+    // v2.1.35: Try bootstrap cache first.
+    // Bootstrap stores the contractors_full payload at full (compliance-wide) scope.
+    // For region-scoped pages, filter client-side. Falls back to API on cache miss.
+    let res;
+    const cached = BOOTSTRAP_CACHE.getSection('contractors_full');
+    if (cached && Array.isArray(cached.items)) {
+      let items = cached.items;
+      if (_contractorsScopedRegion) {
+        const rc = String(_contractorsScopedRegion).toUpperCase();
+        items = items.filter(c =>
+          Array.isArray(c.regions) &&
+          c.regions.some(r => String(r).toUpperCase() === rc)
+        );
+      }
+      res = {
+        items: items,
+        thresholds: cached.thresholds || {},
+        message_counts: cached.message_counts || {},
+        crews_counts: cached.crews_counts || {},
+      };
+    } else {
+      res = await api(params);
+    }
     if (!$('#contractors-list')) return;  // navigated away
 
     if (res.error) {
@@ -7393,7 +7514,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.34';
+  const APP_VERSION = '2.1.35';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
@@ -7500,6 +7621,86 @@
   }
 
 
+  /* ═══════════════════════════════════════════════════════════════════
+   * BACKGROUND REFRESH TIMER (v2.1.35)
+   * ───────────────────────────────────────────────────────────────────
+   * Every 30 sec while the tab is visible, silently refresh the bootstrap
+   * cache so that data stays fresh without forcing reloads.
+   *
+   * Behavior:
+   *   - Visible:  refresh every 30 sec
+   *   - Hidden:   pause timer, save bandwidth + Apps Script invocations
+   *   - Return:   if it's been > 30 sec since last refresh, refresh once,
+   *               then resume normal cadence
+   *
+   * Failures are silent — we keep using the stale cache and try again on
+   * the next interval. After 5 consecutive failures, log a warning to
+   * console (so we know if something is persistently broken) but never
+   * disrupt the user's UI.
+   * ═══════════════════════════════════════════════════════════════════ */
+  const BG_REFRESH = (function() {
+    const INTERVAL_MS = 30 * 1000;
+    let timer = null;
+    let consecutiveFailures = 0;
+    let inFlight = false;
+
+    async function refresh() {
+      if (inFlight) return;       // prevent overlapping refreshes
+      if (document.hidden) return; // shouldn't happen but defensive
+      inFlight = true;
+      try {
+        const data = await BOOTSTRAP_CACHE.fetchAndStore();
+        if (data) {
+          consecutiveFailures = 0;
+          // Re-render current route if it's a safe list view (same logic as
+          // post-write refresh). Modals and detail views handle their own
+          // re-render to avoid clobbering user input.
+          if (typeof resolveRoute === 'function') {
+            const hash = (location.hash || '').replace(/^#/, '').split('?')[0];
+            const safeToRerender = ['/home', '/workspace', '/inbox', '/contractors', ''].indexOf(hash) >= 0
+              || /^\/region\//.test(hash);
+            const modalOpen = !!document.querySelector('.modal-backdrop.open');
+            const ae = document.activeElement;
+            const inputFocused = ae && ['INPUT','TEXTAREA','SELECT'].indexOf(ae.tagName) >= 0;
+            if (safeToRerender && !modalOpen && !inputFocused) resolveRoute();
+          }
+        } else {
+          consecutiveFailures++;
+          if (consecutiveFailures >= 5) {
+            console.warn('[bg-refresh] ' + consecutiveFailures + ' consecutive failures — bootstrap may be unreachable');
+          }
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    function start() {
+      if (timer) return;
+      timer = setInterval(() => {
+        if (!document.hidden) refresh();
+      }, INTERVAL_MS);
+    }
+
+    function stop() {
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+
+    // Pause/resume on visibility change
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        // Tab hidden — let the timer keep running but it'll skip the refresh.
+        // No need to clear the interval; clearing/recreating is more error-prone.
+      } else {
+        // Tab visible again — if cache is stale, refresh now (don't wait for next tick)
+        if (BOOTSTRAP_CACHE.ageMs() > INTERVAL_MS) refresh();
+      }
+    });
+
+    return { start, stop, refresh };
+  })();
+  window.BG_REFRESH = BG_REFRESH;  // expose for debugging
+
   /* ═══════════════════════════════════════════════════════════════
      BOOTSTRAP
      ═══════════════════════════════════════════════════════════════ */
@@ -7591,6 +7792,10 @@
     renderRegionsSubnav();
     renderViewAsBanner();
     resolveRoute();
+
+    // v2.1.35: Start background refresh timer — keeps bootstrap cache fresh
+    // every 30 sec without user intervention.
+    BG_REFRESH.start();
   })();
   </script>
 
