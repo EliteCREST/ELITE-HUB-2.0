@@ -4249,7 +4249,6 @@
           <div class="ctr-row-contract">CONTRACT</div>
           <div class="ctr-row-pay">PAYLOCITY</div>
           <div class="ctr-row-blaze">BLAZE</div>
-          <div class="ctr-row-travel">TRAVEL</div>
           <div class="ctr-row-actions">ACTIONS</div>
         </div>
 
@@ -4269,7 +4268,6 @@
               <div class="ctr-row-contract"><div class="skeleton skeleton-line" style="height:18px;width:70px;border-radius:9999px;"></div></div>
               <div class="ctr-row-pay"><div class="skeleton skeleton-line" style="height:12px;width:40px;"></div></div>
               <div class="ctr-row-blaze"><div class="skeleton skeleton-line" style="height:12px;width:40px;"></div></div>
-              <div class="ctr-row-travel"><div class="skeleton skeleton-line" style="height:12px;width:30px;"></div></div>
               <div class="ctr-row-actions"><div class="skeleton skeleton-line" style="height:20px;width:100px;"></div></div>
             </div>
           `).join('')}
@@ -4484,7 +4482,7 @@
     const clearStatus = c.clear_status || 'not_clear';
     const clearPill = clearStatus === 'clear'
       ? `<span class="ctr-ol-pill ctr-ol-clear">CLEAR</span>`
-      : `<span class="ctr-ol-pill ctr-ol-not-clear">NOT CLEAR</span>`;
+      : `<span class="ctr-ol-pill ctr-ol-not-clear">HOLD</span>`;
 
     // TRADE — one outlined pill with letter codes separated by space (e.g. "R S G")
     const trades = Array.isArray(c.trades_array) ? c.trades_array : [];
@@ -4500,7 +4498,7 @@
     // GL / WC expiry dates (just the dates, colored by urgency; status is implicit via color)
     const fmtExpiryDate = (iso, status, exempt) => {
       if (exempt) return `<span class="ctr-exp-exempt">Exempt</span>`;
-      if (!iso) return `<span class="ctr-exp-missing">Not on file</span>`;
+      if (!iso) return `<span class="ctr-exp-missing">Need</span>`;
       const urgency = getExpiryUrgency(iso);
       return `<span class="ctr-exp ctr-exp-${urgency}">${escapeHtml(formatShortDate(iso))}</span>`;
     };
@@ -4519,13 +4517,6 @@
     const blazePill = c.has_blaze_url
       ? `<span class="ctr-ind-ok">✓ OK</span>`
       : `<span class="ctr-ind-attn">✗ Attn</span>`;
-
-    // TRAVEL — miles if will_travel, dash otherwise
-    const travelCell = c.will_travel
-      ? (c.max_distance > 0
-          ? `<span class="ctr-travel">✓ ${c.max_distance} mi</span>`
-          : `<span class="ctr-travel">✓</span>`)
-      : `<span class="ctr-cell-dash">—</span>`;
 
     // ACTIONS — Upload + View Docs (Phase C; disabled for now)
     const actionsCell = `
@@ -4548,7 +4539,6 @@
         <div class="ctr-row-contract">${contractPill}</div>
         <div class="ctr-row-pay">${payPill}</div>
         <div class="ctr-row-blaze">${blazePill}</div>
-        <div class="ctr-row-travel">${travelCell}</div>
         <div class="ctr-row-actions" onclick="event.stopPropagation();">${actionsCell}</div>
       </div>
     `;
@@ -6943,7 +6933,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.24';
+  const APP_VERSION = '2.1.26';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).

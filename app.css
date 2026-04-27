@@ -2915,7 +2915,6 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
     100px                      /* CONTRACT */
     80px                       /* PAYLOCITY */
     80px                       /* BLAZE */
-    70px                       /* TRAVEL */
     minmax(160px, 1fr);        /* ACTIONS */
   gap: var(--sp-3);
   padding: 10px var(--sp-3);
