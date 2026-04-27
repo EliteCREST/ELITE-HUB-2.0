@@ -5369,9 +5369,28 @@
    * Lazy-creates the folder on first click. Subsequent calls just return
    * the saved folder ID instantly.
    */
+  /**
+   * v2.1.39 (Phase C.1): Open the contractor's Drive folder in a new tab.
+   * Lazy-creates the folder on first click. Subsequent calls just return
+   * the saved folder ID instantly.
+   *
+   * v2.1.40: Open the new tab synchronously (browsers block window.open
+   * called from an async callback). We open about:blank immediately on
+   * click, then navigate it once the backend responds.
+   */
   async function openContractorDocs(btn) {
     if (!_currentContractor) return;
     const id = _currentContractor.contractor_id;
+
+    // Open the new tab IMMEDIATELY — browsers only allow window.open in a
+    // direct user-click context. If we wait for the backend to respond first,
+    // Chrome silently blocks the popup.
+    const newTab = window.open('about:blank', '_blank', 'noopener');
+    if (!newTab) {
+      showToast('Pop-up blocked. Please allow pop-ups for this site to use View Docs.', 'error');
+      return;
+    }
+
     const orig = btn ? btn.textContent : '';
     if (btn) {
       btn.disabled = true;
@@ -5381,16 +5400,19 @@
       const res = await api({ resource: 'contractor_folder', id: id });
       if (res.error) {
         showToast(res.error, 'error');
+        try { newTab.close(); } catch (e) { /* tab already closed */ }
         return;
       }
       if (!res.folder_url) {
         showToast('Could not open folder.', 'error');
+        try { newTab.close(); } catch (e) { /* */ }
         return;
       }
-      // Open in a new tab
-      window.open(res.folder_url, '_blank', 'noopener');
+      // Navigate the already-open tab to the real URL
+      newTab.location.href = res.folder_url;
     } catch (err) {
       showToast('Could not open folder: ' + err.message, 'error');
+      try { newTab.close(); } catch (e) { /* */ }
     } finally {
       if (btn) {
         btn.disabled = false;
