@@ -509,6 +509,8 @@
     // Also clear bootstrap cache (added v2.1.34) — never let one user
     // see another user's preloaded data after logout.
     try { localStorage.removeItem('eh2_bootstrap_v1'); } catch (e) {}
+    // v2.1.36: Clear in-memory contractor detail cache too
+    try { if (typeof _contractorDetailCache !== 'undefined') _contractorDetailCache.clear(); } catch (e) {}
   }
 
   function getToken() {
@@ -2165,16 +2167,33 @@
     // The bootstrap stores submissions with scope='all' — every submission the
     // user can see, annotated with _scope_inbox/_scope_pool/_scope_sent/_scope_assigned
     // membership flags. We filter client-side for the requested scope.
-    // Falls back to direct API if cache miss OR if a record-specific filter
-    // (source_page/source_id) is set, since those aren't pre-computed.
+    // v2.1.36: Also handles source_page/source_id filtering client-side
+    // (used by "Message about contractor" → /inbox?source_page=compliance&source_id=X).
     let res;
     const bootstrapSubs = BOOTSTRAP_CACHE.getSection('submissions');
-    const canUseCache = bootstrapSubs &&
-                        Array.isArray(bootstrapSubs.submissions) &&
-                        !apiParams.source_page &&
-                        !apiParams.source_id;
+    const canUseCache = bootstrapSubs && Array.isArray(bootstrapSubs.submissions);
     if (canUseCache) {
-      const all = bootstrapSubs.submissions;
+      let all = bootstrapSubs.submissions;
+      let counts = bootstrapSubs.counts || {};
+      // Apply source_page + source_id filter first (record-specific view)
+      if (apiParams.source_page && apiParams.source_id) {
+        const sp = String(apiParams.source_page).toLowerCase();
+        const sid = String(apiParams.source_id);
+        all = all.filter(s =>
+          String(s.source_page || '').toLowerCase() === sp &&
+          String(s.source_id || '') === sid
+        );
+        // Recompute tab counts from the filtered set so badges match what's
+        // shown (matching old backend behavior).
+        counts = {
+          inbox:    all.filter(s => s._scope_inbox).length,
+          pool:     all.filter(s => s._scope_pool).length,
+          sent:     all.filter(s => s._scope_sent).length,
+          assigned: all.filter(s => s._scope_assigned).length,
+          resolved: all.filter(s => s.status === 'Resolved').length,
+        };
+      }
+      // Then apply scope filter
       let scoped;
       if (scope === 'inbox')         scoped = all.filter(s => s._scope_inbox);
       else if (scope === 'pool')     scoped = all.filter(s => s._scope_pool);
@@ -2182,7 +2201,7 @@
       else if (scope === 'assigned') scoped = all.filter(s => s._scope_assigned);
       else if (scope === 'resolved') scoped = all.filter(s => s.status === 'Resolved');
       else                           scoped = all;
-      res = { submissions: scoped, counts: bootstrapSubs.counts || {} };
+      res = { submissions: scoped, counts: counts };
     } else {
       res = await api(apiParams);
     }
@@ -5164,6 +5183,40 @@
 
   let _currentContractor = null;
 
+  /* v2.1.36: In-memory cache of contractor details.
+   * First click on a contractor still pays the ~3 sec backend cost, but every
+   * subsequent click on the SAME contractor within the TTL is instant.
+   * Cleared on save (contractor edit) so user always sees their own changes.
+   * Cleared on logout. Bounded size to prevent unbounded memory growth.
+   */
+  const _contractorDetailCache = new Map();
+  const CONTRACTOR_DETAIL_TTL_MS = 2 * 60 * 1000;  // 2 minutes
+  const CONTRACTOR_DETAIL_MAX_ENTRIES = 30;        // LRU-ish cap
+
+  function _getCachedContractorDetail(id) {
+    const entry = _contractorDetailCache.get(id);
+    if (!entry) return null;
+    if (Date.now() - entry.timestamp > CONTRACTOR_DETAIL_TTL_MS) {
+      _contractorDetailCache.delete(id);
+      return null;
+    }
+    return entry.data;
+  }
+
+  function _setCachedContractorDetail(id, data) {
+    // Bound the cache — drop oldest if over limit
+    if (_contractorDetailCache.size >= CONTRACTOR_DETAIL_MAX_ENTRIES) {
+      const firstKey = _contractorDetailCache.keys().next().value;
+      if (firstKey) _contractorDetailCache.delete(firstKey);
+    }
+    _contractorDetailCache.set(id, { data, timestamp: Date.now() });
+  }
+
+  function _invalidateCachedContractorDetail(id) {
+    if (id) _contractorDetailCache.delete(id);
+    else _contractorDetailCache.clear();
+  }
+
   async function openContractorDetail(contractorId) {
     // Show panel with a loading state immediately, then fetch full detail.
     // The cached list item only has summary fields (_list_view=true), we need
@@ -5178,6 +5231,21 @@
 
     // Use the cached list summary to prefill the header immediately (snappy)
     const summary = _contractorsAll.find(x => x.contractor_id === contractorId);
+
+    // v2.1.36: Try local detail cache. Repeat clicks on the same contractor
+    // are instant — no spinner, no loading state, panel renders fully.
+    const cachedDetail = _getCachedContractorDetail(contractorId);
+    if (cachedDetail) {
+      _currentContractor = cachedDetail;
+      panel.innerHTML = renderContractorPanel(cachedDetail);
+      panel.classList.add('open');
+      panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
+      // Still pre-warm users + load message count (they have their own caches)
+      api({ resource: 'users' }).catch(() => {});
+      loadContractorCommunicationCount(cachedDetail.contractor_id);
+      return;
+    }
+
     panel.innerHTML = renderContractorPanelLoading(summary);
     panel.classList.add('open');
     panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
@@ -5193,6 +5261,7 @@
       return;
     }
     _currentContractor = res.contractor;
+    _setCachedContractorDetail(contractorId, res.contractor);  // v2.1.36: cache for next time
     panel.innerHTML = renderContractorPanel(_currentContractor);
     panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
 
@@ -6342,12 +6411,18 @@
       keysToRemove.forEach(k => _apiCache.delete(k));
     }
 
+    // v2.1.36: The detail cache for this contractor will be replaced below
+    // with the fresh data returned from the save (so next click is instant).
+
     showToast(isNew ? 'Contractor created' : 'Changes saved', 'success');
 
     // Flip the panel to view mode IMMEDIATELY using the contractor returned by save.
     // This avoids a second round-trip to fetch the full record.
     if (res.contractor) {
       _currentContractor = res.contractor;
+      // v2.1.36: Populate the detail cache with the fresh data we just got back
+      // so the next click on this contractor is instant.
+      _setCachedContractorDetail(res.contractor.contractor_id, res.contractor);
       const p = $('#contractor-panel');
       if (p) {
         p.innerHTML = renderContractorPanel(_currentContractor);
@@ -7514,7 +7589,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.35';
+  const APP_VERSION = '2.1.36';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
