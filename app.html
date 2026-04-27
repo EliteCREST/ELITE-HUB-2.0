@@ -4239,17 +4239,19 @@
           <button class="contractors-records-export" disabled title="Coming soon">⬇ EXPORT</button>
         </div>
 
-        <div class="ctr-row ctr-row-colheaders">
-          <div class="ctr-row-status">STATUS</div>
-          <div class="ctr-row-name">CONTRACTOR</div>
-          <div class="ctr-row-trade">TRADE</div>
-          <div class="ctr-row-crews">CREWS</div>
-          <div class="ctr-row-gl">GL EXPIRY</div>
-          <div class="ctr-row-wc">WC EXPIRY</div>
-          <div class="ctr-row-contract">CONTRACT</div>
-          <div class="ctr-row-pay">PAYLOCITY</div>
-          <div class="ctr-row-blaze">BLAZE</div>
-          <div class="ctr-row-actions">ACTIONS</div>
+        <div id="ctr-colheaders-mount">
+          <div class="ctr-row ctr-row-colheaders">
+            <div class="ctr-row-status ctr-sortable" onclick="setContractorSort('status')">STATUS<span id="sortarrow-status" class="ctr-sort-arrow"></span></div>
+            <div class="ctr-row-name ctr-sortable" onclick="setContractorSort('name')">CONTRACTOR<span id="sortarrow-name" class="ctr-sort-arrow"></span></div>
+            <div class="ctr-row-trade">TRADE</div>
+            <div class="ctr-row-crews ctr-sortable" onclick="setContractorSort('crews')">CREWS<span id="sortarrow-crews" class="ctr-sort-arrow"></span></div>
+            <div class="ctr-row-gl ctr-sortable" onclick="setContractorSort('gl')">GL EXPIRY<span id="sortarrow-gl" class="ctr-sort-arrow"></span></div>
+            <div class="ctr-row-wc ctr-sortable" onclick="setContractorSort('wc')">WC EXPIRY<span id="sortarrow-wc" class="ctr-sort-arrow"></span></div>
+            <div class="ctr-row-contract">CONTRACT</div>
+            <div class="ctr-row-pay">PAYLOCITY</div>
+            <div class="ctr-row-blaze">BLAZE</div>
+            <div class="ctr-row-actions">ACTIONS</div>
+          </div>
         </div>
 
         <div class="contractors-list-wrap">
@@ -4284,6 +4286,95 @@
   let _contractorsCache = [];              // filtered view (what's currently displayed)
   let _contractorsAll = [];                 // everything fetched once
   let _contractorsThresholds = { gl_expiring_days: 30, wc_expiring_days: 30 };
+
+  // Sort state for the contractors table.
+  // key: 'status' | 'name' | 'crews' | 'gl' | 'wc' | null (default = original sort)
+  // dir: 'asc' | 'desc'
+  let _contractorsSort = { key: 'gl', dir: 'asc' };
+
+  /**
+   * Apply the current sort to a list of contractors. Hard-replace semantics —
+   * only one column is the sort key at a time.
+   */
+  function applyContractorSort(items) {
+    const key = _contractorsSort.key;
+    const dir = _contractorsSort.dir;
+    if (!key) return items;
+
+    // Severity rank for STATUS sort: HOLD (most urgent) → ATTN → CLEAR
+    const STATUS_RANK = { hold: 0, attn: 1, clear: 2 };
+
+    const sorted = items.slice().sort((a, b) => {
+      let va, vb;
+      switch (key) {
+        case 'status':
+          va = STATUS_RANK[a.clear_status] ?? 99;
+          vb = STATUS_RANK[b.clear_status] ?? 99;
+          break;
+        case 'name':
+          va = String(a.contractor_name || '').toLowerCase();
+          vb = String(b.contractor_name || '').toLowerCase();
+          break;
+        case 'crews':
+          va = _crewsCounts[a.contractor_id] || 0;
+          vb = _crewsCounts[b.contractor_id] || 0;
+          break;
+        case 'gl':
+          va = a.gl_expiry || '9999-12-31';
+          vb = b.gl_expiry || '9999-12-31';
+          break;
+        case 'wc':
+          if (a.wc_exempt) va = '9999-12-30';
+          else va = a.wc_expiry || '9999-12-31';
+          if (b.wc_exempt) vb = '9999-12-30';
+          else vb = b.wc_expiry || '9999-12-31';
+          break;
+        default:
+          return 0;
+      }
+      if (va < vb) return dir === 'asc' ? -1 : 1;
+      if (va > vb) return dir === 'asc' ?  1 : -1;
+      return 0;
+    });
+    return sorted;
+  }
+
+  /**
+   * Clicked a sortable header. If clicking the current sort column, toggle direction.
+   * Otherwise switch to that column with a sensible default direction.
+   */
+  function setContractorSort(key) {
+    const cur = _contractorsSort;
+    if (cur.key === key) {
+      _contractorsSort.dir = cur.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _contractorsSort.key = key;
+      // Default direction per column type:
+      //   crews → desc (most crews first)
+      //   anything else → asc (A-Z, soonest, lowest severity rank = HOLD first)
+      _contractorsSort.dir = (key === 'crews') ? 'desc' : 'asc';
+    }
+    renderContractorSortArrows();
+    applyContractorFilters();
+  }
+  window.setContractorSort = setContractorSort;
+
+  /**
+   * Update the ▲/▼ arrow indicators on column headers to reflect current sort.
+   */
+  function renderContractorSortArrows() {
+    ['status', 'name', 'crews', 'gl', 'wc'].forEach(k => {
+      const el = document.getElementById('sortarrow-' + k);
+      if (!el) return;
+      if (_contractorsSort.key === k) {
+        el.textContent = _contractorsSort.dir === 'asc' ? ' ▲' : ' ▼';
+        el.classList.add('ctr-sort-arrow-active');
+      } else {
+        el.textContent = '';
+        el.classList.remove('ctr-sort-arrow-active');
+      }
+    });
+  }
   let _contractorsLoadTimer = null;
   let _contractorsScopedRegion = null;      // when on a region page, fixed to that region
 
@@ -4327,6 +4418,7 @@
     _contractorMessageCounts = res.message_counts || {};
     _crewsCounts = res.crews_counts || {};
 
+    renderContractorSortArrows();
     applyContractorFilters();
   }
 
@@ -4397,6 +4489,9 @@
         (c.email || '').toLowerCase().includes(search)
       );
     }
+
+    // Apply user-selected sort (default: GL expiry ascending — matches backend default)
+    filtered = applyContractorSort(filtered);
 
     _contractorsCache = filtered;
 
@@ -4546,11 +4641,16 @@
 
     const commsBadge = renderCommsBadge(_contractorMessageCounts[c.contractor_id]);
 
-    // STATUS — Clear / Not Clear (derived on the backend)
-    const clearStatus = c.clear_status || 'not_clear';
-    const clearPill = clearStatus === 'clear'
-      ? `<span class="ctr-ol-pill ctr-ol-clear">CLEAR</span>`
-      : `<span class="ctr-ol-pill ctr-ol-not-clear">HOLD</span>`;
+    // STATUS — Clear / Attn / Hold (derived on the backend)
+    const clearStatus = c.clear_status || 'hold';
+    let clearPill;
+    if (clearStatus === 'clear') {
+      clearPill = `<span class="ctr-ol-pill ctr-ol-clear">CLEAR</span>`;
+    } else if (clearStatus === 'attn') {
+      clearPill = `<span class="ctr-ol-pill ctr-ol-attn">ATTN</span>`;
+    } else {
+      clearPill = `<span class="ctr-ol-pill ctr-ol-not-clear">HOLD</span>`;
+    }
 
     // TRADE — one outlined pill with letter codes separated by space (e.g. "R S G")
     const trades = Array.isArray(c.trades_array) ? c.trades_array : [];
@@ -7001,7 +7101,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.29';
+  const APP_VERSION = '2.1.30';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).

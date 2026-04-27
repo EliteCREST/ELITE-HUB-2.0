@@ -3007,6 +3007,7 @@ a.ctr-summary-amber:hover { background: var(--slate-200); }
 }
 .ctr-ol-clear      { color: var(--blue); }
 .ctr-ol-not-clear  { color: var(--red); }
+.ctr-ol-attn       { color: #B45309; }
 .ctr-ol-trade      { color: var(--blue); letter-spacing: 2px; padding: 3px 12px; }
 .ctr-ol-signed     { color: var(--blue); }
 .ctr-ol-not-signed { color: var(--red); }
@@ -4955,3 +4956,23 @@ a.ctr-summary-item-active {
   cursor: default;
 }
 a.ctr-summary-item-active:hover { background: var(--white); }
+
+/* ─── Sortable column headers (v2.1.30) ────────────────────────── */
+.ctr-row-colheaders .ctr-sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--t-fast);
+}
+.ctr-row-colheaders .ctr-sortable:hover {
+  color: var(--blue);
+}
+.ctr-sort-arrow {
+  display: inline;
+  font-size: 9px;
+  color: var(--slate-400);
+  margin-left: 2px;
+}
+.ctr-sort-arrow-active {
+  color: var(--blue);
+  font-weight: 700;
+}
