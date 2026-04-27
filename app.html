@@ -506,6 +506,9 @@
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(VIEWING_AS_KEY);
     if (typeof _apiCache !== 'undefined') _apiCache.clear();
+    // Also clear bootstrap cache (added v2.1.34) — never let one user
+    // see another user's preloaded data after logout.
+    try { localStorage.removeItem('eh2_bootstrap_v1'); } catch (e) {}
   }
 
   function getToken() {
@@ -694,6 +697,120 @@
     return res;
   }
   window.testBootstrap = testBootstrap;
+
+  /* ═══════════════════════════════════════════════════════════════════
+   * BOOTSTRAP_CACHE (v2.1.34) — frontend cache of the bootstrap response
+   * ───────────────────────────────────────────────────────────────────
+   * The whole point of bootstrap: fetch ALL the data the user needs once,
+   * then serve every subsequent page render from this cache instead of
+   * making another backend call. Each cached read is ~0ms, vs ~3-7sec
+   * for an Apps Script round-trip.
+   *
+   * Storage: localStorage (survives reloads, capped at ~5-10MB by browser)
+   * Key:     'eh2_bootstrap_v1' (version-suffixed for safe future migrations)
+   * Contents: { data: {...}, fetched_at: <ms timestamp>, version: 1 }
+   *
+   * Lifecycle (Deploy 2 — this version):
+   *   - On app boot, if no cache exists, fetch bootstrap and populate
+   *   - On logout, clear the cache
+   *   - Pages read sections via getBootstrapSection('dashboard')
+   * Lifecycle (Deploy 3 — coming):
+   *   - Background timer refreshes every 30 sec
+   *   - Writes invalidate affected sections and refetch
+   * ═══════════════════════════════════════════════════════════════════ */
+  const BOOTSTRAP_CACHE = (function() {
+    const KEY = 'eh2_bootstrap_v1';
+
+    function _read() {
+      try {
+        const raw = localStorage.getItem(KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) { return null; }
+    }
+
+    function _write(data) {
+      try {
+        localStorage.setItem(KEY, JSON.stringify({
+          data: data,
+          fetched_at: Date.now(),
+          version: 1,
+        }));
+      } catch (e) {
+        // localStorage might be full or disabled — silently degrade.
+        // Worst case: pages will fall back to direct API calls.
+        console.warn('[bootstrap] cache write failed:', e.message);
+      }
+    }
+
+    function get() {
+      const entry = _read();
+      return entry ? entry.data : null;
+    }
+
+    function getSection(name) {
+      const data = get();
+      return data ? data[name] : null;
+    }
+
+    function ageMs() {
+      const entry = _read();
+      return entry ? (Date.now() - entry.fetched_at) : Infinity;
+    }
+
+    function exists() {
+      return _read() !== null;
+    }
+
+    function clear() {
+      try { localStorage.removeItem(KEY); } catch (e) {}
+    }
+
+    /**
+     * Fetch fresh bootstrap data and store it. Returns the data on success,
+     * or null on failure. Logs timing for observability.
+     */
+    async function fetchAndStore() {
+      const t0 = performance.now();
+      try {
+        const data = await api({ resource: 'bootstrap' });
+        if (data && data.error) {
+          console.error('[bootstrap] fetch error:', data.error);
+          return null;
+        }
+        _write(data);
+        const ms = Math.round(performance.now() - t0);
+        _logTiming('bootstrap', 'fetched & stored (' + Math.round(JSON.stringify(data).length / 1024) + ' KB)', ms);
+        return data;
+      } catch (e) {
+        console.error('[bootstrap] fetch exception:', e);
+        return null;
+      }
+    }
+
+    /**
+     * Force refresh — public API for Deploy 3's background timer & post-write hooks.
+     */
+    async function forceRefresh() {
+      return await fetchAndStore();
+    }
+
+    /**
+     * Update a single section in the cache (used after a successful write
+     * so the user sees their change immediately, without a full refetch).
+     */
+    function updateSection(name, value) {
+      const entry = _read();
+      if (!entry) return;
+      entry.data[name] = value;
+      try { localStorage.setItem(KEY, JSON.stringify(entry)); } catch (e) {}
+    }
+
+    return {
+      get, getSection, ageMs, exists, clear,
+      fetchAndStore, forceRefresh, updateSection,
+    };
+  })();
+  window.BOOTSTRAP_CACHE = BOOTSTRAP_CACHE;  // expose for debugging
 
   function _computeTimingAggregates() {
     // Group API calls by resource name. Compute count, avg, p50, p95, max.
@@ -3145,12 +3262,24 @@
       greetingEl.textContent = `${verb}, ${firstName}.`;
     }
 
-    // Fire requests in parallel
-    const [tasksRes, widgetsRes, dashboardRes] = await Promise.all([
-      api({ resource: 'tasks' }),
-      api({ resource: 'widgets' }),
-      api({ resource: 'dashboard' }),
-    ]);
+    // v2.1.34: Read from bootstrap cache instead of 3 backend calls.
+    // The old version fired tasks/widgets/dashboard in parallel but Apps Script
+    // serializes them, taking 5+ seconds total. From cache: 0ms.
+    let tasksRes      = BOOTSTRAP_CACHE.getSection('tasks');
+    let widgetsRes    = BOOTSTRAP_CACHE.getSection('widgets');
+    let dashboardRes  = BOOTSTRAP_CACHE.getSection('dashboard');
+
+    // Fallback to direct API if cache miss (e.g. bootstrap failed)
+    if (!tasksRes || !widgetsRes || !dashboardRes) {
+      const fallback = await Promise.all([
+        tasksRes     ? Promise.resolve(tasksRes)     : api({ resource: 'tasks' }),
+        widgetsRes   ? Promise.resolve(widgetsRes)   : api({ resource: 'widgets' }),
+        dashboardRes ? Promise.resolve(dashboardRes) : api({ resource: 'dashboard' }),
+      ]);
+      tasksRes     = fallback[0];
+      widgetsRes   = fallback[1];
+      dashboardRes = fallback[2];
+    }
 
     if (!$('#ws-task-list')) return;  // navigated away
 
@@ -7099,7 +7228,12 @@
     // If we're not on the home view, abort (user navigated away)
     if (!greetingEl) return;
 
-    const data = await api({ resource: 'dashboard' });
+    // v2.1.34: Read from bootstrap cache instead of firing a backend call.
+    // If cache miss (e.g. first deploy or bootstrap failed), fall back to API.
+    let data = BOOTSTRAP_CACHE.getSection('dashboard');
+    if (!data) {
+      data = await api({ resource: 'dashboard' });
+    }
 
     if (!greetingEl || !kpiEl) return;  // user navigated away during fetch
 
@@ -7257,7 +7391,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.33';
+  const APP_VERSION = '2.1.34';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
@@ -7375,17 +7509,87 @@
     throw new Error('Redirecting to login');
   }
 
-  document.body.style.opacity = '1';
+  /**
+   * Multi-step loading screen shown during the initial bootstrap fetch.
+   * Users see progress messages instead of a frozen blank page.
+   */
+  function _showBootstrapLoadingScreen() {
+    const overlay = document.createElement('div');
+    overlay.id = 'eh2-bootstrap-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:var(--white,#fff);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:system-ui,-apple-system,sans-serif;';
+    overlay.innerHTML = `
+      <div style="text-align:center;max-width:380px;padding:0 24px;">
+        <div style="width:56px;height:56px;border:3px solid #e2e8f0;border-top-color:#1F5FAD;border-radius:50%;animation:eh2spin 0.9s linear infinite;margin:0 auto 24px;"></div>
+        <div id="eh2-bootstrap-msg" style="font-size:16px;font-weight:600;color:#1B2A4A;margin-bottom:8px;">Preparing your workspace…</div>
+        <div id="eh2-bootstrap-sub" style="font-size:13px;color:#64748b;">This takes a few seconds the first time.</div>
+      </div>
+      <style>@keyframes eh2spin { to { transform: rotate(360deg); } }</style>
+    `;
+    document.body.appendChild(overlay);
+    return overlay;
+  }
 
-  // Show version in sidebar footer
-  const versionEl = document.getElementById('app-sidebar-version');
-  if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
+  function _updateBootstrapMessage(msg, sub) {
+    const m = document.getElementById('eh2-bootstrap-msg');
+    const s = document.getElementById('eh2-bootstrap-sub');
+    if (m && msg) m.textContent = msg;
+    if (s && sub != null) s.textContent = sub;
+  }
 
-  renderUserSwitcher();
-  renderAccountMenu();
-  renderRegionsSubnav();
-  renderViewAsBanner();
-  resolveRoute();
+  function _hideBootstrapLoadingScreen() {
+    const overlay = document.getElementById('eh2-bootstrap-overlay');
+    if (overlay) {
+      overlay.style.transition = 'opacity 0.25s';
+      overlay.style.opacity = '0';
+      setTimeout(() => overlay.remove(), 260);
+    }
+  }
+
+  /**
+   * Boot sequence:
+   *   1. If we have a fresh cached bootstrap (< 5 min old), use it — instant boot
+   *   2. Otherwise fetch fresh bootstrap with a loading screen
+   *   3. Then proceed with normal app render
+   */
+  (async function boot() {
+    document.body.style.opacity = '1';
+
+    const versionEl = document.getElementById('app-sidebar-version');
+    if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
+
+    const STALE_AFTER_MS = 5 * 60 * 1000;  // 5 min — older than this, refetch
+    const hasFresh = BOOTSTRAP_CACHE.exists() && BOOTSTRAP_CACHE.ageMs() < STALE_AFTER_MS;
+
+    if (!hasFresh) {
+      // Show loading screen + fetch bootstrap
+      _showBootstrapLoadingScreen();
+      _updateBootstrapMessage('Loading your workspace…', 'Fetching contractors, messages, and tasks');
+
+      // Brief micro-delay so the message is visible even on fast connections
+      const minDisplay = new Promise(r => setTimeout(r, 250));
+
+      const data = await BOOTSTRAP_CACHE.fetchAndStore();
+      await minDisplay;
+
+      if (!data) {
+        // Bootstrap failed — degrade gracefully. Show the app anyway;
+        // pages will fall back to direct API calls (slower but functional).
+        _updateBootstrapMessage('Continuing without preload…', 'Pages may be slower');
+        await new Promise(r => setTimeout(r, 600));
+      } else {
+        _updateBootstrapMessage('Almost ready…', '');
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      _hideBootstrapLoadingScreen();
+    }
+
+    renderUserSwitcher();
+    renderAccountMenu();
+    renderRegionsSubnav();
+    renderViewAsBanner();
+    resolveRoute();
+  })();
   </script>
 
 </body>
