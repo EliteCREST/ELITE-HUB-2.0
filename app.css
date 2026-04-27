@@ -2845,34 +2845,121 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   display: flex;
   flex-direction: column;
 }
+/* ─── Contractors records panel (v1-style layout) ─────────────── */
+
+.contractors-records-panel {
+  background: var(--white);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  margin-top: var(--sp-3);
+}
+
+.contractors-records-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--navy);
+  color: var(--white);
+}
+.contractors-records-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.contractors-records-header-text {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.contractors-records-header-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.65);
+}
+.contractors-records-export {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: var(--white);
+  border-radius: var(--r-sm);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.contractors-records-export:hover:not(:disabled) {
+  border-color: var(--white);
+  background: rgba(255, 255, 255, 0.08);
+}
+.contractors-records-export:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ─── Contractor row grid — 11 columns, v1 layout ─────────────── */
+
 .ctr-row {
   display: grid;
-  grid-template-columns: minmax(220px, 2.2fr) minmax(100px, 1fr) 130px 130px 90px minmax(110px, 1fr);
-  gap: var(--sp-3);
-  padding: 12px var(--sp-3);
+  grid-template-columns:
+    90px                       /* STATUS */
+    minmax(200px, 2fr)         /* CONTRACTOR (name + contact + meta) */
+    100px                      /* TRADE */
+    60px                       /* CREWS */
+    100px                      /* GL EXPIRY */
+    100px                      /* WC EXPIRY */
+    100px                      /* CONTRACT */
+    80px                       /* PAYLOCITY */
+    80px                       /* BLAZE */
+    70px                       /* TRAVEL */
+    minmax(160px, 1fr);        /* ACTIONS */
+  gap: var(--sp-2);
+  padding: 10px var(--sp-3);
   border-bottom: 1px solid var(--slate-100);
-  cursor: pointer;
   align-items: center;
   transition: background var(--t-fast);
 }
-.ctr-row:last-child { border-bottom: none; }
-.ctr-row:hover { background: var(--slate-50); }
+.contractors-list .ctr-row { cursor: pointer; }
+.contractors-list .ctr-row:last-child { border-bottom: none; }
+.contractors-list .ctr-row:hover { background: var(--slate-50); }
 
-.ctr-row-name {
-  min-width: 0;
+/* Column header row (grey, uppercase) */
+.ctr-row-colheaders {
+  background: var(--slate-50);
+  border-bottom: 1px solid var(--slate-200);
+  padding: 8px var(--sp-3);
+  cursor: default !important;
 }
+.ctr-row-colheaders:hover { background: var(--slate-50) !important; }
+.ctr-row-colheaders > div {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--slate-600);
+  text-transform: uppercase;
+}
+
+/* Contractor name cell */
+.ctr-row-name { min-width: 0; }
 .ctr-row-name-text {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--navy);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .ctr-row-contact {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--slate-600);
-  margin-top: 2px;
+  margin-top: 1px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2881,7 +2968,8 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  flex-wrap: wrap;
+  margin-top: 3px;
 }
 .ctr-row-pay-id {
   font-size: 10px;
@@ -2889,88 +2977,97 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   font-weight: 600;
   letter-spacing: 0.3px;
 }
-.ctr-row-regions {
-  display: flex;
-  gap: 3px;
-  flex-wrap: wrap;
-  min-width: 0;
-}
+
+/* Region chips */
 .ctr-region-chip {
   display: inline-block;
-  padding: 2px 7px;
+  padding: 1px 6px;
   background: var(--slate-100);
   color: var(--slate-700);
-  border-radius: var(--r-round);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-
-/* Expiry date under the GL/WC pills */
-.ctr-row-gl, .ctr-row-wc {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  align-items: flex-start;
-}
-.ctr-row-expiry-date {
-  font-size: 11px;
-  line-height: 1.2;
-}
-.ctr-exp-ok      { color: var(--slate-600); }
-.ctr-exp-soon    { color: #B45309; font-weight: 700; }
-.ctr-exp-expired { color: var(--red); font-weight: 700; }
-.ctr-exp-missing,
-.ctr-exp-none    { color: var(--slate-400); font-style: italic; }
-.ctr-exp-exempt  { color: var(--slate-500); font-weight: 600; }
-
-.ctr-row-status {
-  display: flex;
-  align-items: center;
-}
-.ctr-status-pill {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: var(--r-round);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-}
-.ctr-status-active   { background: #DCFCE7; color: #15803D; }
-.ctr-status-inactive { background: var(--slate-200); color: var(--slate-600); }
-.ctr-status-on_hold  { background: var(--amber-pale); color: #B45309; }
-
-.ctr-trade-pill {
-  display: inline-block;
-  padding: 1px 6px;
-  border: 1px solid var(--slate-300);
-  color: var(--slate-600);
   border-radius: var(--r-round);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.4px;
 }
 
-.ctr-row-updated {
-  font-size: 11px;
-  color: var(--slate-500);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Headline styles kept for any non-list-view usage, but not used in new row layout */
-.ctr-headline {
+/* ─── Outlined pills (v1-style) ─────────────────────────────── */
+.ctr-ol-pill {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--r-sm);
-  font-size: 11px;
+  padding: 3px 10px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--r-round);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  background: transparent;
+}
+.ctr-ol-clear      { color: var(--blue); }
+.ctr-ol-not-clear  { color: var(--red); }
+.ctr-ol-trade      { color: var(--blue); letter-spacing: 2px; padding: 3px 12px; }
+.ctr-ol-signed     { color: var(--blue); }
+.ctr-ol-not-signed { color: var(--red); }
+
+/* Indicator cells (Paylocity, Blaze) */
+.ctr-ind-ok   { color: var(--blue); font-size: 12px; font-weight: 600; }
+.ctr-ind-attn { color: var(--red);  font-size: 12px; font-weight: 600; }
+
+/* Expiry dates */
+.ctr-exp {
+  font-size: 12px;
   font-weight: 700;
 }
-.ctr-headline-ok      { background: transparent; color: var(--slate-600); }
-.ctr-headline-soon    { background: var(--amber-pale); color: #B45309; }
-.ctr-headline-expired { background: var(--red-pale); color: var(--red); }
-.ctr-headline-none    { color: var(--slate-400); }
+.ctr-exp-ok      { color: var(--blue); }
+.ctr-exp-soon    { color: #B45309; }
+.ctr-exp-expired { color: var(--red); }
+.ctr-exp-none    { color: var(--slate-400); font-style: italic; font-weight: normal; }
+.ctr-exp-missing { color: var(--red); font-weight: 700; font-style: italic; }
+.ctr-exp-exempt  { color: var(--slate-500); font-size: 12px; font-weight: 600; }
+
+/* Travel */
+.ctr-travel {
+  font-size: 11px;
+  color: var(--slate-700);
+  font-weight: 600;
+}
+
+/* Dash placeholder for empty cells */
+.ctr-cell-dash {
+  color: var(--slate-300);
+  font-size: 14px;
+}
+
+/* Actions column */
+.ctr-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.ctr-action-btn {
+  padding: 4px 8px;
+  background: var(--white);
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-sm);
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--slate-700);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+.ctr-action-btn:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.ctr-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Skeleton row still uses grid but is non-interactive */
+.ctr-row-skeleton { cursor: default; }
+.ctr-row-skeleton:hover { background: transparent; }
 
 /* Status pills */
 .ctr-pill {
