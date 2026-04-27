@@ -4938,3 +4938,20 @@ a.ctr-summary-amber:hover { background: var(--slate-200); }
   font-weight: 400;
   user-select: none;
 }
+
+/* ─── Active state for summary segments and total chip ─────────── */
+.ctr-summary-seg-active {
+  color: var(--blue) !important;
+  font-weight: 700;
+  background: var(--white);
+  border-radius: var(--r-sm);
+  padding: 1px 6px;
+  margin: 0 2px;
+}
+a.ctr-summary-item-active {
+  background: var(--white);
+  color: var(--navy);
+  box-shadow: inset 0 0 0 1.5px var(--blue);
+  cursor: default;
+}
+a.ctr-summary-item-active:hover { background: var(--white); }

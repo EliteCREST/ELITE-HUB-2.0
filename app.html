@@ -4428,9 +4428,12 @@
     const wcExpSoon = source.filter(c => c.wc_status === 'expiring_soon').length;
     const wcMissing = source.filter(c => c.wc_status === 'missing').length;
 
-    // Build grouped chip — list of segments to show, each clickable to filter.
-    // Empty (zero) segments are skipped to reduce noise.
-    function buildGroupChip(label, segments) {
+    // Read current dropdown state to highlight the active segment
+    const activeGl = ($('#ctr-gl-status') ? $('#ctr-gl-status').value : '') || '';
+    const activeWc = ($('#ctr-wc-status') ? $('#ctr-wc-status').value : '') || '';
+    const noFilter = !activeGl && !activeWc;
+
+    function buildGroupChip(label, segments, activeValue) {
       const visible = segments.filter(s => s.count > 0);
       if (visible.length === 0) {
         return `<span class="ctr-summary-group">
@@ -4438,9 +4441,11 @@
           <span class="ctr-summary-group-clean">✓ All current</span>
         </span>`;
       }
-      const segmentsHtml = visible.map(s =>
-        `<a class="ctr-summary-seg" href="javascript:filterByStatus('${s.field}','${s.value}')">${s.count} ${escapeHtml(s.label)}</a>`
-      ).join('<span class="ctr-summary-seg-divider">·</span>');
+      const segmentsHtml = visible.map(s => {
+        const isActive = activeValue === s.value;
+        const cls = 'ctr-summary-seg' + (isActive ? ' ctr-summary-seg-active' : '');
+        return `<a class="${cls}" href="javascript:filterByStatus('${s.field}','${s.value}')">${s.count} ${escapeHtml(s.label)}</a>`;
+      }).join('<span class="ctr-summary-seg-divider">·</span>');
       return `<span class="ctr-summary-group">
         <span class="ctr-summary-group-label">${escapeHtml(label)}:</span>
         ${segmentsHtml}
@@ -4451,28 +4456,62 @@
       { count: glExpired, label: 'expired',  field: 'gl_status', value: 'expired' },
       { count: glExpSoon, label: 'soon',     field: 'gl_status', value: 'expiring_soon' },
       { count: glMissing, label: 'missing',  field: 'gl_status', value: 'missing' },
-    ]);
+    ], activeGl);
 
     const wcChip = buildGroupChip('WC', [
       { count: wcExpired, label: 'expired',  field: 'wc_status', value: 'expired' },
       { count: wcExpSoon, label: 'soon',     field: 'wc_status', value: 'expiring_soon' },
       { count: wcMissing, label: 'missing',  field: 'wc_status', value: 'missing' },
       { count: wcExempt,  label: 'exempt',   field: 'wc_status', value: 'exempt' },
-    ]);
+    ], activeWc);
 
+    // Total chip is clickable: clears all status filters
+    const totalCls = 'ctr-summary-item' + (noFilter ? ' ctr-summary-item-active' : '');
     el.innerHTML = `
-      <span class="ctr-summary-item"><strong>${total}</strong> total</span>
+      <a class="${totalCls}" href="javascript:clearAllContractorFilters()"><strong>${total}</strong> total</a>
       ${glChip}
       ${wcChip}
     `;
   }
 
+  /**
+   * Set a single status filter and clear the others (region stays untouched).
+   * If the requested filter is already active for the same field+value, toggles off.
+   * Triggered by clicks on segments inside the GL/WC summary chips.
+   */
   function filterByStatus(which, value) {
     const el = $('#ctr-' + which.replace('_','-'));
     if (!el) return;
-    el.value = value;
+
+    // Toggle off if same filter is already active
+    if (el.value === value) {
+      el.value = '';
+    } else {
+      el.value = value;
+    }
+
+    // Clear sibling status filters so categories don't AND together unintentionally
+    if (which === 'gl_status') {
+      const wc = $('#ctr-wc-status'); if (wc) wc.value = '';
+    } else if (which === 'wc_status') {
+      const gl = $('#ctr-gl-status'); if (gl) gl.value = '';
+    }
+
     applyContractorFilters();
   }
+  window.filterByStatus = filterByStatus;
+
+  /**
+   * Clear all status filters and search. Region filter is preserved.
+   * Triggered by clicking the "N total" chip in the summary bar.
+   */
+  function clearAllContractorFilters() {
+    const gl = $('#ctr-gl-status'); if (gl) gl.value = '';
+    const wc = $('#ctr-wc-status'); if (wc) wc.value = '';
+    const search = $('#ctr-search'); if (search) search.value = '';
+    applyContractorFilters();
+  }
+  window.clearAllContractorFilters = clearAllContractorFilters;
 
   function renderContractorsList(items) {
     const listEl = $('#contractors-list');
@@ -6962,7 +7001,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.28';
+  const APP_VERSION = '2.1.29';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
