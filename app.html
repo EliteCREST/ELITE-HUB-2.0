@@ -630,7 +630,7 @@
   const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
 
   // Resources that should be cached on GET. Writes invalidate relevant caches.
-  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractors_full','contractor','contractor_crews','contractor_crews_full','users','regions','reviews_individual','submissions_for_record','submission_counts','crews_counts'];
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractors_full','contractor','contractor_crews_full','users','regions','reviews_individual','submissions_for_record','submission_counts'];
 
   // Which resources to invalidate when an action happens
   const INVALIDATE_MAP = {
@@ -4428,39 +4428,6 @@
   // Module-scoped map: contractor_id → number (active crew count)
   let _crewsCounts = {};
 
-  async function fetchContractorMessageCounts(ids) {
-    if (!ids || ids.length === 0) return;
-    try {
-      const res = await api({
-        resource: 'submission_counts',
-        source_page: 'compliance',
-        source_ids: ids.join(','),
-      });
-      if (res && res.counts) {
-        _contractorMessageCounts = res.counts;
-        // Re-render if the list is still visible (user may have navigated away)
-        if ($('#contractors-list')) applyContractorFilters();
-      }
-    } catch (err) {
-      console.warn('[contractors] message-count fetch failed:', err);
-    }
-  }
-
-  async function fetchCrewsCounts(ids) {
-    if (!ids || ids.length === 0) return;
-    try {
-      const res = await api({
-        resource: 'crews_counts',
-        contractor_ids: ids.join(','),
-      });
-      if (res && res.counts) {
-        _crewsCounts = res.counts;
-        if ($('#contractors-list')) applyContractorFilters();
-      }
-    } catch (err) {
-      console.warn('[contractors] crew-count fetch failed:', err);
-    }
-  }
 
   /**
    * Apply current filter/search state to _contractorsAll — instant, no API call.
@@ -5267,7 +5234,7 @@
     // Bump global count + invalidate caches so the row badge AND the next
     // modal open both reflect the change
     _crewsCounts[ctx.contractorId] = (_crewsCounts[ctx.contractorId] || 0) + 1;
-    invalidateApiCache(['crews_counts', 'contractor_crews', 'contractor_crews_full', 'contractors_full']);
+    invalidateApiCache(['contractor_crews_full', 'contractors_full']);
     if ($('#contractors-list')) applyContractorFilters();
   }
 
@@ -5300,7 +5267,7 @@
     if (_crewsCounts[ctx.contractorId] && _crewsCounts[ctx.contractorId] > 0) {
       _crewsCounts[ctx.contractorId]--;
     }
-    invalidateApiCache(['crews_counts', 'contractor_crews', 'contractor_crews_full', 'contractors_full']);
+    invalidateApiCache(['contractor_crews_full', 'contractors_full']);
     if ($('#contractors-list')) applyContractorFilters();
   }
 
@@ -5364,7 +5331,7 @@
 
     showToast('Crew updated', 'success');
     _renderCrewsModal({ loading: false });
-    invalidateApiCache(['contractor_crews', 'contractor_crews_full']);
+    invalidateApiCache(['contractor_crews_full']);
   }
 
   function closeCrewsModal() {
@@ -7101,7 +7068,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.30';
+  const APP_VERSION = '2.1.31';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).

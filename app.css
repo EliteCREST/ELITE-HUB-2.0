@@ -2823,16 +2823,6 @@ body.view-as-active .app-root {
   transition: background var(--t-fast);
 }
 a.ctr-summary-item:hover { background: var(--slate-200); }
-/* Category color variants intentionally use the neutral style now —
-   per-category coloring made the bar too noisy. Keep classes alive in case
-   any code/theme references them. */
-.ctr-summary-red,
-.ctr-summary-amber {
-  background: var(--slate-100);
-  color: var(--slate-700);
-}
-a.ctr-summary-red:hover,
-a.ctr-summary-amber:hover { background: var(--slate-200); }
 
 /* Table list */
 .contractors-list-wrap {
@@ -2967,19 +2957,6 @@ a.ctr-summary-amber:hover { background: var(--slate-200); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ctr-row-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 3px;
-}
-.ctr-row-pay-id {
-  font-size: 10px;
-  color: var(--slate-500);
-  font-weight: 600;
-  letter-spacing: 0.3px;
-}
 
 /* Region chips */
 .ctr-region-chip {
@@ -3027,13 +3004,6 @@ a.ctr-summary-amber:hover { background: var(--slate-200); }
 .ctr-exp-none    { color: var(--slate-400); font-style: italic; font-weight: normal; }
 .ctr-exp-missing { color: var(--red); font-weight: 700; font-style: italic; }
 .ctr-exp-exempt  { color: var(--slate-500); font-size: 12px; font-weight: 600; }
-
-/* Travel */
-.ctr-travel {
-  font-size: 11px;
-  color: var(--slate-700);
-  font-weight: 600;
-}
 
 /* Dash placeholder for empty cells */
 .ctr-cell-dash {
@@ -4791,21 +4761,6 @@ a.ctr-summary-amber:hover { background: var(--slate-200); }
 .crew-line {
   font-size: 12px;
   color: var(--slate-600);
-}
-.crew-delete-btn {
-  background: transparent;
-  border: none;
-  color: var(--slate-400);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: var(--r-sm);
-  transition: color var(--t-fast), background var(--t-fast);
-}
-.crew-delete-btn:hover {
-  color: var(--red);
-  background: var(--red-pale);
 }
 
 /* ─── Crews modal — improved spacing + edit mode ────────────────── */
