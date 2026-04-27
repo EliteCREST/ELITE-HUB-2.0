@@ -4601,3 +4601,209 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   font-size: 13px;
   color: var(--navy);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CONTRACTOR CREWS — clickable button + modal (Phase B-1, v2.1.22)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Button on the contractor row */
+.ctr-crews-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: var(--slate-100);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-round);
+  color: var(--slate-700);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.ctr-crews-btn:hover {
+  background: var(--slate-200);
+  border-color: var(--slate-300);
+}
+
+/* Modal backdrop */
+.crews-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  animation: fadeIn 150ms ease-out;
+}
+.crews-modal {
+  background: var(--white);
+  border-radius: var(--r-lg);
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
+  width: 100%;
+  max-width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header (dark navy, matches v1 modal screenshot) */
+.crews-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--navy);
+  color: var(--white);
+}
+.crews-header-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+.crews-header-sub {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 2px;
+}
+.crews-close {
+  background: transparent;
+  border: none;
+  color: var(--white);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.75;
+  transition: opacity var(--t-fast);
+}
+.crews-close:hover { opacity: 1; }
+
+/* Body — scrollable area */
+.crews-body {
+  padding: var(--sp-4) var(--sp-5);
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+/* Add-new-crew form card */
+.crews-add-card {
+  background: var(--slate-50);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-3);
+}
+.crews-add-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #6B46C1;
+  margin-bottom: var(--sp-2);
+}
+.crews-field {
+  margin-bottom: var(--sp-2);
+}
+.crews-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--slate-500);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.crews-input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--slate-300);
+  border-radius: var(--r-sm);
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--navy);
+  background: var(--white);
+  box-sizing: border-box;
+}
+.crews-input:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(31, 95, 173, 0.15);
+}
+.crews-add-btn {
+  width: 100%;
+  padding: 9px 14px;
+  background: var(--navy);
+  color: var(--white);
+  border: none;
+  border-radius: var(--r-sm);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: background var(--t-fast);
+}
+.crews-add-btn:hover {
+  background: #2A3F65;
+}
+
+/* List of existing crews */
+.crews-empty {
+  text-align: center;
+  padding: var(--sp-4) 0;
+  color: var(--slate-500);
+}
+.crews-empty-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-600);
+}
+.crews-empty-sub {
+  font-size: 12px;
+  margin-top: 4px;
+}
+.crew-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--slate-200);
+  border-radius: var(--r-md);
+  margin-bottom: 8px;
+}
+.crew-item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.crew-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--navy);
+  margin-bottom: 2px;
+}
+.crew-line {
+  font-size: 12px;
+  color: var(--slate-600);
+}
+.crew-delete-btn {
+  background: transparent;
+  border: none;
+  color: var(--slate-400);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.crew-delete-btn:hover {
+  color: var(--red);
+  background: var(--red-pale);
+}

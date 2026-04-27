@@ -4295,11 +4295,15 @@
 
     // Background: fetch message counts for all loaded contractors (non-blocking)
     fetchContractorMessageCounts(_contractorsAll.map(c => c.contractor_id));
+    // Background: fetch crew counts for all loaded contractors (non-blocking)
+    fetchCrewsCounts(_contractorsAll.map(c => c.contractor_id));
   }
 
   // Module-scoped map: contractor_id → { total, unread }. Populated by the
   // background counts fetch, consumed by renderContractorRow + renderContractorsList.
   let _contractorMessageCounts = {};
+  // Module-scoped map: contractor_id → number (active crew count)
+  let _crewsCounts = {};
 
   async function fetchContractorMessageCounts(ids) {
     if (!ids || ids.length === 0) return;
@@ -4316,6 +4320,22 @@
       }
     } catch (err) {
       console.warn('[contractors] message-count fetch failed:', err);
+    }
+  }
+
+  async function fetchCrewsCounts(ids) {
+    if (!ids || ids.length === 0) return;
+    try {
+      const res = await api({
+        resource: 'crews_counts',
+        contractor_ids: ids.join(','),
+      });
+      if (res && res.counts) {
+        _crewsCounts = res.counts;
+        if ($('#contractors-list')) applyContractorFilters();
+      }
+    } catch (err) {
+      console.warn('[contractors] crew-count fetch failed:', err);
     }
   }
 
@@ -4439,8 +4459,10 @@
       ? `<span class="ctr-ol-pill ctr-ol-trade">${escapeHtml(trades.join(' '))}</span>`
       : `<span class="ctr-cell-dash">—</span>`;
 
-    // CREWS — placeholder for now (Phase B will add real count + click-to-open modal)
-    const crewsCell = `<span class="ctr-cell-dash">—</span>`;
+    // CREWS — clickable button. Count populated by background fetch.
+    const crewCount = _crewsCounts[c.contractor_id] || 0;
+    const crewsLabel = crewCount > 0 ? `👷 Crews ${crewCount}` : `👷 Crews`;
+    const crewsCell = `<button class="ctr-crews-btn" onclick="event.stopPropagation(); openCrewsModal('${escapeAttr(c.contractor_id)}', '${escapeAttr(c.contractor_name)}')">${escapeHtml(crewsLabel)}</button>`;
 
     // GL / WC expiry dates (just the dates, colored by urgency; status is implicit via color)
     const fmtExpiryDate = (iso, status, exempt) => {
@@ -4866,6 +4888,213 @@
     panel.innerHTML = renderContractorPanel(_currentContractor);
     panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
   }
+
+  /* ─── Crews modal (Phase B-1) ──────────────────────────────────── */
+
+  // Open state for the crews modal
+  let _crewsModalCtx = null;   // { contractorId, contractorName, canEdit, items }
+
+  async function openCrewsModal(contractorId, contractorName) {
+    if (!contractorId) return;
+    _crewsModalCtx = { contractorId, contractorName, canEdit: false, items: [] };
+
+    // Render shell immediately with loading state
+    _renderCrewsModal({ loading: true });
+
+    try {
+      const res = await api({ resource: 'contractor_crews', contractor_id: contractorId });
+      if (res && res.error) {
+        showToast(res.error, 'error');
+        closeCrewsModal();
+        return;
+      }
+      _crewsModalCtx.canEdit = !!(res && res.can_edit);
+      _crewsModalCtx.items = (res && res.items) || [];
+      _renderCrewsModal({ loading: false });
+    } catch (err) {
+      console.warn('[crews] load failed:', err);
+      showToast('Could not load crews: ' + (err.message || String(err)), 'error');
+      closeCrewsModal();
+    }
+  }
+
+  function _renderCrewsModal(opts) {
+    const ctx = _crewsModalCtx;
+    if (!ctx) return;
+
+    // Remove any existing mount before re-rendering
+    const existing = document.getElementById('crews-modal-mount');
+    if (existing) existing.remove();
+
+    const addFormHtml = ctx.canEdit ? `
+      <div class="crews-add-card">
+        <div class="crews-add-title">+ ADD NEW CREW</div>
+        <form id="crews-add-form" onsubmit="event.preventDefault(); submitCrewAdd();">
+          <div class="crews-field">
+            <label class="crews-label">CREW NAME</label>
+            <input type="text" id="crews-name" class="crews-input" placeholder="e.g. Crew A" required maxlength="100">
+          </div>
+          <div class="crews-field">
+            <label class="crews-label">PHONE</label>
+            <input type="text" id="crews-phone" class="crews-input" placeholder="(555) 000-0000" maxlength="40">
+          </div>
+          <div class="crews-field">
+            <label class="crews-label">LOCATION</label>
+            <input type="text" id="crews-location" class="crews-input" placeholder="City, State" maxlength="200">
+          </div>
+          <button type="submit" class="crews-add-btn">+ Add Crew</button>
+        </form>
+      </div>
+    ` : '';
+
+    const itemsHtml = opts.loading
+      ? `<div class="crews-empty">Loading…</div>`
+      : (ctx.items.length === 0
+          ? `<div class="crews-empty">
+              <div class="crews-empty-title">No crews yet.</div>
+              ${ctx.canEdit ? `<div class="crews-empty-sub">Use the form above to add the first crew.</div>` : ''}
+            </div>`
+          : ctx.items.map(it => _renderCrewItem(it, ctx.canEdit)).join(''));
+
+    const mount = document.createElement('div');
+    mount.id = 'crews-modal-mount';
+    mount.innerHTML = `
+      <div class="crews-backdrop" onclick="closeCrewsModal()">
+        <div class="crews-modal" onclick="event.stopPropagation()">
+          <div class="crews-header">
+            <div>
+              <div class="crews-header-title">${escapeHtml(ctx.contractorName)}</div>
+              <div class="crews-header-sub">Crews assigned to this contractor</div>
+            </div>
+            <button class="crews-close" type="button" onclick="closeCrewsModal()" aria-label="Close">×</button>
+          </div>
+          <div class="crews-body">
+            ${addFormHtml}
+            <div id="crews-list">${itemsHtml}</div>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(mount);
+
+    // Focus the name field if add form is shown
+    if (ctx.canEdit) {
+      setTimeout(() => { const el = document.getElementById('crews-name'); if (el) el.focus(); }, 50);
+    }
+  }
+
+  function _renderCrewItem(it, canEdit) {
+    const phoneLine    = it.phone    ? `<div class="crew-line">📞 ${escapeHtml(it.phone)}</div>` : '';
+    const locationLine = it.location ? `<div class="crew-line">📍 ${escapeHtml(it.location)}</div>` : '';
+    const deleteBtn    = canEdit
+      ? `<button class="crew-delete-btn" onclick="confirmDeleteCrew('${escapeAttr(it.crew_id)}', '${escapeAttr(it.crew_name)}')" title="Remove crew">×</button>`
+      : '';
+    return `
+      <div class="crew-item" data-crew-id="${escapeAttr(it.crew_id)}">
+        <div class="crew-item-main">
+          <div class="crew-name">${escapeHtml(it.crew_name)}</div>
+          ${phoneLine}
+          ${locationLine}
+        </div>
+        ${deleteBtn}
+      </div>
+    `;
+  }
+
+  async function submitCrewAdd() {
+    const ctx = _crewsModalCtx;
+    if (!ctx || !ctx.canEdit) return;
+
+    const nameEl     = document.getElementById('crews-name');
+    const phoneEl    = document.getElementById('crews-phone');
+    const locationEl = document.getElementById('crews-location');
+
+    const crewName = nameEl ? String(nameEl.value || '').trim() : '';
+    const phone    = phoneEl ? String(phoneEl.value || '').trim() : '';
+    const location = locationEl ? String(locationEl.value || '').trim() : '';
+
+    if (!crewName) { showToast('Crew name is required.', 'error'); return; }
+
+    const res = await api({}, 'POST', {
+      action: 'savecrew',
+      contractor_id: ctx.contractorId,
+      crew_name: crewName,
+      phone: phone,
+      location: location,
+    });
+
+    if (res && res.error) {
+      showToast('Failed to add crew: ' + res.error, 'error');
+      return;
+    }
+    if (!res || !res.success) {
+      showToast('Failed to add crew (unknown error)', 'error');
+      return;
+    }
+
+    // Optimistic update: append to local items list, clear form, re-render
+    ctx.items.push({
+      crew_id:    res.crew_id,
+      crew_name:  crewName,
+      phone:      phone,
+      location:   location,
+      created_at: new Date().toISOString(),
+      created_by: '',
+    });
+    ctx.items.sort((a, b) => String(a.crew_name).localeCompare(String(b.crew_name)));
+
+    showToast('Crew added', 'success');
+    _renderCrewsModal({ loading: false });
+
+    // Bump global count + invalidate cache so the row badge updates next time
+    _crewsCounts[ctx.contractorId] = (_crewsCounts[ctx.contractorId] || 0) + 1;
+    invalidateApiCache(['crews_counts']);
+    if ($('#contractors-list')) applyContractorFilters();
+  }
+
+  function confirmDeleteCrew(crewId, crewName) {
+    if (!_crewsModalCtx) return;
+    if (!confirm(`Remove "${crewName}" from this contractor?`)) return;
+    deleteCrewFromModal(crewId);
+  }
+
+  async function deleteCrewFromModal(crewId) {
+    const ctx = _crewsModalCtx;
+    if (!ctx || !ctx.canEdit) return;
+
+    const res = await api({}, 'POST', { action: 'deletecrew', crew_id: crewId });
+    if (res && res.error) {
+      showToast('Failed to remove crew: ' + res.error, 'error');
+      return;
+    }
+    if (!res || !res.success) {
+      showToast('Failed to remove crew (unknown error)', 'error');
+      return;
+    }
+
+    // Optimistic update
+    ctx.items = ctx.items.filter(it => it.crew_id !== crewId);
+    showToast('Crew removed', 'success');
+    _renderCrewsModal({ loading: false });
+
+    // Decrement count, refresh row
+    if (_crewsCounts[ctx.contractorId] && _crewsCounts[ctx.contractorId] > 0) {
+      _crewsCounts[ctx.contractorId]--;
+    }
+    invalidateApiCache(['crews_counts']);
+    if ($('#contractors-list')) applyContractorFilters();
+  }
+
+  function closeCrewsModal() {
+    const m = document.getElementById('crews-modal-mount');
+    if (m) m.remove();
+    _crewsModalCtx = null;
+  }
+
+  window.openCrewsModal       = openCrewsModal;
+  window.closeCrewsModal      = closeCrewsModal;
+  window.submitCrewAdd        = submitCrewAdd;
+  window.confirmDeleteCrew    = confirmDeleteCrew;
 
   /**
    * Compose a message about this contractor to a specific user, region, or the Compliance pool.
@@ -6586,7 +6815,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.21';
+  const APP_VERSION = '2.1.22';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
