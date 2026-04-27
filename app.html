@@ -5364,8 +5364,44 @@
     location.hash = `#/inbox?source_page=compliance&source_id=${encodeURIComponent(id)}`;
   }
 
+  /**
+   * v2.1.39 (Phase C.1): Open the contractor's Drive folder in a new tab.
+   * Lazy-creates the folder on first click. Subsequent calls just return
+   * the saved folder ID instantly.
+   */
+  async function openContractorDocs(btn) {
+    if (!_currentContractor) return;
+    const id = _currentContractor.contractor_id;
+    const orig = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '📁 Opening…';
+    }
+    try {
+      const res = await api({ resource: 'contractor_folder', id: id });
+      if (res.error) {
+        showToast(res.error, 'error');
+        return;
+      }
+      if (!res.folder_url) {
+        showToast('Could not open folder.', 'error');
+        return;
+      }
+      // Open in a new tab
+      window.open(res.folder_url, '_blank', 'noopener');
+    } catch (err) {
+      showToast('Could not open folder: ' + err.message, 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = orig;
+      }
+    }
+  }
+
   window.loadContractorCommunicationCount = loadContractorCommunicationCount;
   window.viewContractorMessages           = viewContractorMessages;
+  window.openContractorDocs               = openContractorDocs;
 
   function renderContractorPanelLoading(summary) {
     const name = summary ? summary.contractor_name : 'Loading…';
@@ -5460,6 +5496,7 @@
         <div class="ctr-panel-actions">
           <button class="btn btn-primary btn-sm" onclick="contractorSendNote()">📨 Message about contractor</button>
           <button class="btn btn-secondary btn-sm" id="ctr-view-messages-btn" onclick="viewContractorMessages()" style="display:none;">💬 <span id="ctr-view-messages-label">View messages</span></button>
+          <button class="btn btn-secondary btn-sm" onclick="openContractorDocs(this)" title="Open this contractor's document folder in Drive">📁 View Docs</button>
           ${canEdit ? `<button class="btn btn-secondary btn-sm" onclick="openEditContractor()">✎ Edit</button>` : ''}
         </div>
 
@@ -7631,7 +7668,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.38';
+  const APP_VERSION = '2.1.39';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
