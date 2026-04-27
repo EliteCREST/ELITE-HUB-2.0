@@ -630,7 +630,7 @@
   const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
 
   // Resources that should be cached on GET. Writes invalidate relevant caches.
-  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_individual','submissions_for_record','submission_counts'];
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractor','users','regions','reviews_individual','submissions_for_record','submission_counts','crews_counts','contractor_crews'];
 
   // Which resources to invalidate when an action happens
   const INVALIDATE_MAP = {
@@ -971,6 +971,28 @@
       users: eligible,
     };
   }
+
+  /**
+   * Auto-format a phone input as the user types: 5551234567 → (555) 123-4567.
+   * Strips non-digits, caps at 10 digits, formats progressively. Permissive —
+   * accepts partial input and formats what's there.
+   */
+  function formatPhoneInput(input) {
+    if (!input) return;
+    const raw = String(input.value || '').replace(/\D/g, '').slice(0, 10);
+    let formatted = '';
+    if (raw.length === 0) {
+      formatted = '';
+    } else if (raw.length < 4) {
+      formatted = '(' + raw;
+    } else if (raw.length < 7) {
+      formatted = '(' + raw.slice(0, 3) + ') ' + raw.slice(3);
+    } else {
+      formatted = '(' + raw.slice(0, 3) + ') ' + raw.slice(3, 6) + '-' + raw.slice(6);
+    }
+    input.value = formatted;
+  }
+  window.formatPhoneInput = formatPhoneInput;
 
   async function signOut() {
     const token = getToken();
@@ -4936,7 +4958,7 @@
           </div>
           <div class="crews-field">
             <label class="crews-label">PHONE</label>
-            <input type="text" id="crews-phone" class="crews-input" placeholder="(555) 000-0000" maxlength="40">
+            <input type="tel" id="crews-phone" class="crews-input" placeholder="(555) 000-0000" maxlength="14" oninput="formatPhoneInput(this)">
           </div>
           <div class="crews-field">
             <label class="crews-label">LOCATION</label>
@@ -4984,10 +5006,34 @@
   }
 
   function _renderCrewItem(it, canEdit) {
+    const ctx = _crewsModalCtx;
+    const isEditing = ctx && ctx.editing === it.crew_id;
+
+    if (isEditing) {
+      return `
+        <div class="crew-item crew-item-editing" data-crew-id="${escapeAttr(it.crew_id)}">
+          <div class="crew-item-main">
+            <div class="crew-edit-fields">
+              <input type="text" class="crews-input crew-edit-name" value="${escapeAttr(it.crew_name)}" placeholder="Crew name" maxlength="100">
+              <input type="tel" class="crews-input crew-edit-phone" value="${escapeAttr(it.phone || '')}" placeholder="(555) 000-0000" maxlength="14" oninput="formatPhoneInput(this)">
+              <input type="text" class="crews-input crew-edit-location" value="${escapeAttr(it.location || '')}" placeholder="City, State" maxlength="200">
+            </div>
+            <div class="crew-edit-actions">
+              <button class="crew-btn crew-btn-primary" onclick="saveCrewEdit('${escapeAttr(it.crew_id)}')">Save</button>
+              <button class="crew-btn crew-btn-secondary" onclick="cancelCrewEdit()">Cancel</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     const phoneLine    = it.phone    ? `<div class="crew-line">📞 ${escapeHtml(it.phone)}</div>` : '';
     const locationLine = it.location ? `<div class="crew-line">📍 ${escapeHtml(it.location)}</div>` : '';
+    const editBtn      = canEdit
+      ? `<button class="crew-icon-btn" onclick="startCrewEdit('${escapeAttr(it.crew_id)}')" title="Edit crew">✎</button>`
+      : '';
     const deleteBtn    = canEdit
-      ? `<button class="crew-delete-btn" onclick="confirmDeleteCrew('${escapeAttr(it.crew_id)}', '${escapeAttr(it.crew_name)}')" title="Remove crew">×</button>`
+      ? `<button class="crew-icon-btn crew-icon-btn-delete" onclick="confirmDeleteCrew('${escapeAttr(it.crew_id)}', '${escapeAttr(it.crew_name)}')" title="Remove crew">×</button>`
       : '';
     return `
       <div class="crew-item" data-crew-id="${escapeAttr(it.crew_id)}">
@@ -4996,7 +5042,10 @@
           ${phoneLine}
           ${locationLine}
         </div>
-        ${deleteBtn}
+        <div class="crew-item-actions">
+          ${editBtn}
+          ${deleteBtn}
+        </div>
       </div>
     `;
   }
@@ -5046,9 +5095,10 @@
     showToast('Crew added', 'success');
     _renderCrewsModal({ loading: false });
 
-    // Bump global count + invalidate cache so the row badge updates next time
+    // Bump global count + invalidate caches so the row badge AND the next
+    // modal open both reflect the change
     _crewsCounts[ctx.contractorId] = (_crewsCounts[ctx.contractorId] || 0) + 1;
-    invalidateApiCache(['crews_counts']);
+    invalidateApiCache(['crews_counts', 'contractor_crews']);
     if ($('#contractors-list')) applyContractorFilters();
   }
 
@@ -5077,12 +5127,75 @@
     showToast('Crew removed', 'success');
     _renderCrewsModal({ loading: false });
 
-    // Decrement count, refresh row
+    // Decrement count, refresh row, invalidate caches
     if (_crewsCounts[ctx.contractorId] && _crewsCounts[ctx.contractorId] > 0) {
       _crewsCounts[ctx.contractorId]--;
     }
-    invalidateApiCache(['crews_counts']);
+    invalidateApiCache(['crews_counts', 'contractor_crews']);
     if ($('#contractors-list')) applyContractorFilters();
+  }
+
+  function startCrewEdit(crewId) {
+    if (!_crewsModalCtx || !_crewsModalCtx.canEdit) return;
+    _crewsModalCtx.editing = crewId;
+    _renderCrewsModal({ loading: false });
+    // Focus the name input
+    setTimeout(() => {
+      const el = document.querySelector('.crew-edit-name');
+      if (el) { el.focus(); el.select(); }
+    }, 50);
+  }
+
+  function cancelCrewEdit() {
+    if (!_crewsModalCtx) return;
+    _crewsModalCtx.editing = null;
+    _renderCrewsModal({ loading: false });
+  }
+
+  async function saveCrewEdit(crewId) {
+    const ctx = _crewsModalCtx;
+    if (!ctx || !ctx.canEdit) return;
+
+    const nameEl     = document.querySelector('.crew-edit-name');
+    const phoneEl    = document.querySelector('.crew-edit-phone');
+    const locationEl = document.querySelector('.crew-edit-location');
+
+    const crewName = nameEl ? String(nameEl.value || '').trim() : '';
+    const phone    = phoneEl ? String(phoneEl.value || '').trim() : '';
+    const location = locationEl ? String(locationEl.value || '').trim() : '';
+
+    if (!crewName) { showToast('Crew name is required.', 'error'); return; }
+
+    const res = await api({}, 'POST', {
+      action: 'updatecrew',
+      crew_id: crewId,
+      crew_name: crewName,
+      phone: phone,
+      location: location,
+    });
+
+    if (res && res.error) {
+      showToast('Failed to save: ' + res.error, 'error');
+      return;
+    }
+    if (!res || !res.success) {
+      showToast('Failed to save (unknown error)', 'error');
+      return;
+    }
+
+    // Optimistic update on local list
+    const idx = ctx.items.findIndex(it => it.crew_id === crewId);
+    if (idx >= 0) {
+      ctx.items[idx].crew_name = crewName;
+      ctx.items[idx].phone = phone;
+      ctx.items[idx].location = location;
+      ctx.items.sort((a, b) => String(a.crew_name).localeCompare(String(b.crew_name)));
+    }
+    ctx.editing = null;
+
+    showToast('Crew updated', 'success');
+    _renderCrewsModal({ loading: false });
+    invalidateApiCache(['contractor_crews']);
   }
 
   function closeCrewsModal() {
@@ -5095,6 +5208,9 @@
   window.closeCrewsModal      = closeCrewsModal;
   window.submitCrewAdd        = submitCrewAdd;
   window.confirmDeleteCrew    = confirmDeleteCrew;
+  window.startCrewEdit        = startCrewEdit;
+  window.cancelCrewEdit       = cancelCrewEdit;
+  window.saveCrewEdit         = saveCrewEdit;
 
   /**
    * Compose a message about this contractor to a specific user, region, or the Compliance pool.
@@ -6815,7 +6931,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.22';
+  const APP_VERSION = '2.1.23';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).

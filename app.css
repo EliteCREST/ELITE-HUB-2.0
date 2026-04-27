@@ -2909,7 +2909,7 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
     90px                       /* STATUS */
     minmax(200px, 2fr)         /* CONTRACTOR (name + contact + meta) */
     100px                      /* TRADE */
-    60px                       /* CREWS */
+    90px                       /* CREWS */
     100px                      /* GL EXPIRY */
     100px                      /* WC EXPIRY */
     100px                      /* CONTRACT */
@@ -2917,7 +2917,7 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
     80px                       /* BLAZE */
     70px                       /* TRAVEL */
     minmax(160px, 1fr);        /* ACTIONS */
-  gap: var(--sp-2);
+  gap: var(--sp-3);
   padding: 10px var(--sp-3);
   border-bottom: 1px solid var(--slate-100);
   align-items: center;
@@ -4806,4 +4806,99 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
 .crew-delete-btn:hover {
   color: var(--red);
   background: var(--red-pale);
+}
+
+/* ─── Crews modal — improved spacing + edit mode ────────────────── */
+
+/* More breathing room in modal body */
+.crews-body {
+  padding: var(--sp-4) var(--sp-5);
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+/* Form field spacing */
+.crews-field {
+  margin-bottom: var(--sp-3);
+}
+.crews-field:last-of-type {
+  margin-bottom: 0;
+}
+
+/* Add card has more bottom margin to separate from list */
+.crews-add-card {
+  margin-bottom: var(--sp-4);
+}
+
+/* Crew item: action button cluster on the right */
+.crew-item {
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-2);
+}
+.crew-item-actions {
+  display: flex;
+  gap: 4px;
+  align-items: flex-start;
+}
+.crew-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--slate-500);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.crew-icon-btn:hover {
+  color: var(--blue);
+  background: var(--slate-100);
+}
+.crew-icon-btn-delete:hover {
+  color: var(--red);
+  background: var(--red-pale);
+}
+
+/* Edit mode for a crew item */
+.crew-item-editing {
+  background: var(--slate-50);
+  border-color: var(--slate-300);
+}
+.crew-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: var(--sp-2);
+}
+.crew-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.crew-btn {
+  padding: 6px 14px;
+  border-radius: var(--r-sm);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.crew-btn-primary {
+  background: var(--navy);
+  color: var(--white);
+  border-color: var(--navy);
+}
+.crew-btn-primary:hover {
+  background: #2A3F65;
+}
+.crew-btn-secondary {
+  background: var(--white);
+  color: var(--slate-700);
+  border-color: var(--slate-300);
+}
+.crew-btn-secondary:hover {
+  border-color: var(--slate-500);
 }
