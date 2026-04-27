@@ -2950,11 +2950,15 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
   font-weight: 700;
   color: var(--navy);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+}
+.ctr-row-regions-inline {
+  display: inline-flex;
+  gap: 3px;
+  flex-wrap: wrap;
 }
 .ctr-row-contact {
   font-size: 11px;

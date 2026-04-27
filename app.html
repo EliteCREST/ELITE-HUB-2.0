@@ -4457,9 +4457,9 @@
       ? `<span class="ctr-ol-pill ctr-ol-signed">ACTIVE</span>`
       : `<span class="ctr-ol-pill ctr-ol-not-signed">INACTIVE</span>`;
 
-    // PAYLOCITY / BLAZE — ✓ OK / ✗ Attn
+    // PAYLOCITY: show pay_id when present (acts as both indicator AND value), fallback to ✗ Attn
     const payPill = c.has_pay_id
-      ? `<span class="ctr-ind-ok">✓ OK</span>`
+      ? `<span class="ctr-ind-ok">${escapeHtml(c.pay_id)}</span>`
       : `<span class="ctr-ind-attn">✗ Attn</span>`;
     const blazePill = c.has_blaze_url
       ? `<span class="ctr-ind-ok">✓ OK</span>`
@@ -4483,12 +4483,8 @@
       <div class="ctr-row" onclick="openContractorDetail('${escapeAttr(c.contractor_id)}')">
         <div class="ctr-row-status">${clearPill}</div>
         <div class="ctr-row-name">
-          <div class="ctr-row-name-text">${commsBadge}${escapeHtml(c.contractor_name)}</div>
+          <div class="ctr-row-name-text">${commsBadge}${escapeHtml(c.contractor_name)}${regionChips ? ` <span class="ctr-row-regions-inline">${regionChips}</span>` : ''}</div>
           ${c.contact_name ? `<div class="ctr-row-contact">${escapeHtml(c.contact_name)}</div>` : ''}
-          <div class="ctr-row-meta">
-            <span class="ctr-row-pay-id">PAY ${escapeHtml(c.pay_id || '—')}</span>
-            ${regionChips}
-          </div>
         </div>
         <div class="ctr-row-trade">${tradePill}</div>
         <div class="ctr-row-crews" onclick="event.stopPropagation();">${crewsCell}</div>
@@ -6590,7 +6586,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.19';
+  const APP_VERSION = '2.1.21';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
