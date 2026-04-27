@@ -1202,6 +1202,14 @@
   // Background populator for the user cache. Safe to call multiple times.
   async function ensureAllUsersCache() {
     if (_allUsersCache) return _allUsersCache;
+    // v2.1.37: Try bootstrap first — it has the fields we need (username, display_name,
+    // role, regions). Avoids a 1-3 sec backend call when opening a contractor or
+    // composing a message.
+    const bootUsers = BOOTSTRAP_CACHE.getSection('users');
+    if (bootUsers && Array.isArray(bootUsers.users) && bootUsers.users.length > 0) {
+      _allUsersCache = bootUsers.users;
+      return _allUsersCache;
+    }
     try {
       const res = await api({ resource: 'users' });
       if (res && res.users) _allUsersCache = res.users;
@@ -5236,15 +5244,17 @@
     // are instant — no spinner, no loading state, panel renders fully.
     const cachedDetail = _getCachedContractorDetail(contractorId);
     if (cachedDetail) {
+      _logTiming('cache', 'contractor detail HIT (' + contractorId + ')', 0);
       _currentContractor = cachedDetail;
       panel.innerHTML = renderContractorPanel(cachedDetail);
       panel.classList.add('open');
       panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
-      // Still pre-warm users + load message count (they have their own caches)
-      api({ resource: 'users' }).catch(() => {});
+      // Still pre-warm users + load message count (both read from bootstrap cache when available)
+      ensureAllUsersCache().catch(() => {});
       loadContractorCommunicationCount(cachedDetail.contractor_id);
       return;
     }
+    _logTiming('cache', 'contractor detail MISS (' + contractorId + ')', 0);
 
     panel.innerHTML = renderContractorPanelLoading(summary);
     panel.classList.add('open');
@@ -5266,8 +5276,9 @@
     panel.onclick = (e) => { if (e.target === panel) closeContractorPanel(); };
 
     // Pre-warm the users cache so the Message modal opens instantly if clicked.
+    // v2.1.37: Uses ensureAllUsersCache which reads from bootstrap first.
     // Fire-and-forget — don't block the panel render on this.
-    api({ resource: 'users' }).catch(() => {});
+    ensureAllUsersCache().catch(() => {});
 
     // Background: fetch the message count and update the View Messages button.
     // Panel is already rendered and interactive; button appears when count loads.
@@ -5277,9 +5288,23 @@
   /**
    * Fetch the message-count for this contractor and update the View button.
    * Called after the detail panel renders. Hides the button when count is 0.
+   *
+   * v2.1.37: Reads from bootstrap cache first (zero backend call) since the
+   * bootstrap's contractors_full payload includes per-contractor message_counts.
+   * Falls back to direct API only if the cache is missing.
    */
   async function loadContractorCommunicationCount(contractorId) {
     if (!contractorId) return;
+
+    // Try bootstrap cache first
+    const cached = BOOTSTRAP_CACHE.getSection('contractors_full');
+    if (cached && cached.message_counts && cached.message_counts[contractorId]) {
+      if (!_currentContractor || _currentContractor.contractor_id !== contractorId) return;
+      updateContractorViewMessagesBtn(cached.message_counts[contractorId]);
+      return;
+    }
+
+    // Fallback to direct API
     try {
       const res = await api({
         resource: 'submission_counts',
@@ -7589,7 +7614,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.36';
+  const APP_VERSION = '2.1.37';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
