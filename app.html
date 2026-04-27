@@ -4419,6 +4419,7 @@
     const source = _contractorsAll;
     const total = source.length;
     if (total === 0) { el.innerHTML = ''; return; }
+
     const glExpired = source.filter(c => c.gl_status === 'expired').length;
     const glExpSoon = source.filter(c => c.gl_status === 'expiring_soon').length;
     const glMissing = source.filter(c => c.gl_status === 'missing').length;
@@ -4426,15 +4427,43 @@
     const wcExpired = source.filter(c => c.wc_status === 'expired').length;
     const wcExpSoon = source.filter(c => c.wc_status === 'expiring_soon').length;
     const wcMissing = source.filter(c => c.wc_status === 'missing').length;
+
+    // Build grouped chip — list of segments to show, each clickable to filter.
+    // Empty (zero) segments are skipped to reduce noise.
+    function buildGroupChip(label, segments) {
+      const visible = segments.filter(s => s.count > 0);
+      if (visible.length === 0) {
+        return `<span class="ctr-summary-group">
+          <span class="ctr-summary-group-label">${escapeHtml(label)}</span>
+          <span class="ctr-summary-group-clean">✓ All current</span>
+        </span>`;
+      }
+      const segmentsHtml = visible.map(s =>
+        `<a class="ctr-summary-seg" href="javascript:filterByStatus('${s.field}','${s.value}')">${s.count} ${escapeHtml(s.label)}</a>`
+      ).join('<span class="ctr-summary-seg-divider">·</span>');
+      return `<span class="ctr-summary-group">
+        <span class="ctr-summary-group-label">${escapeHtml(label)}:</span>
+        ${segmentsHtml}
+      </span>`;
+    }
+
+    const glChip = buildGroupChip('GL', [
+      { count: glExpired, label: 'expired',  field: 'gl_status', value: 'expired' },
+      { count: glExpSoon, label: 'soon',     field: 'gl_status', value: 'expiring_soon' },
+      { count: glMissing, label: 'missing',  field: 'gl_status', value: 'missing' },
+    ]);
+
+    const wcChip = buildGroupChip('WC', [
+      { count: wcExpired, label: 'expired',  field: 'wc_status', value: 'expired' },
+      { count: wcExpSoon, label: 'soon',     field: 'wc_status', value: 'expiring_soon' },
+      { count: wcMissing, label: 'missing',  field: 'wc_status', value: 'missing' },
+      { count: wcExempt,  label: 'exempt',   field: 'wc_status', value: 'exempt' },
+    ]);
+
     el.innerHTML = `
       <span class="ctr-summary-item"><strong>${total}</strong> total</span>
-      ${glExpired ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('gl_status','expired')">${glExpired} GL expired</a>` : ''}
-      ${glExpSoon ? `<a class="ctr-summary-item ctr-summary-amber"  href="javascript:filterByStatus('gl_status','expiring_soon')">${glExpSoon} GL expiring soon</a>` : ''}
-      ${glMissing ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('gl_status','missing')">${glMissing} GL missing</a>` : ''}
-      ${wcExpired ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('wc_status','expired')">${wcExpired} WC expired</a>` : ''}
-      ${wcExpSoon ? `<a class="ctr-summary-item ctr-summary-amber"  href="javascript:filterByStatus('wc_status','expiring_soon')">${wcExpSoon} WC expiring soon</a>` : ''}
-      ${wcMissing ? `<a class="ctr-summary-item ctr-summary-red"    href="javascript:filterByStatus('wc_status','missing')">${wcMissing} WC missing</a>` : ''}
-      ${wcExempt  ? `<span class="ctr-summary-item">${wcExempt} WC exempt</span>` : ''}
+      ${glChip}
+      ${wcChip}
     `;
   }
 
@@ -6933,7 +6962,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.26';
+  const APP_VERSION = '2.1.28';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).

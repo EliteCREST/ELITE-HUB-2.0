@@ -2823,16 +2823,16 @@ body.view-as-active .app-root {
   transition: background var(--t-fast);
 }
 a.ctr-summary-item:hover { background: var(--slate-200); }
-.ctr-summary-red {
-  background: var(--red-pale);
-  color: var(--red);
-}
-a.ctr-summary-red:hover { background: #FEE8E8; }
+/* Category color variants intentionally use the neutral style now —
+   per-category coloring made the bar too noisy. Keep classes alive in case
+   any code/theme references them. */
+.ctr-summary-red,
 .ctr-summary-amber {
-  background: var(--amber-pale);
-  color: #B45309;
+  background: var(--slate-100);
+  color: var(--slate-700);
 }
-a.ctr-summary-amber:hover { background: #FDE9B2; }
+a.ctr-summary-red:hover,
+a.ctr-summary-amber:hover { background: var(--slate-200); }
 
 /* Table list */
 .contractors-list-wrap {
@@ -4900,4 +4900,41 @@ a.ctr-summary-amber:hover { background: #FDE9B2; }
 }
 .crew-btn-secondary:hover {
   border-color: var(--slate-500);
+}
+
+/* ─── Grouped GL/WC summary chips (v2.1.28) ────────────────────── */
+.ctr-summary-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--slate-100);
+  color: var(--slate-700);
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--r-round);
+}
+.ctr-summary-group-label {
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--slate-700);
+}
+.ctr-summary-group-clean {
+  color: var(--slate-500);
+  font-weight: 500;
+}
+.ctr-summary-seg {
+  color: var(--slate-700);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--t-fast);
+}
+.ctr-summary-seg:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+.ctr-summary-seg-divider {
+  color: var(--slate-400);
+  font-weight: 400;
+  user-select: none;
 }
