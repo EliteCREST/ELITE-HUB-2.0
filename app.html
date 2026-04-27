@@ -579,7 +579,7 @@
 
   // ─── Timing instrumentation ───────────────────────────────────────────
   // Persistent log of every API call, keyboard-toggleable HUD with aggregates.
-  // Toggle with Ctrl+Shift+T (or Cmd+Shift+T on Mac).
+  // Toggle with Ctrl+Shift+H (or Cmd+Shift+H on Mac).
   // ──────────────────────────────────────────────────────────────────────
 
   const TIMING_LOG_KEY = 'eh2_timing_log';
@@ -635,9 +635,11 @@
   }
   window.toggleTimingHud = toggleTimingHud;
 
-  // Keyboard shortcut: Ctrl+Shift+T (or Cmd+Shift+T on Mac)
+  // Keyboard shortcut: Ctrl+Shift+H (or Cmd+Shift+H on Mac).
+  // Note: Ctrl+Shift+T is reserved by Chrome (reopens closed tabs) and can't
+  // be intercepted reliably, so we use H ("HUD") instead.
   document.addEventListener('keydown', function(e) {
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'T' || e.key === 't')) {
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'H' || e.key === 'h')) {
       e.preventDefault();
       toggleTimingHud();
     }
@@ -914,7 +916,7 @@
         ${recentHtml || '<div style="color:#94a3b8;padding:6px 0;">No events.</div>'}
       </div>
       <div style="margin-top:8px;padding-top:6px;border-top:1px solid #1e293b;color:#64748b;font-size:9px;">
-        Ctrl+Shift+T to toggle · Tag a moment with the + button before doing an action
+        Ctrl+Shift+H to toggle · Tag a moment with the + button before doing an action
       </div>
     `;
   }
