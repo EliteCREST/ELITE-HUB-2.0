@@ -940,7 +940,7 @@
   const API_CACHE_TTL_MS = 60 * 1000;  // 60 seconds
 
   // Resources that should be cached on GET. Writes invalidate relevant caches.
-  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractors_full','contractor','contractor_crews_full','users','regions','reviews_individual','submissions_for_record','submission_counts'];
+  const CACHEABLE_RESOURCES = ['dashboard','submissions','tasks','widgets','contractors','contractors_full','contractor','contractor_crews_full','users','regions','reviews_individual','submissions_for_record','submission_counts','submission_full'];
 
   // Which resources to invalidate when an action happens
   const INVALIDATE_MAP = {
@@ -948,9 +948,9 @@
     deletetask:            ['tasks','dashboard'],
     savewidget:            ['widgets'],
     deletewidget:          ['widgets'],
-    savesubmission:        ['submissions','dashboard','submissions_for_record','submission_counts'],
-    updatesubmissionstatus:['submissions','dashboard','submissions_for_record','submission_counts'],
-    addreply:              ['submissions','submission','dashboard','submissions_for_record','submission_counts'],
+    savesubmission:        ['submissions','dashboard','submissions_for_record','submission_counts','submission_full'],
+    updatesubmissionstatus:['submissions','dashboard','submissions_for_record','submission_counts','submission_full'],
+    addreply:              ['submissions','submission','submission_full','dashboard','submissions_for_record','submission_counts'],
     savecontractor:        ['contractors','contractor'],
     addcontractornote:     ['contractor'],
     deletecontractornote:  ['contractor'],
@@ -1096,12 +1096,14 @@
   // Anything that mutates data the user can SEE in a cached page belongs here.
   // After the write succeeds, we fire a background bootstrap refresh so the user's
   // next navigation reflects the change without waiting for the 30-sec timer.
+  // NOTE: marksubmissionseen is intentionally NOT in this list (v2.1.38). It fires
+  // every time a message is opened — triggering a bootstrap refresh on every read
+  // would generate huge backend load. The next 30-sec timer refresh picks it up.
   const _ACTIONS_AFFECTING_BOOTSTRAP = {
     savesubmission:        true,
     addreply:              true,
     updatesubmissionstatus:true,
     assignsubmission:      true,
-    marksubmissionseen:    true,
     savetask:              true,
     deletetask:            true,
     savewidget:            true,
@@ -2612,10 +2614,26 @@
     const err  = $('#submission-error');
     if (!body) return;
 
-    const [subRes, repRes] = await Promise.all([
-      api({ resource: 'submission', id: id }),
-      api({ resource: 'submission_replies', id: id }),
-    ]);
+    // v2.1.38: One combined call instead of two parallel calls.
+    // Apps Script serializes parallel calls anyway, so combining them
+    // halves the wait. Falls back to the old two-call path if the combined
+    // endpoint is missing (e.g. backend not yet deployed).
+    let subRes, repRes;
+    const fullRes = await api({ resource: 'submission_full', id: id });
+    if (fullRes && !fullRes.error && fullRes.submission) {
+      subRes = { submission: fullRes.submission };
+      repRes = { replies: fullRes.replies || [] };
+    } else if (fullRes && fullRes.error && /unknown.*resource|not.*found/i.test(String(fullRes.error))) {
+      // Backend doesn't have submission_full yet — fall back to old path
+      [subRes, repRes] = await Promise.all([
+        api({ resource: 'submission', id: id }),
+        api({ resource: 'submission_replies', id: id }),
+      ]);
+    } else {
+      // Real error from submission_full — surface it
+      subRes = fullRes;
+      repRes = { replies: [] };
+    }
 
     if (!body) return;  // user navigated away
 
@@ -2633,12 +2651,11 @@
     const replies = (repRes.replies) || [];
     _currentSubmission = sub;
 
-    // Auto-mark seen so unread dot clears in inbox next time
-    try {
-      await api({}, 'POST', { action: 'marksubmissionseen', id: sub.id });
-    } catch (e) { /* non-critical */ }
-
+    // v2.1.38: Render IMMEDIATELY, then fire mark-seen in background.
+    // Previously this was awaited, adding ~2.5 sec before the user could read.
+    // The user is now looking at the message while the seen-mark completes.
     renderSubmissionDetail(body, sub, replies);
+    api({}, 'POST', { action: 'marksubmissionseen', id: sub.id }).catch(() => {});
   }
 
   function renderSubmissionDetail(container, sub, replies) {
@@ -7614,7 +7631,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.37';
+  const APP_VERSION = '2.1.38';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
