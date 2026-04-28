@@ -5385,7 +5385,11 @@
     // Open the new tab IMMEDIATELY — browsers only allow window.open in a
     // direct user-click context. If we wait for the backend to respond first,
     // Chrome silently blocks the popup.
-    const newTab = window.open('about:blank', '_blank', 'noopener');
+    // NOTE: We deliberately do NOT use 'noopener' here. With noopener, some
+    // browsers return null from window.open even when the tab successfully
+    // opens, which makes our null-check fire spuriously. Without noopener,
+    // we get a real handle to the new tab and can navigate it.
+    const newTab = window.open('about:blank', '_blank');
     if (!newTab) {
       showToast('Pop-up blocked. Please allow pop-ups for this site to use View Docs.', 'error');
       return;
