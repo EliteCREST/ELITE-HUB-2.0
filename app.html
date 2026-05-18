@@ -7481,16 +7481,65 @@
     ['Case list with assignee and status', 'Per-region filter', 'Quick note entry']
   ), { title: 'Legal' });
 
-  route('/admin', () => placeholder('Admin', 'Stage 7',
-    'System administration landing.',
-    [
-      'Users management',
-      'Scoring rules editor',
-      'Project defaults',
-      'Audit log',
-      'System health dashboard',
-    ]
-  ), { title: 'Admin' });
+  route('/admin', () => {
+    // Settings page. Sections added incrementally:
+    // - v2.1.41: Data Sources (3 sheet links)
+    // - Stage 7 will add: Users, Scoring rules, Project defaults, Audit log, System health
+    const sheets = [
+      { name: 'Operations',     id: '1xjScTPREBc4URVOSvO8r1y_wCLt6i39ZrXUtfMpQnig', desc: 'Main data: VEHICLES, CONTRACTORS, SUBMISSIONS, REVIEWS, USERS, etc.' },
+      { name: 'UserWorkspaces', id: '1R7FOdwrDlbuoM2yhl37GXBG5w766cu1RZKCGgvRNpSU', desc: 'Per-user inbox, tasks, notifications, widgets.' },
+      { name: 'Config',         id: '1EOImypAdeH4lMTbQ59fltztKBwS9x7Ef99BCU6QPxCE', desc: 'App config, region map, role permissions, scoring rules.' },
+    ];
+    const sheetCards = sheets.map(s => `
+      <div class="settings-card">
+        <div class="settings-card-head">
+          <div>
+            <div class="settings-card-title">${escapeHtml(s.name)}</div>
+            <div class="settings-card-desc">${escapeHtml(s.desc)}</div>
+          </div>
+          <a class="btn btn-primary" target="_blank" rel="noopener"
+             href="https://docs.google.com/spreadsheets/d/${escapeHtml(s.id)}/edit">Open ↗</a>
+        </div>
+        <div class="settings-card-id" title="Click to copy" onclick="navigator.clipboard.writeText('${escapeHtml(s.id)}').then(()=>toast('Sheet ID copied'))">${escapeHtml(s.id)}</div>
+      </div>
+    `).join('');
+    return `
+      <div class="view">
+        <h1 class="view-title">Settings</h1>
+        <p class="view-sub">System administration.</p>
+
+        <section class="settings-section">
+          <h2 class="settings-section-title">Data Sources</h2>
+          <p class="settings-section-sub">The three Google Sheets that back Elite Hub 2.0.</p>
+          <div class="settings-cards">${sheetCards}</div>
+        </section>
+
+        <section class="settings-section">
+          <h2 class="settings-section-title">Coming in Stage 7</h2>
+          <div class="settings-coming">
+            <div>• Users management</div>
+            <div>• Scoring rules editor</div>
+            <div>• Project defaults</div>
+            <div>• Audit log</div>
+            <div>• System health dashboard</div>
+          </div>
+        </section>
+      </div>
+      <style>
+        .settings-section { margin-top: var(--sp-6); }
+        .settings-section-title { font-size: 18px; font-weight: 600; color: var(--navy); margin: 0 0 4px; }
+        .settings-section-sub { font-size: 13px; color: var(--slate-600); margin: 0 0 var(--sp-3); }
+        .settings-cards { display: flex; flex-direction: column; gap: var(--sp-2); }
+        .settings-card { border: 1px solid var(--slate-200); border-radius: 8px; padding: var(--sp-3); background: #fff; }
+        .settings-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-3); }
+        .settings-card-title { font-size: 15px; font-weight: 600; color: var(--navy); }
+        .settings-card-desc { font-size: 13px; color: var(--slate-600); margin-top: 2px; }
+        .settings-card-id { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: var(--slate-500); margin-top: var(--sp-2); cursor: pointer; user-select: all; padding: 6px 8px; background: var(--slate-50, #f8fafc); border-radius: 4px; word-break: break-all; }
+        .settings-card-id:hover { background: var(--slate-100, #f1f5f9); }
+        .settings-coming { font-size: 13px; color: var(--slate-600); line-height: 1.8; padding: var(--sp-3); background: var(--slate-50, #f8fafc); border-radius: 8px; border: 1px dashed var(--slate-200); }
+      </style>
+    `;
+  }, { title: 'Settings' });
 
   route('/admin/users', () => placeholder('Admin · Users', 'Stage 7',
     'Manage user accounts and permissions.',
@@ -7694,7 +7743,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.40';
+  const APP_VERSION = '2.1.41';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
