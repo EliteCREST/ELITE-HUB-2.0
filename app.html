@@ -6589,16 +6589,295 @@
     }, 100);
   }
 
-  route('/fleet', () => placeholder('Fleet', 'Stage 6',
-    'Cross-region fleet view — vehicles, maintenance, driver compliance, scoring.',
-    [
-      'All vehicles across 9 regions with region filter',
-      'Maintenance status and upcoming service',
-      'Driver compliance tracking (licenses, DOT)',
-      'Fleet Scoring Engine (300-850 per region)',
-      'Export to CSV',
-    ]
-  ), { title: 'Fleet' });
+  /* ═══════════════════════════════════════════════════════════════
+     FLEET — vehicle list (Stage 6.4 Chunk B)
+     ───────────────────────────────────────────────────────────────
+     Reads vehicles from bootstrap cache (preloaded at login).
+     Shows region filter + status filter + search box, then a grid
+     of vehicle cards. Click → toast for now (detail panel is Chunk C).
+     Admin-only "+ New Vehicle" button is wired but stubbed (Chunk D).
+     ═══════════════════════════════════════════════════════════════ */
+  route('/fleet', () => {
+    const me = getLoggedInUser();
+    const canAdd = ['angel','sam','sara','emma','carlynn','jaida'].includes(me.username);
+    return `
+      <div class="view fleet-view">
+        <div class="fleet-header">
+          <div>
+            <h1 class="view-title">Fleet</h1>
+            <p class="view-sub" id="fleet-sub">Loading…</p>
+          </div>
+          ${canAdd ? `<button class="btn btn-primary" onclick="openNewVehicleModal()">+ New Vehicle</button>` : ''}
+        </div>
+        ${renderFleetBody({})}
+      </div>
+    `;
+  }, {
+    title: 'Fleet',
+    onAfterRender: () => loadFleetList({})
+  });
+
+  /**
+   * Returns the HTML for the fleet body section (toolbar + summary + grid).
+   * Mirrors renderContractorsBody pattern.
+   */
+  function renderFleetBody(options) {
+    options = options || {};
+
+    // Region control — same role-based logic as contractors page
+    let regionControlHtml;
+    const userRegions = getEffectiveUserRegions();
+    if (userRegions.mode === 'single') {
+      regionControlHtml = `<input type="hidden" id="fleet-region" value="${escapeAttr(userRegions.regions[0].name)}">`;
+    } else if (userRegions.mode === 'none') {
+      regionControlHtml = `<input type="hidden" id="fleet-region" value="">`;
+    } else {
+      const allLabel = userRegions.mode === 'all' ? 'All regions' : 'All my regions';
+      // NOTE: Fleet uses region NAMES (e.g. "Chicago"), not codes, because the
+      // VEHICLES sheet stores region as the full name. Map from region object accordingly.
+      regionControlHtml = `
+        <select id="fleet-region" class="ctr-filter-select" onchange="applyFleetFilters()">
+          <option value="">${escapeHtml(allLabel)}</option>
+          ${userRegions.regions.map(r => `<option value="${escapeAttr(r.name)}">${escapeHtml(r.name)}</option>`).join('')}
+          <option value="Other">Other / Remote</option>
+        </select>`;
+    }
+
+    return `
+      <div class="contractors-toolbar">
+        <input type="text" id="fleet-search" class="ctr-filter-input" placeholder="Search by ID, driver, VIN, plate…" oninput="debouncedLoadFleet()">
+        ${regionControlHtml}
+        <select id="fleet-status" class="ctr-filter-select" onchange="applyFleetFilters()">
+          <option value="">All statuses</option>
+          <option value="OK">OK</option>
+          <option value="Active">Active</option>
+          <option value="Offline">Offline</option>
+          <option value="Not Active">Not Active</option>
+        </select>
+        <select id="fleet-assigned" class="ctr-filter-select" onchange="applyFleetFilters()">
+          <option value="">Any driver</option>
+          <option value="assigned">Assigned</option>
+          <option value="unassigned">Unassigned</option>
+        </select>
+      </div>
+
+      <div class="fleet-summary" id="fleet-summary">
+        <span class="skeleton skeleton-line" style="height:22px;width:70px;border-radius:9999px;display:inline-block;"></span>
+        <span class="skeleton skeleton-line" style="height:22px;width:90px;border-radius:9999px;display:inline-block;"></span>
+        <span class="skeleton skeleton-line" style="height:22px;width:100px;border-radius:9999px;display:inline-block;"></span>
+      </div>
+
+      <div id="fleet-grid" class="fleet-grid">
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+        <div class="skeleton skeleton-card"></div>
+      </div>
+
+      <style>
+        .fleet-header { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp-3); margin-bottom:var(--sp-3); }
+        .fleet-summary { display:flex; gap:var(--sp-2); flex-wrap:wrap; margin:var(--sp-3) 0; }
+        .fleet-summary-pill { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:9999px; font-size:12px; font-weight:600; background:var(--slate-100, #f1f5f9); color:var(--slate-700, #334155); }
+        .fleet-summary-pill.pill-ok       { background:#dcfce7; color:#15803d; }
+        .fleet-summary-pill.pill-offline  { background:#fef3c7; color:#a16207; }
+        .fleet-summary-pill.pill-warn     { background:#fee2e2; color:#b91c1c; }
+        .fleet-grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:var(--sp-3); }
+        .fleet-card { background:#fff; border:1px solid var(--slate-200, #e2e8f0); border-radius:10px; padding:var(--sp-3); cursor:pointer; transition:box-shadow .15s, transform .15s; position:relative; }
+        .fleet-card:hover { box-shadow:0 4px 12px rgba(15,23,42,.08); transform:translateY(-1px); border-color:var(--blue, #1F5FAD); }
+        .fleet-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp-2); }
+        .fleet-card-id { font-size:13px; font-weight:700; color:var(--navy, #1B2A4A); font-family:ui-monospace, Menlo, Consolas, monospace; }
+        .fleet-card-region { font-size:11px; color:var(--slate-500, #64748b); text-transform:uppercase; letter-spacing:.3px; font-weight:600; margin-top:2px; }
+        .fleet-card-status { font-size:10px; font-weight:700; padding:2px 8px; border-radius:9999px; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; }
+        .fleet-status-OK         { background:#dcfce7; color:#15803d; }
+        .fleet-status-Active     { background:#dbeafe; color:#1d4ed8; }
+        .fleet-status-Offline    { background:#fef3c7; color:#a16207; }
+        .fleet-status-NotActive  { background:#fee2e2; color:#b91c1c; }
+        .fleet-status-Unknown    { background:var(--slate-100, #f1f5f9); color:var(--slate-600, #475569); }
+        .fleet-card-vehicle { font-size:14px; font-weight:600; color:var(--slate-800, #1e293b); margin-top:var(--sp-2); }
+        .fleet-card-driver { font-size:13px; color:var(--slate-600, #475569); margin-top:2px; }
+        .fleet-card-driver.unassigned { color:var(--slate-400, #94a3b8); font-style:italic; }
+        .fleet-card-meta { display:flex; gap:var(--sp-3); flex-wrap:wrap; margin-top:var(--sp-2); padding-top:var(--sp-2); border-top:1px solid var(--slate-100, #f1f5f9); font-size:11px; color:var(--slate-500, #64748b); }
+        .fleet-card-meta span { white-space:nowrap; }
+        .fleet-card-meta .warn { color:#b91c1c; font-weight:600; }
+        .fleet-card-meta .soon { color:#a16207; font-weight:600; }
+        .fleet-empty { grid-column:1/-1; text-align:center; padding:var(--sp-6); color:var(--slate-500, #64748b); font-size:14px; }
+        .skeleton-card { height:140px; border-radius:10px; }
+      </style>
+    `;
+  }
+
+  // ─── Module-scoped state for filters ───────────────────────────
+  let _fleetFilters = { search: '', region: '', status: '', assigned: '' };
+  let _fleetDebounceTimer = null;
+
+  function debouncedLoadFleet() {
+    clearTimeout(_fleetDebounceTimer);
+    _fleetDebounceTimer = setTimeout(() => applyFleetFilters(), 200);
+  }
+  window.debouncedLoadFleet = debouncedLoadFleet;
+
+  function applyFleetFilters() {
+    _fleetFilters.search   = ($('#fleet-search')?.value || '').trim().toLowerCase();
+    _fleetFilters.region   = ($('#fleet-region')?.value || '').trim();
+    _fleetFilters.status   = ($('#fleet-status')?.value || '').trim();
+    _fleetFilters.assigned = ($('#fleet-assigned')?.value || '').trim();
+    renderFleetGrid();
+  }
+  window.applyFleetFilters = applyFleetFilters;
+
+  /**
+   * Pulls vehicles from BOOTSTRAP_CACHE and renders.
+   * If cache is empty (rare), falls back to a single message — the next bootstrap
+   * cycle will populate it within 30 seconds.
+   */
+  function loadFleetList(overrides) {
+    overrides = overrides || {};
+    Object.assign(_fleetFilters, overrides);
+    renderFleetGrid();
+  }
+  window.loadFleetList = loadFleetList;
+
+  function _getVehiclesFromCache() {
+    const section = BOOTSTRAP_CACHE.getSection('vehicles');
+    if (!section) return null;                  // cache cold
+    if (section.error) return { error: section.error };
+    return { vehicles: Array.isArray(section.vehicles) ? section.vehicles : [] };
+  }
+
+  function _vehicleExpirationFlag(v) {
+    // Returns { label, cls } if anything expires within 30 days, or null.
+    const now = new Date(); now.setHours(0,0,0,0);
+    const soon = new Date(now.getTime() + 30 * 86400000);
+    function check(dateStr, label) {
+      if (!dateStr) return null;
+      const d = new Date(dateStr);
+      if (isNaN(d)) return null;
+      if (d < now) return { label: label + ' EXPIRED', cls: 'warn' };
+      if (d <= soon) return { label: label + ' soon', cls: 'soon' };
+      return null;
+    }
+    return check(v.insurance_exp_date, 'Insurance')
+        || check(v.tag_expiration,     'Tag')
+        || check(v.maintenance_due_date, 'Maintenance')
+        || null;
+  }
+
+  function renderFleetGrid() {
+    const grid = $('#fleet-grid');
+    const sub  = $('#fleet-sub');
+    const summary = $('#fleet-summary');
+    if (!grid) return;
+
+    const res = _getVehiclesFromCache();
+    if (!res) {
+      // Cache still loading
+      if (sub) sub.textContent = 'Loading vehicles…';
+      return;
+    }
+    if (res.error) {
+      if (sub) sub.textContent = 'Error loading vehicles: ' + res.error;
+      grid.innerHTML = `<div class="fleet-empty">Could not load vehicles. ${escapeHtml(res.error)}</div>`;
+      if (summary) summary.innerHTML = '';
+      return;
+    }
+
+    const all = res.vehicles;
+    const f = _fleetFilters;
+
+    // Apply filters
+    let filtered = all;
+    if (f.region)   filtered = filtered.filter(v => String(v.region || '') === f.region);
+    if (f.status)   filtered = filtered.filter(v => String(v.status || '') === f.status);
+    if (f.assigned === 'assigned')   filtered = filtered.filter(v => v.assigned_driver && !/^un/i.test(v.assigned_driver));
+    if (f.assigned === 'unassigned') filtered = filtered.filter(v => !v.assigned_driver || /^un/i.test(v.assigned_driver));
+    if (f.search) {
+      const q = f.search;
+      filtered = filtered.filter(v =>
+        String(v.vehicle_id || '').toLowerCase().includes(q) ||
+        String(v.device_name || '').toLowerCase().includes(q) ||
+        String(v.assigned_driver || '').toLowerCase().includes(q) ||
+        String(v.vin || '').toLowerCase().includes(q) ||
+        String(v.license_plate || '').toLowerCase().includes(q) ||
+        String(v.make || '').toLowerCase().includes(q) ||
+        String(v.model || '').toLowerCase().includes(q)
+      );
+    }
+
+    // Summary pills (computed from the FILTERED set so they update with filters)
+    if (summary) {
+      const okCount      = filtered.filter(v => v.status === 'OK' || v.status === 'Active').length;
+      const offlineCount = filtered.filter(v => v.status === 'Offline').length;
+      const expiringCount = filtered.filter(v => _vehicleExpirationFlag(v)).length;
+      summary.innerHTML = `
+        <span class="fleet-summary-pill">${filtered.length} vehicle${filtered.length === 1 ? '' : 's'}</span>
+        <span class="fleet-summary-pill pill-ok">${okCount} on the road</span>
+        <span class="fleet-summary-pill pill-offline">${offlineCount} offline</span>
+        ${expiringCount ? `<span class="fleet-summary-pill pill-warn">${expiringCount} expiring</span>` : ''}
+      `;
+    }
+
+    // Subtitle
+    if (sub) {
+      const totalAll = all.length;
+      sub.textContent = filtered.length === totalAll
+        ? `${totalAll} vehicles across all regions.`
+        : `Showing ${filtered.length} of ${totalAll} vehicles.`;
+    }
+
+    // Empty state
+    if (filtered.length === 0) {
+      grid.innerHTML = `<div class="fleet-empty">No vehicles match your filters.</div>`;
+      return;
+    }
+
+    // Sort: by status (OK/Active first), then by vehicle_id
+    filtered.sort((a, b) => {
+      const order = { 'OK': 0, 'Active': 1, 'Offline': 2, 'Not Active': 3, '': 4 };
+      const sa = order[a.status] ?? 5;
+      const sb = order[b.status] ?? 5;
+      if (sa !== sb) return sa - sb;
+      return String(a.vehicle_id).localeCompare(String(b.vehicle_id), undefined, { numeric: true });
+    });
+
+    grid.innerHTML = filtered.map(v => {
+      const driver = v.assigned_driver || '';
+      const unassigned = !driver || /^un/i.test(driver);
+      const statusClass = String(v.status || 'Unknown').replace(/\s+/g, '');
+      const year = v.year ? v.year + ' ' : '';
+      const make = v.make || '';
+      const model = v.model || '';
+      const vehicleLabel = (year + make + ' ' + model).trim() || '—';
+      const flag = _vehicleExpirationFlag(v);
+      return `
+        <div class="fleet-card" onclick="openVehicleDetail('${escapeAttr(v.vehicle_id)}')">
+          <div class="fleet-card-head">
+            <div>
+              <div class="fleet-card-id">#${escapeHtml(v.vehicle_id)}</div>
+              <div class="fleet-card-region">${escapeHtml(v.region || '—')}</div>
+            </div>
+            <span class="fleet-card-status fleet-status-${escapeAttr(statusClass)}">${escapeHtml(v.status || '—')}</span>
+          </div>
+          <div class="fleet-card-vehicle">${escapeHtml(vehicleLabel)}</div>
+          <div class="fleet-card-driver ${unassigned ? 'unassigned' : ''}">${escapeHtml(driver || 'Unassigned')}</div>
+          <div class="fleet-card-meta">
+            ${v.license_plate ? `<span>🪪 ${escapeHtml(v.license_plate)}</span>` : ''}
+            ${v.odometer ? `<span>📏 ${escapeHtml(Number(v.odometer).toLocaleString())} mi</span>` : ''}
+            ${flag ? `<span class="${flag.cls}">⚠ ${escapeHtml(flag.label)}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // Stub handlers — real implementations come in Chunks C and D
+  window.openVehicleDetail = function(vehicleId) {
+    showToast('Vehicle ' + vehicleId + ' — detail panel coming in Chunk C', 'default');
+  };
+  window.openNewVehicleModal = function() {
+    showToast('Add vehicle — coming in Chunk D', 'default');
+  };
 
   /* ═══════════════════════════════════════════════════════════════
      REVIEWS — individual reviews workflow (Stage 6.3 Chunk C.3)
@@ -7500,7 +7779,7 @@
           <a class="btn btn-primary" target="_blank" rel="noopener"
              href="https://docs.google.com/spreadsheets/d/${escapeHtml(s.id)}/edit">Open ↗</a>
         </div>
-        <div class="settings-card-id" title="Click to copy" onclick="navigator.clipboard.writeText('${escapeHtml(s.id)}').then(()=>toast('Sheet ID copied'))">${escapeHtml(s.id)}</div>
+        <div class="settings-card-id" title="Click to copy" onclick="navigator.clipboard.writeText('${escapeHtml(s.id)}').then(()=>showToast('Sheet ID copied','success'))">${escapeHtml(s.id)}</div>
       </div>
     `).join('');
     return `
@@ -7743,7 +8022,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.41';
+  const APP_VERSION = '2.1.42';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
