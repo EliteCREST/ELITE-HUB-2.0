@@ -7002,10 +7002,310 @@
     return header + rows;
   }
 
-  // Stub handlers — real implementations come in Chunks C and D
-  window.openVehicleDetail = function(vehicleId) {
-    showToast('Vehicle ' + vehicleId + ' — detail panel coming in Chunk C', 'default');
-  };
+  /* ═══════════════════════════════════════════════════════════════
+     FLEET — vehicle detail panel (Stage 6.4 Chunk C)
+     ───────────────────────────────────────────────────────────────
+     Slide-in panel mirroring the contractor detail panel. Opens on
+     click, fetches the full record via ?resource=vehicle, renders
+     grouped sections. Compliance team gets an inline Edit form that
+     saves via the existing savevehicle backend action.
+     ═══════════════════════════════════════════════════════════════ */
+
+  let _currentVehicle = null;
+
+  // Field groups for the detail panel. [key, label] pairs per section.
+  const VEHICLE_FIELD_GROUPS = [
+    { title: 'Identity', fields: [
+      ['vehicle_id', 'Vehicle ID'], ['year', 'Year'], ['make', 'Make'], ['model', 'Model'],
+      ['color', 'Color'], ['vin', 'VIN'], ['license_plate', 'License plate'],
+      ['tag_state', 'Tag state'], ['tag_expiration', 'Tag expiration'], ['region', 'Region'],
+    ]},
+    { title: 'Status & Driver', fields: [
+      ['status', 'Status'], ['assigned_driver', 'Assigned driver'],
+      ['last_known_driver', 'Last known driver'], ['agreement_status', 'Agreement status'],
+    ]},
+    { title: 'Tracking', fields: [
+      ['device_name', 'Device name'], ['serial_number', 'Serial number'],
+      ['last_communicated', 'Last communicated'], ['geotab_status', 'Geotab status'],
+      ['toll_transponder', 'Toll transponder'],
+    ]},
+    { title: 'Specs', fields: [
+      ['brand', 'Brand'], ['cab_size', 'Cab size'], ['bed_size', 'Bed size'],
+      ['accessory', 'Accessory'], ['vehicle_wrap', 'Vehicle wrap'],
+      ['odometer', 'Odometer'], ['odometer_date_checked', 'Odometer date checked'],
+    ]},
+    { title: 'Locations', fields: [
+      ['vehicle_location', 'Vehicle location'], ['office_location', 'Office location'],
+    ]},
+    { title: 'Maintenance & Insurance', fields: [
+      ['last_maintenance', 'Last maintenance'], ['maintenance_due_date', 'Maintenance due'],
+      ['oil_change_due_miles', 'Oil change due (miles)'], ['insurance_exp_date', 'Insurance expiry'],
+    ]},
+    { title: 'Notes', fields: [
+      ['notes', 'Notes'],
+    ]},
+  ];
+
+  // Date-type fields render as <input type="date"> in edit mode
+  const VEHICLE_DATE_FIELDS = new Set([
+    'tag_expiration', 'last_communicated', 'odometer_date_checked',
+    'last_maintenance', 'maintenance_due_date', 'insurance_exp_date',
+  ]);
+
+  function _fleetCanEdit() {
+    const me = getLoggedInUser();
+    return ['angel','sam','sara','emma','carlynn','jaida'].includes(me.username);
+  }
+
+  async function openVehicleDetail(vehicleId) {
+    let panel = document.getElementById('vehicle-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'vehicle-panel';
+      panel.className = 'ctr-panel-backdrop';
+      document.body.appendChild(panel);
+    }
+
+    // Prefill header from the cached list item so it feels instant
+    const summary = (function() {
+      const res = _getVehiclesFromCache();
+      const list = (res && res.vehicles) || [];
+      return list.find(v => String(v.vehicle_id) === String(vehicleId)) || null;
+    })();
+
+    panel.innerHTML = renderVehiclePanelLoading(summary);
+    panel.classList.add('open');
+    panel.onclick = (e) => { if (e.target === panel) closeVehiclePanel(); };
+
+    const res = await api({ resource: 'vehicle', id: vehicleId });
+    if (!document.getElementById('vehicle-panel') || !panel.classList.contains('open')) return;
+
+    if (res.error || !res.vehicle) {
+      showToast(res.error || 'Vehicle not found', 'error');
+      closeVehiclePanel();
+      return;
+    }
+    _currentVehicle = res.vehicle;
+    panel.innerHTML = renderVehiclePanel(_currentVehicle);
+    panel.onclick = (e) => { if (e.target === panel) closeVehiclePanel(); };
+  }
+
+  function closeVehiclePanel() {
+    const panel = document.getElementById('vehicle-panel');
+    if (!panel) return;
+    panel.classList.remove('open');
+    _currentVehicle = null;
+  }
+
+  function renderVehiclePanelLoading(summary) {
+    const label = summary
+      ? ((summary.year ? summary.year + ' ' : '') + (summary.make || '') + ' ' + (summary.model || '')).trim() || ('#' + summary.vehicle_id)
+      : 'Loading…';
+    const sub = summary ? ('#' + summary.vehicle_id + (summary.region ? ' · ' + summary.region : '')) : '';
+    return `
+      <div class="ctr-panel" onclick="event.stopPropagation()">
+        <div class="ctr-panel-header">
+          <div class="ctr-panel-header-main">
+            <h2 class="ctr-panel-title">${escapeHtml(label)}</h2>
+            <div class="ctr-panel-subtitle">${escapeHtml(sub)}</div>
+          </div>
+          <button class="ctr-panel-close" onclick="closeVehiclePanel()" title="Close">×</button>
+        </div>
+        <div class="ctr-panel-body">
+          <div class="ctr-panel-section"><div class="skeleton skeleton-line" style="height:60px;"></div></div>
+          <div class="ctr-panel-section"><div class="skeleton skeleton-line" style="height:60px;"></div></div>
+          <div class="ctr-panel-section"><div class="skeleton skeleton-line" style="height:80px;"></div></div>
+        </div>
+      </div>
+    `;
+  }
+
+  function _vehicleFieldDisplay(key, value) {
+    const v = value == null ? '' : String(value);
+    if (!v) return '<span class="ctr-cell-dash">—</span>';
+    // Color insurance/tag/maintenance dates by urgency
+    if (VEHICLE_DATE_FIELDS.has(key) && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+      if (key === 'insurance_exp_date' || key === 'tag_expiration' || key === 'maintenance_due_date') {
+        const urgency = getExpiryUrgency(v.slice(0, 10));
+        return `<span class="ctr-exp ctr-exp-${urgency}">${escapeHtml(formatFriendlyDate(v))}</span>`;
+      }
+      return escapeHtml(formatFriendlyDate(v));
+    }
+    if (key === 'odometer' && /^\d+$/.test(v)) {
+      return escapeHtml(Number(v).toLocaleString()) + ' mi';
+    }
+    return escapeHtml(v);
+  }
+
+  function renderVehiclePanel(veh) {
+    const canEdit = _fleetCanEdit();
+    const label = ((veh.year ? veh.year + ' ' : '') + (veh.make || '') + ' ' + (veh.model || '')).trim() || ('#' + veh.vehicle_id);
+    const statusClass = String(veh.status || 'Unknown').replace(/\s+/g, '');
+
+    const sectionsHtml = VEHICLE_FIELD_GROUPS.map(group => {
+      const rows = group.fields.map(([key, lbl]) => `
+        <div><div class="ctr-panel-label">${escapeHtml(lbl)}</div>
+        <div class="ctr-panel-value">${_vehicleFieldDisplay(key, veh[key])}</div></div>
+      `).join('');
+      return `
+        <div class="ctr-panel-section">
+          <div class="ctr-panel-section-title">${escapeHtml(group.title)}</div>
+          <div class="ctr-panel-grid">${rows}</div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="ctr-panel" onclick="event.stopPropagation()">
+        <div class="ctr-panel-header">
+          <div class="ctr-panel-header-main">
+            <h2 class="ctr-panel-title">${escapeHtml(label)}</h2>
+            <div class="ctr-panel-subtitle">#${escapeHtml(veh.vehicle_id)}${veh.region ? ' · ' + escapeHtml(veh.region) : ''}</div>
+            <div class="ctr-panel-pills">
+              <span class="fleet-card-status fleet-status-${escapeAttr(statusClass)}">${escapeHtml(veh.status || '—')}</span>
+              ${veh.assigned_driver ? `<span class="pill" style="font-size:10px;">${escapeHtml(veh.assigned_driver)}</span>` : ''}
+            </div>
+          </div>
+          <button class="ctr-panel-close" onclick="closeVehiclePanel()" title="Close">×</button>
+        </div>
+
+        ${canEdit ? `
+        <div class="ctr-panel-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openEditVehicle()">✎ Edit</button>
+        </div>` : ''}
+
+        <div class="ctr-panel-body">
+          ${sectionsHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  function openEditVehicle() {
+    if (!_currentVehicle || !_fleetCanEdit()) return;
+    const panel = document.getElementById('vehicle-panel');
+    if (!panel) return;
+    panel.innerHTML = renderVehicleEditForm(_currentVehicle);
+    panel.onclick = (e) => { if (e.target === panel) cancelVehicleEdit(); };
+  }
+
+  function cancelVehicleEdit() {
+    const panel = document.getElementById('vehicle-panel');
+    if (!panel) return;
+    if (_currentVehicle) {
+      panel.innerHTML = renderVehiclePanel(_currentVehicle);
+      panel.onclick = (e) => { if (e.target === panel) closeVehiclePanel(); };
+    } else {
+      closeVehiclePanel();
+    }
+  }
+
+  function renderVehicleEditForm(veh) {
+    const label = ((veh.year ? veh.year + ' ' : '') + (veh.make || '') + ' ' + (veh.model || '')).trim() || ('#' + veh.vehicle_id);
+
+    const sectionsHtml = VEHICLE_FIELD_GROUPS.map(group => {
+      const rows = group.fields.map(([key, lbl]) => {
+        // vehicle_id is the primary key — show it read-only
+        if (key === 'vehicle_id') {
+          return `<div class="ctr-edit-field">
+            <label class="ctr-edit-label">${escapeHtml(lbl)} (read-only)</label>
+            <input type="text" class="ctr-edit-input" value="${escapeAttr(veh.vehicle_id || '')}" disabled>
+          </div>`;
+        }
+        const wide = (key === 'notes') ? ' ctr-edit-field-wide' : '';
+        if (key === 'notes') {
+          return `<div class="ctr-edit-field${wide}">
+            <label class="ctr-edit-label">${escapeHtml(lbl)}</label>
+            <textarea class="ctr-edit-input" name="${escapeAttr(key)}" rows="3">${escapeHtml(veh[key] || '')}</textarea>
+          </div>`;
+        }
+        const type = VEHICLE_DATE_FIELDS.has(key) ? 'date' : 'text';
+        const val = VEHICLE_DATE_FIELDS.has(key)
+          ? String(veh[key] || '').slice(0, 10)
+          : (veh[key] || '');
+        return `<div class="ctr-edit-field">
+          <label class="ctr-edit-label">${escapeHtml(lbl)}</label>
+          <input type="${type}" class="ctr-edit-input" name="${escapeAttr(key)}" value="${escapeAttr(val)}">
+        </div>`;
+      }).join('');
+      return `
+        <div class="ctr-panel-section">
+          <div class="ctr-panel-section-title">${escapeHtml(group.title)}</div>
+          <div class="ctr-edit-grid">${rows}</div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="ctr-panel ctr-panel-edit" onclick="event.stopPropagation()">
+        <form id="veh-edit-form" onsubmit="event.preventDefault(); submitVehicleEdit();">
+          <div class="ctr-panel-header">
+            <div class="ctr-panel-header-main">
+              <h2 class="ctr-panel-title">Edit Vehicle</h2>
+              <div class="ctr-panel-subtitle">${escapeHtml(label)} · #${escapeHtml(veh.vehicle_id)}</div>
+            </div>
+            <button class="ctr-panel-close" type="button" onclick="cancelVehicleEdit()" title="Cancel">×</button>
+          </div>
+          <div class="ctr-panel-actions">
+            <button class="btn btn-primary btn-sm" type="submit" id="veh-save-btn">Save changes</button>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="cancelVehicleEdit()">Cancel</button>
+          </div>
+          <div class="ctr-panel-body">
+            ${sectionsHtml}
+          </div>
+        </form>
+      </div>
+    `;
+  }
+
+  async function submitVehicleEdit() {
+    const form = document.getElementById('veh-edit-form');
+    if (!form || !_currentVehicle) return;
+
+    const saveBtn = document.getElementById('veh-save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+
+    // Start from the current full record so we don't drop fields the form
+    // doesn't expose; then overlay the edited values.
+    const payload = { ..._currentVehicle };
+    const fd = new FormData(form);
+    for (const [key, value] of fd.entries()) {
+      payload[key] = value;
+    }
+    payload.vehicle_id = _currentVehicle.vehicle_id;  // never let the PK change
+
+    const res = await api({}, 'POST', { action: 'savevehicle', vehicle: payload });
+
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save changes';
+
+    if (res.error) {
+      showToast('Save failed: ' + res.error, 'error');
+      return;
+    }
+
+    showToast('Vehicle saved', 'success');
+    _currentVehicle = payload;
+
+    // Flip back to view mode with the saved data
+    const panel = document.getElementById('vehicle-panel');
+    if (panel) {
+      panel.innerHTML = renderVehiclePanel(_currentVehicle);
+      panel.onclick = (e) => { if (e.target === panel) closeVehiclePanel(); };
+    }
+
+    // Refresh the bootstrap cache so the list reflects the change on next render
+    if (typeof BOOTSTRAP_CACHE !== 'undefined') {
+      BOOTSTRAP_CACHE.forceRefresh().then(() => {
+        if (document.getElementById('fleet-grid')) renderFleetGrid();
+      }).catch(() => {});
+    }
+  }
+
+  window.openVehicleDetail = openVehicleDetail;
+  window.closeVehiclePanel = closeVehiclePanel;
+  window.openEditVehicle   = openEditVehicle;
+  window.cancelVehicleEdit = cancelVehicleEdit;
+  window.submitVehicleEdit = submitVehicleEdit;
   window.openNewVehicleModal = function() {
     showToast('Add vehicle — coming in Chunk D', 'default');
   };
@@ -8153,7 +8453,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.43';
+  const APP_VERSION = '2.1.44';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
