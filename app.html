@@ -8205,12 +8205,21 @@
   // LEGAL (Stage 6.4) — read/browse across five case types
   // ════════════════════════════════════════════════════════════════════
   const LEGAL_CASE_TYPES = [
-    { key: 'lawsuit', label: 'Lawsuits' },
-    { key: 'ag',      label: 'AG Complaints' },
-    { key: 'bbb',     label: 'BBB Complaints' },
-    { key: 'roc',     label: 'ROC Complaints' },
-    { key: 'lien',    label: 'Liens' },
+    { key: 'lawsuit', label: 'Lawsuits',       singular: 'Lawsuit' },
+    { key: 'ag',      label: 'AG Complaints',  singular: 'AG Complaint' },
+    { key: 'bbb',     label: 'BBB Complaints', singular: 'BBB Complaint' },
+    { key: 'roc',     label: 'ROC Complaints', singular: 'ROC Complaint' },
+    { key: 'lien',    label: 'Liens',          singular: 'Lien' },
   ];
+
+  function legalTypeSingular(key) {
+    const t = LEGAL_CASE_TYPES.find(x => x.key === key);
+    return t ? t.singular : 'Case';
+  }
+  function legalTypeLabel(key) {
+    const t = LEGAL_CASE_TYPES.find(x => x.key === key);
+    return t ? t.label : 'Cases';
+  }
 
   let _legalAll = [];            // all items from the backend (all types)
   let _legalCurrentParams = { type: 'lawsuit', regionFilter: '', searchValue: '' };
@@ -8234,7 +8243,7 @@
             <p class="view-sub" id="legal-sub">Loading…</p>
           </div>
           <div style="display:flex; gap: var(--sp-2);">
-            ${legalCanEdit() ? `<button class="btn btn-primary" onclick="openLegalAdd()">+ Add Case</button>` : ''}
+            ${legalCanEdit() ? `<button class="btn btn-primary" id="legal-add-btn" onclick="openLegalAdd()">+ Add ${escapeHtml(legalTypeSingular(typeFilter))}</button>` : ''}
           </div>
         </div>
         ${renderLegalBody({ typeFilter, regionFilter, searchValue })}
@@ -8419,6 +8428,8 @@
     const label = (LEGAL_CASE_TYPES.find(t => t.key === value) || {}).label;
     const activeBtn = Array.from(document.querySelectorAll('.legal-view .rev-toggle-btn')).find(btn => btn.textContent === label);
     if (activeBtn) activeBtn.classList.add('active');
+    const addBtn = document.getElementById('legal-add-btn');
+    if (addBtn) addBtn.textContent = '+ Add ' + legalTypeSingular(value);
     applyLegalFilters();
   }
 
@@ -8576,14 +8587,10 @@
     return isComplianceTeam(getLoggedInUser());
   }
 
-  function openLegalModal(caseType, existing) {
-    caseType = caseType || _legalCurrentParams.type || 'lawsuit';
-    const fields = LEGAL_FIELDS[caseType];
-    if (!fields) return;
-    const isEdit = !!(existing && existing.id);
-    const typeLabel = (LEGAL_CASE_TYPES.find(t => t.key === caseType) || {}).label || 'Case';
-
-    const fieldHtml = fields.map(f => {
+  // Build just the fields grid for a given case type, pre-filling from `existing` if provided.
+  function _legalFieldsHtml(caseType, existing) {
+    const fields = LEGAL_FIELDS[caseType] || [];
+    return fields.map(f => {
       const val = existing ? (existing[f.key] != null ? String(existing[f.key]) : '') : '';
       const id = 'legal-f-' + f.key;
       const wide = (f.type === 'textarea') ? ' new-sub-field-wide' : '';
@@ -8605,15 +8612,50 @@
       }
       return `<div class="new-sub-field${wide}"><label for="${id}">${escapeHtml(f.label)}</label>${input}</div>`;
     }).join('');
+  }
+
+  // Rebuild the form fields when the type picker changes (add mode only).
+  function onLegalTypeChange(newType) {
+    const grid = document.getElementById('legal-fields-grid');
+    if (grid) grid.innerHTML = _legalFieldsHtml(newType, null);
+    const ct = document.getElementById('legal-f-case_type');
+    if (ct) ct.value = newType;
+  }
+
+  function openLegalModal(caseType, existing) {
+    caseType = caseType || _legalCurrentParams.type || 'lawsuit';
+    const fields = LEGAL_FIELDS[caseType];
+    if (!fields) return;
+    const isEdit = !!(existing && existing.id);
+
+    // Type control: dropdown when adding (lets user choose/change), fixed label when editing.
+    let typeControlHtml;
+    if (isEdit) {
+      typeControlHtml = `<div class="new-sub-field new-sub-field-wide">
+        <label>Case Type</label>
+        <div style="padding:8px 0; font-weight:600;">${escapeHtml(legalTypeLabel(caseType))}</div>
+      </div>`;
+    } else {
+      const opts = LEGAL_CASE_TYPES.map(t => `<option value="${t.key}" ${t.key === caseType ? 'selected' : ''}>${escapeHtml(t.label)}</option>`).join('');
+      typeControlHtml = `<div class="new-sub-field new-sub-field-wide">
+        <label for="legal-type-picker">Case Type</label>
+        <select id="legal-type-picker" class="new-sub-select" onchange="onLegalTypeChange(this.value)">${opts}</select>
+      </div>`;
+    }
 
     const modal = document.getElementById('legal-modal');
     if (!modal) return;
-    modal.querySelector('#legal-modal-title').textContent = (isEdit ? 'Edit ' : 'Add ') + typeLabel.replace(/s$/, '');
+    modal.querySelector('#legal-modal-title').textContent = (isEdit ? 'Edit ' : 'Add ') + legalTypeSingular(caseType);
     modal.querySelector('#legal-modal-body').innerHTML =
       `<div class="new-sub-banner" id="legal-modal-error" style="display:none;"></div>
        <input type="hidden" id="legal-f-id" value="${escapeAttr(existing && existing.id ? existing.id : '')}">
        <input type="hidden" id="legal-f-case_type" value="${escapeAttr(caseType)}">
-       <div class="new-sub-grid">${fieldHtml}</div>`;
+       <div class="new-sub-grid">
+         ${typeControlHtml}
+       </div>
+       <div class="new-sub-grid" id="legal-fields-grid">
+         ${_legalFieldsHtml(caseType, existing)}
+       </div>`;
     openModal('legal-modal');
   }
 
@@ -8664,6 +8706,7 @@
   window.openLegalAdd     = openLegalAdd;
   window.openLegalEdit    = openLegalEdit;
   window.submitLegalModal = submitLegalModal;
+  window.onLegalTypeChange = onLegalTypeChange;
 
   route('/admin', () => {
     // Settings page. Sections added incrementally:
@@ -8927,7 +8970,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.46';
+  const APP_VERSION = '2.1.47';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
