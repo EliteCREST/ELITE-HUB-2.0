@@ -8186,10 +8186,235 @@
   window.submitImportReviews     = submitImportReviews;
 
 
-  route('/legal', () => placeholder('Legal', 'Stage 6',
-    'Legal cases across all regions.',
-    ['Case list with assignee and status', 'Per-region filter', 'Quick note entry']
-  ), { title: 'Legal' });
+  // ════════════════════════════════════════════════════════════════════
+  // LEGAL (Stage 6.4) — read/browse across five case types
+  // ════════════════════════════════════════════════════════════════════
+  const LEGAL_CASE_TYPES = [
+    { key: 'lawsuit', label: 'Lawsuits' },
+    { key: 'ag',      label: 'AG Complaints' },
+    { key: 'bbb',     label: 'BBB Complaints' },
+    { key: 'roc',     label: 'ROC Complaints' },
+    { key: 'lien',    label: 'Liens' },
+  ];
+
+  let _legalAll = [];            // all items from the backend (all types)
+  let _legalCurrentParams = { type: 'lawsuit', regionFilter: '', searchValue: '' };
+  let _legalSearchTimer = null;
+
+  function debouncedLoadLegal() {
+    if (_legalSearchTimer) clearTimeout(_legalSearchTimer);
+    _legalSearchTimer = setTimeout(() => applyLegalFilters(), 80);
+  }
+
+  route('/legal', (params) => {
+    const typeFilter   = params.type          || 'lawsuit';
+    const regionFilter = params.region_filter || '';
+    const searchValue  = params.search        || '';
+
+    return `
+      <div class="view legal-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Legal</h1>
+            <p class="view-sub" id="legal-sub">Loading…</p>
+          </div>
+        </div>
+        ${renderLegalBody({ typeFilter, regionFilter, searchValue })}
+      </div>
+    `;
+  }, {
+    title: 'Legal',
+    onAfterRender: (params) => loadLegalCases({ params: params || {} })
+  });
+
+  function renderLegalBody(opts) {
+    opts = opts || {};
+    const typeFilter   = opts.typeFilter   || 'lawsuit';
+    const regionFilter = opts.regionFilter || '';
+    const searchValue  = opts.searchValue  || '';
+
+    // Region dropdown based on the user's permissions (same pattern as Reviews)
+    const userRegions = getEffectiveUserRegions();
+    const showRegionDropdown = (userRegions.mode === 'all' || userRegions.mode === 'list');
+    const regionDropdownHtml = showRegionDropdown ? (() => {
+      const allLabel = userRegions.mode === 'all' ? 'All regions' : 'All my regions';
+      const regionOptions = userRegions.regions.map(r =>
+        `<option value="${r.code}" ${regionFilter === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`
+      ).join('');
+      return `
+        <select id="legal-region-filter" class="ctr-filter-input" onchange="setLegalRegionFilter(this.value)">
+          <option value="" ${regionFilter === '' ? 'selected' : ''}>${escapeHtml(allLabel)}</option>
+          ${regionOptions}
+        </select>`;
+    })() : '';
+
+    const typeTabs = LEGAL_CASE_TYPES.map(t =>
+      `<button class="rev-toggle-btn ${typeFilter === t.key ? 'active' : ''}"
+               onclick="setLegalType('${t.key}')" type="button">${escapeHtml(t.label)}</button>`
+    ).join('');
+
+    return `
+      <div class="rev-toggle" role="tablist" aria-label="Case type" style="flex-wrap:wrap; margin-bottom:var(--sp-3);">
+        ${typeTabs}
+      </div>
+      <div class="reviews-toolbar">
+        <input type="text" id="legal-search" class="ctr-filter-input"
+               placeholder="Search title, complainant, case #, status…"
+               value="${escapeAttr(searchValue)}"
+               oninput="debouncedLoadLegal()">
+        ${regionDropdownHtml}
+      </div>
+      <div class="reviews-list" id="legal-list">
+        <div class="skeleton skeleton-line" style="height:90px;margin-bottom:8px;"></div>
+        <div class="skeleton skeleton-line" style="height:90px;margin-bottom:8px;"></div>
+        <div class="skeleton skeleton-line" style="height:90px;margin-bottom:8px;"></div>
+      </div>
+    `;
+  }
+
+  async function loadLegalCases(opts) {
+    opts = opts || {};
+    const params = opts.params || {};
+    _legalCurrentParams = {
+      type:         params.type          || _legalCurrentParams.type || 'lawsuit',
+      regionFilter: params.region_filter || '',
+      searchValue:  params.search        || '',
+    };
+
+    const listEl = document.getElementById('legal-list');
+    if (!listEl) return;
+
+    try {
+      const apiParams = { resource: 'legal_cases' };
+      if (_legalCurrentParams.regionFilter) apiParams.region = _legalCurrentParams.regionFilter;
+      const res = await api(apiParams);
+      _legalAll = (res && res.items) || [];
+      applyLegalFilters();
+    } catch (err) {
+      console.warn('[legal] load failed:', err);
+      listEl.innerHTML = `<div class="card" style="border-color:var(--red);">
+        <div style="color:var(--red);">⚠ ${escapeHtml(String(err.message || err))}</div>
+      </div>`;
+    }
+  }
+
+  function applyLegalFilters() {
+    const listEl = document.getElementById('legal-list');
+    const subEl  = document.getElementById('legal-sub');
+    if (!listEl) return;
+
+    const p = _legalCurrentParams;
+    const searchEl = document.getElementById('legal-search');
+    const searchQ  = searchEl ? String(searchEl.value || '').toLowerCase().trim() : (p.searchValue || '').toLowerCase().trim();
+
+    let rows = _legalAll.filter(r => String(r.case_type) === p.type);
+
+    if (!p.regionFilter) {
+      // no-op: showing all regions the fetch returned
+    } else {
+      rows = rows.filter(r => String(r.region || '').toLowerCase() === p.regionFilter);
+    }
+
+    if (searchQ) {
+      rows = rows.filter(r => {
+        const hay = [r.title, r.complainant, r.customer_name, r.case_number, r.status, r.assigned_to, r.brand, r.job_number]
+          .map(x => String(x || '').toLowerCase()).join(' ');
+        return hay.indexOf(searchQ) >= 0;
+      });
+    }
+
+    const typeLabel = (LEGAL_CASE_TYPES.find(t => t.key === p.type) || {}).label || 'Cases';
+    if (subEl) {
+      subEl.textContent = rows.length === 0
+        ? `No ${typeLabel.toLowerCase()} match your filters.`
+        : `${rows.length} ${rows.length === 1 ? 'case' : 'cases'} · ${typeLabel}.`;
+    }
+
+    if (rows.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">
+        <div class="empty-state-title">No ${escapeHtml(typeLabel.toLowerCase())} to show</div>
+        <div class="empty-state-sub">Try a different case type or region, or clear the search.</div>
+      </div>`;
+      return;
+    }
+
+    listEl.innerHTML = rows.map(r => renderLegalCard(r)).join('');
+  }
+
+  function _legalStatusClass(status) {
+    const s = String(status || '').toLowerCase();
+    if (s.indexOf('open') >= 0 || s.indexOf('active') >= 0) return 'var(--red)';
+    if (s.indexOf('progress') >= 0 || s.indexOf('pending') >= 0) return 'var(--amber, #d97706)';
+    if (s.indexOf('resolved') >= 0 || s.indexOf('closed') >= 0) return 'var(--green)';
+    return 'var(--slate-500, #64748b)';
+  }
+
+  function renderLegalCard(r) {
+    const title = escapeHtml(r.title || r.customer_name || r.case_number || '(untitled case)');
+    const status = String(r.status || '').trim();
+    const statusColor = _legalStatusClass(status);
+    const region = escapeHtml(String(r.region || '').toUpperCase());
+    const assignee = escapeHtml(r.assigned_to || '—');
+    const filed = escapeHtml(r.filed_date || '');
+    const amount = r.amount ? escapeHtml(String(r.amount)) : (r.amount_at_stake ? escapeHtml(String(r.amount_at_stake)) : '');
+    const brand = escapeHtml(r.brand || '');
+    const job = escapeHtml(r.job_number || '');
+
+    const meta = [];
+    if (region)   meta.push(`<span class="legal-meta-pill">📍 ${region}</span>`);
+    if (assignee && assignee !== '—') meta.push(`<span class="legal-meta-pill">👤 ${assignee}</span>`);
+    if (brand)    meta.push(`<span class="legal-meta-pill">${brand}</span>`);
+    if (job)      meta.push(`<span class="legal-meta-pill">Job ${job}</span>`);
+    if (filed)    meta.push(`<span class="legal-meta-pill">Filed ${filed}</span>`);
+    if (amount)   meta.push(`<span class="legal-meta-pill">$${amount}</span>`);
+
+    return `
+      <div class="card legal-card" style="margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp-2);">
+          <div style="font-weight:600;">${title}</div>
+          ${status ? `<span style="font-size:0.72rem; font-weight:600; color:#fff; background:${statusColor}; padding:2px 8px; border-radius:10px; white-space:nowrap;">${escapeHtml(status)}</span>` : ''}
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; font-size:0.78rem; color:var(--slate-600,#475569);">
+          ${meta.join('')}
+        </div>
+        ${r.notes ? `<div style="margin-top:8px; font-size:0.82rem; color:var(--slate-600,#475569); white-space:pre-wrap;">${escapeHtml(String(r.notes).slice(0,300))}${String(r.notes).length > 300 ? '…' : ''}</div>` : ''}
+      </div>
+    `;
+  }
+
+  function _updateLegalUrlParam(name, value) {
+    const h = location.hash || '#/legal';
+    const [path, qs] = h.split('?');
+    const params = new URLSearchParams(qs || '');
+    if (value) params.set(name, value); else params.delete(name);
+    const newHash = path + (params.toString() ? '?' + params.toString() : '');
+    history.replaceState(null, '', newHash);
+  }
+
+  function setLegalType(value) {
+    _legalCurrentParams.type = value;
+    _updateLegalUrlParam('type', value === 'lawsuit' ? '' : value);
+    document.querySelectorAll('.legal-view .rev-toggle-btn').forEach(btn => btn.classList.remove('active'));
+    const label = (LEGAL_CASE_TYPES.find(t => t.key === value) || {}).label;
+    const activeBtn = Array.from(document.querySelectorAll('.legal-view .rev-toggle-btn')).find(btn => btn.textContent === label);
+    if (activeBtn) activeBtn.classList.add('active');
+    applyLegalFilters();
+  }
+
+  function setLegalRegionFilter(value) {
+    _legalCurrentParams.regionFilter = value;
+    _updateLegalUrlParam('region_filter', value);
+    // Refetch with the new region scope (server-side filter, cheaper)
+    loadLegalCases({ params: {
+      type:          _legalCurrentParams.type,
+      region_filter: value,
+      search:        _legalCurrentParams.searchValue,
+    }});
+  }
+
+  window.debouncedLoadLegal   = debouncedLoadLegal;
+  window.setLegalType         = setLegalType;
+  window.setLegalRegionFilter = setLegalRegionFilter;
 
   route('/admin', () => {
     // Settings page. Sections added incrementally:
