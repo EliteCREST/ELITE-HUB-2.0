@@ -476,6 +476,21 @@
     </div>
   </div>
 
+  <!-- Legal Add/Edit Modal (Stage 6.4) -->
+  <div id="legal-modal" class="modal-backdrop">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <div class="modal-title" id="legal-modal-title">Add Case</div>
+        <button class="modal-close" onclick="closeModal('legal-modal')" type="button">×</button>
+      </div>
+      <div class="modal-body" id="legal-modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" type="button" onclick="closeModal('legal-modal')">Cancel</button>
+        <button class="btn btn-primary" id="legal-save-btn" type="button" onclick="submitLegalModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast-container" class="toast-container"></div>
 
 
@@ -8218,6 +8233,9 @@
             <h1 class="view-title">Legal</h1>
             <p class="view-sub" id="legal-sub">Loading…</p>
           </div>
+          <div style="display:flex; gap: var(--sp-2);">
+            ${legalCanEdit() ? `<button class="btn btn-primary" onclick="openLegalAdd()">+ Add Case</button>` : ''}
+          </div>
         </div>
         ${renderLegalBody({ typeFilter, regionFilter, searchValue })}
       </div>
@@ -8372,7 +8390,10 @@
       <div class="card legal-card" style="margin-bottom:8px;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp-2);">
           <div style="font-weight:600;">${title}</div>
-          ${status ? `<span style="font-size:0.72rem; font-weight:600; color:#fff; background:${statusColor}; padding:2px 8px; border-radius:10px; white-space:nowrap;">${escapeHtml(status)}</span>` : ''}
+          <div style="display:flex; align-items:center; gap:8px; white-space:nowrap;">
+            ${status ? `<span style="font-size:0.72rem; font-weight:600; color:#fff; background:${statusColor}; padding:2px 8px; border-radius:10px;">${escapeHtml(status)}</span>` : ''}
+            ${legalCanEdit() ? `<button class="btn btn-secondary btn-sm" style="padding:2px 10px; font-size:0.75rem;" onclick="openLegalEdit('${escapeAttr(String(r.id))}')">Edit</button>` : ''}
+          </div>
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; font-size:0.78rem; color:var(--slate-600,#475569);">
           ${meta.join('')}
@@ -8415,6 +8436,234 @@
   window.debouncedLoadLegal   = debouncedLoadLegal;
   window.setLegalType         = setLegalType;
   window.setLegalRegionFilter = setLegalRegionFilter;
+
+  // ════════════════════════════════════════════════════════════════════
+  // LEGAL — Phase B: add / edit (compliance-only)
+  // ════════════════════════════════════════════════════════════════════
+  const LEGAL_STATUS_OPTIONS = ['Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
+
+  const LEGAL_FIELDS = {
+    lawsuit: [
+      { key: 'title', label: 'Title', type: 'text' },
+      { key: 'type', label: 'Type', type: 'text' },
+      { key: 'brand', label: 'Brand', type: 'text' },
+      { key: 'region', label: 'Region', type: 'region' },
+      { key: 'status', label: 'Status', type: 'status' },
+      { key: 'job_number', label: 'Job Number', type: 'text' },
+      { key: 'amount', label: 'Amount', type: 'number' },
+      { key: 'filed_date', label: 'Filed Date', type: 'date' },
+      { key: 'due_date', label: 'Due Date', type: 'date' },
+      { key: 'resolved_date', label: 'Resolved Date', type: 'date' },
+      { key: 'assigned_to', label: 'Assigned To', type: 'text' },
+      { key: 'complainant', label: 'Complainant', type: 'text' },
+      { key: 'case_number', label: 'Case Number', type: 'text' },
+      { key: 'attorney', label: 'Attorney', type: 'text' },
+      { key: 'response_due', label: 'Response Due', type: 'date' },
+      { key: 'hearing_date', label: 'Hearing Date', type: 'date' },
+      { key: 'sent_gm', label: 'Sent GM', type: 'text' },
+      { key: 'doc_link', label: 'Doc Link', type: 'text' },
+      { key: 'resolution', label: 'Resolution', type: 'textarea' },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+    ag: [
+      { key: 'title', label: 'Title', type: 'text' },
+      { key: 'brand', label: 'Brand', type: 'text' },
+      { key: 'region', label: 'Region', type: 'region' },
+      { key: 'status', label: 'Status', type: 'status' },
+      { key: 'job_number', label: 'Job Number', type: 'text' },
+      { key: 'amount', label: 'Amount', type: 'number' },
+      { key: 'filed_date', label: 'Filed Date', type: 'date' },
+      { key: 'resolved_date', label: 'Resolved Date', type: 'date' },
+      { key: 'assigned_to', label: 'Assigned To', type: 'text' },
+      { key: 'complainant', label: 'Complainant', type: 'text' },
+      { key: 'ag_response_sent', label: 'AG Response Sent', type: 'text' },
+      { key: 'doc_link', label: 'Doc Link', type: 'text' },
+      { key: 'resolution', label: 'Resolution', type: 'textarea' },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+    bbb: [
+      { key: 'title', label: 'Title', type: 'text' },
+      { key: 'brand', label: 'Brand', type: 'text' },
+      { key: 'region', label: 'Region', type: 'region' },
+      { key: 'status', label: 'Status', type: 'status' },
+      { key: 'job_number', label: 'Job Number', type: 'text' },
+      { key: 'amount', label: 'Amount', type: 'number' },
+      { key: 'filed_date', label: 'Filed Date', type: 'date' },
+      { key: 'resolved_date', label: 'Resolved Date', type: 'date' },
+      { key: 'assigned_to', label: 'Assigned To', type: 'text' },
+      { key: 'complainant', label: 'Complainant', type: 'text' },
+      { key: 'case_number', label: 'Case Number', type: 'text' },
+      { key: 'mediation', label: 'Mediation', type: 'text' },
+      { key: 'credit_amount', label: 'Credit Amount', type: 'number' },
+      { key: 'complaint_1_note', label: 'Complaint 1 Note', type: 'textarea' },
+      { key: 'complaint_1_date', label: 'Complaint 1 Date', type: 'date' },
+      { key: 'complaint_1_response', label: 'Complaint 1 Response', type: 'textarea' },
+      { key: 'complaint_2_note', label: 'Complaint 2 Note', type: 'textarea' },
+      { key: 'complaint_2_date', label: 'Complaint 2 Date', type: 'date' },
+      { key: 'complaint_2_response', label: 'Complaint 2 Response', type: 'textarea' },
+      { key: 'complaint_3_note', label: 'Complaint 3 Note', type: 'textarea' },
+      { key: 'complaint_3_date', label: 'Complaint 3 Date', type: 'date' },
+      { key: 'complaint_3_response', label: 'Complaint 3 Response', type: 'textarea' },
+      { key: 'complaint_4_note', label: 'Complaint 4 Note', type: 'textarea' },
+      { key: 'complaint_4_date', label: 'Complaint 4 Date', type: 'date' },
+      { key: 'complaint_4_response', label: 'Complaint 4 Response', type: 'textarea' },
+      { key: 'complaint_5_note', label: 'Complaint 5 Note', type: 'textarea' },
+      { key: 'complaint_5_date', label: 'Complaint 5 Date', type: 'date' },
+      { key: 'complaint_5_response', label: 'Complaint 5 Response', type: 'textarea' },
+      { key: 'complaint_6_note', label: 'Complaint 6 Note', type: 'textarea' },
+      { key: 'complaint_6_date', label: 'Complaint 6 Date', type: 'date' },
+      { key: 'complaint_6_response', label: 'Complaint 6 Response', type: 'textarea' },
+      { key: 'complaint_7_note', label: 'Complaint 7 Note', type: 'textarea' },
+      { key: 'complaint_7_date', label: 'Complaint 7 Date', type: 'date' },
+      { key: 'complaint_7_response', label: 'Complaint 7 Response', type: 'textarea' },
+      { key: 'doc_link', label: 'Doc Link', type: 'text' },
+      { key: 'resolution', label: 'Resolution', type: 'textarea' },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+    roc: [
+      { key: 'title', label: 'Title', type: 'text' },
+      { key: 'type', label: 'Type', type: 'text' },
+      { key: 'status', label: 'Status', type: 'status' },
+      { key: 'brand', label: 'Brand', type: 'text' },
+      { key: 'region', label: 'Region', type: 'region' },
+      { key: 'job_number', label: 'Job Number', type: 'text' },
+      { key: 'filed_date', label: 'Filed Date', type: 'date' },
+      { key: 'amount', label: 'Amount', type: 'number' },
+      { key: 'assigned_to', label: 'Assigned To (GM)', type: 'text' },
+      { key: 'customer_name', label: 'Customer Name', type: 'text' },
+      { key: 'case_number', label: 'Case Number', type: 'text' },
+      { key: 'complaint_date', label: 'Complaint Date', type: 'date' },
+      { key: 'onsite_1_date', label: 'On-Site 1 Date', type: 'date' },
+      { key: 'onsite_1', label: 'On-Site 1', type: 'textarea' },
+      { key: 'onsite_2_date', label: 'On-Site 2 Date', type: 'date' },
+      { key: 'onsite_2', label: 'On-Site 2', type: 'textarea' },
+      { key: 'onsite_3_date', label: 'On-Site 3 Date', type: 'date' },
+      { key: 'onsite_3', label: 'On-Site 3', type: 'textarea' },
+      { key: 'roc_inspector', label: 'ROC Inspector', type: 'text' },
+      { key: 'inspector_contact', label: 'Inspector Contact', type: 'text' },
+      { key: 'license_holder', label: 'License Holder', type: 'text' },
+      { key: 'nature_of_complaint', label: 'Nature of Complaint', type: 'textarea' },
+      { key: 'resolved_date', label: 'Resolved Date', type: 'date' },
+      { key: 'type_of_lead', label: 'Type of Lead', type: 'text' },
+      { key: 'sales_rep', label: 'Sales Rep', type: 'text' },
+      { key: 'open_service_on_file', label: 'Open Service on File', type: 'text' },
+      { key: 'doc_link', label: 'Doc Link', type: 'text' },
+      { key: 'resolution', label: 'Resolution', type: 'textarea' },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+    lien: [
+      { key: 'title', label: 'Title', type: 'text' },
+      { key: 'brand', label: 'Brand', type: 'text' },
+      { key: 'region', label: 'Region', type: 'region' },
+      { key: 'status', label: 'Status', type: 'status' },
+      { key: 'job_number', label: 'Job Number', type: 'text' },
+      { key: 'amount', label: 'Amount', type: 'number' },
+      { key: 'filed_date', label: 'Filed Date', type: 'date' },
+      { key: 'resolved_date', label: 'Resolved Date', type: 'date' },
+      { key: 'assigned_to', label: 'Assigned To', type: 'text' },
+      { key: 'lien_address', label: 'Lien Address', type: 'text' },
+      { key: 'lien_amount', label: 'Lien Amount', type: 'number' },
+      { key: 'lien_filed', label: 'Lien Filed', type: 'date' },
+      { key: 'lien_release', label: 'Lien Release', type: 'date' },
+      { key: 'attorney', label: 'Attorney', type: 'text' },
+      { key: 'doc_link', label: 'Doc Link', type: 'text' },
+      { key: 'resolution', label: 'Resolution', type: 'textarea' },
+      { key: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  };
+
+  function legalCanEdit() {
+    return isComplianceTeam(getLoggedInUser());
+  }
+
+  function openLegalModal(caseType, existing) {
+    caseType = caseType || _legalCurrentParams.type || 'lawsuit';
+    const fields = LEGAL_FIELDS[caseType];
+    if (!fields) return;
+    const isEdit = !!(existing && existing.id);
+    const typeLabel = (LEGAL_CASE_TYPES.find(t => t.key === caseType) || {}).label || 'Case';
+
+    const fieldHtml = fields.map(f => {
+      const val = existing ? (existing[f.key] != null ? String(existing[f.key]) : '') : '';
+      const id = 'legal-f-' + f.key;
+      const wide = (f.type === 'textarea') ? ' new-sub-field-wide' : '';
+      let input;
+      if (f.type === 'textarea') {
+        input = `<textarea id="${id}" class="new-sub-select" rows="2">${escapeHtml(val)}</textarea>`;
+      } else if (f.type === 'date') {
+        input = `<input type="date" id="${id}" class="new-sub-select" value="${escapeAttr(val)}">`;
+      } else if (f.type === 'number') {
+        input = `<input type="number" step="any" id="${id}" class="new-sub-select" value="${escapeAttr(val)}">`;
+      } else if (f.type === 'region') {
+        const opts = REGIONS.map(r => `<option value="${r.code}" ${val.toLowerCase() === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
+        input = `<select id="${id}" class="new-sub-select"><option value="">— Select region —</option>${opts}</select>`;
+      } else if (f.type === 'status') {
+        const opts = LEGAL_STATUS_OPTIONS.map(s => `<option value="${escapeAttr(s)}" ${val === s ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+        input = `<select id="${id}" class="new-sub-select"><option value="">— Select status —</option>${opts}</select>`;
+      } else {
+        input = `<input type="text" id="${id}" class="new-sub-select" value="${escapeAttr(val)}">`;
+      }
+      return `<div class="new-sub-field${wide}"><label for="${id}">${escapeHtml(f.label)}</label>${input}</div>`;
+    }).join('');
+
+    const modal = document.getElementById('legal-modal');
+    if (!modal) return;
+    modal.querySelector('#legal-modal-title').textContent = (isEdit ? 'Edit ' : 'Add ') + typeLabel.replace(/s$/, '');
+    modal.querySelector('#legal-modal-body').innerHTML =
+      `<div class="new-sub-banner" id="legal-modal-error" style="display:none;"></div>
+       <input type="hidden" id="legal-f-id" value="${escapeAttr(existing && existing.id ? existing.id : '')}">
+       <input type="hidden" id="legal-f-case_type" value="${escapeAttr(caseType)}">
+       <div class="new-sub-grid">${fieldHtml}</div>`;
+    openModal('legal-modal');
+  }
+
+  async function submitLegalModal() {
+    const body = document.getElementById('legal-modal-body');
+    if (!body) return;
+    const caseType = body.querySelector('#legal-f-case_type').value;
+    const fields = LEGAL_FIELDS[caseType] || [];
+    const item = { case_type: caseType };
+    const idVal = body.querySelector('#legal-f-id').value;
+    if (idVal) item.id = idVal;
+    fields.forEach(f => {
+      const el = body.querySelector('#legal-f-' + f.key);
+      if (el) item[f.key] = el.value;
+    });
+
+    const errEl = document.getElementById('legal-modal-error');
+    const saveBtn = document.getElementById('legal-save-btn');
+    if (!String(item.title || '').trim()) {
+      if (errEl) { errEl.textContent = 'Title is required.'; errEl.style.display = 'block'; }
+      return;
+    }
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving…'; }
+    try {
+      const res = await api({}, 'POST', { action: 'savelegalcase', item });
+      if (res && res.error) throw new Error(res.error);
+      closeModal('legal-modal');
+      loadLegalCases({ params: {
+        type: caseType,
+        region_filter: _legalCurrentParams.regionFilter,
+        search: _legalCurrentParams.searchValue,
+      }});
+    } catch (err) {
+      if (errEl) { errEl.textContent = String(err.message || err); errEl.style.display = 'block'; }
+    } finally {
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save'; }
+    }
+  }
+
+  function openLegalAdd() { openLegalModal(_legalCurrentParams.type, null); }
+
+  function openLegalEdit(id) {
+    const existing = _legalAll.find(r => String(r.id) === String(id) && String(r.case_type) === _legalCurrentParams.type)
+      || _legalAll.find(r => String(r.id) === String(id));
+    if (existing) openLegalModal(existing.case_type, existing);
+  }
+
+  window.openLegalAdd     = openLegalAdd;
+  window.openLegalEdit    = openLegalEdit;
+  window.submitLegalModal = submitLegalModal;
 
   route('/admin', () => {
     // Settings page. Sections added incrementally:
@@ -8678,7 +8927,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.45';
+  const APP_VERSION = '2.1.46';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
