@@ -7481,17 +7481,25 @@
 
   async function fetchReviewMessageCounts(hashes) {
     if (!hashes || hashes.length === 0) return;
+    // Chunk to keep each GET URL well under length limits. Review hashes are
+    // 40-char SHA-1s; ~25 per call keeps source_ids near ~1KB, safely short.
+    const CHUNK = 25;
+    const merged = {};
     try {
-      const res = await api({
-        resource: 'submission_counts',
-        source_page: 'reviews',
-        source_ids: hashes.join(','),
-      });
-      if (res && res.counts) {
-        _reviewsMessageCounts = res.counts;
-        // Re-render if list is still visible
-        if (document.getElementById('reviews-list')) applyReviewsFilters();
+      for (let i = 0; i < hashes.length; i += CHUNK) {
+        const batch = hashes.slice(i, i + CHUNK);
+        const res = await api({
+          resource: 'submission_counts',
+          source_page: 'reviews',
+          source_ids: batch.join(','),
+        });
+        if (res && res.counts) {
+          Object.keys(res.counts).forEach(k => { merged[k] = res.counts[k]; });
+        }
       }
+      _reviewsMessageCounts = merged;
+      // Re-render if list is still visible
+      if (document.getElementById('reviews-list')) applyReviewsFilters();
     } catch (err) {
       console.warn('[reviews] count fetch failed:', err);
     }
@@ -8970,7 +8978,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.47';
+  const APP_VERSION = '2.1.48';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
