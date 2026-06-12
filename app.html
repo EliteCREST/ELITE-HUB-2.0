@@ -62,9 +62,9 @@
           <span class="nav-item-icon">⚖️</span>
           <span class="nav-item-label">Legal</span>
         </a>
-        <a class="nav-item" href="https://elitecrest.github.io/Supplier-Contacts/Elite_Supplier_Contacts.html" target="_blank" rel="noopener">
+        <a class="nav-item" data-nav="/suppliers" href="#/suppliers">
           <span class="nav-item-icon">🏢</span>
-          <span class="nav-item-label">Suppliers ↗</span>
+          <span class="nav-item-label">Suppliers</span>
         </a>
 
         <!-- Regions expandable group -->
@@ -8720,6 +8720,425 @@
   window.submitLegalModal = submitLegalModal;
   window.onLegalTypeChange = onLegalTypeChange;
 
+  // ════════════════════════════════════════════════════════════════════
+  // ═══ SUPPLIER CONTACTS (Stage 6.4) ══════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+
+  let _scContacts  = [];
+  let _scSuppliers = [];
+  let _scRegions   = [];
+  let _scView      = [];
+  let _scSortKey   = 'supplier';
+  let _scSortDir   = 1;
+  let _scEditingId = null;
+
+  function _scCanEdit() {
+    const me = getLoggedInUser();
+    return me && (me.username === 'angel' || me.username === 'sara');
+  }
+
+  function _scEscHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function _scFmtPhone(p) {
+    if (!p) return '—';
+    const d = String(p).replace(/\D/g, '');
+    if (d.length === 10) return `<a href="tel:${d}" style="color:var(--blue);">(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}</a>`;
+    return _scEscHtml(p);
+  }
+
+  function _scFmtEmail(v) {
+    return v ? `<a href="mailto:${_scEscHtml(v)}" style="color:var(--blue);">${_scEscHtml(v)}</a>` : '—';
+  }
+
+  function _scSupplierTag(code) {
+    const colors = { ABC: 'var(--blue)', RBS: 'var(--navy)', SRS: '#C9A961', ASC: '#2E7D5B' };
+    const textColors = { SRS: 'var(--navy)' };
+    const bg = colors[code] || 'var(--blue)';
+    const fg = textColors[code] || '#fff';
+    return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;border-radius:3px;background:${bg};color:${fg};">${_scEscHtml(code)}</span>`;
+  }
+
+  function _scPriorityTag(p) {
+    if (!p) return '';
+    const map = { Primary: 'var(--blue)', Secondary: '#2E7D5B', Tertiary: '#854F0B' };
+    const bg = map[p] || 'var(--muted)';
+    return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;border-radius:3px;background:${bg};color:#fff;">${_scEscHtml(p)}</span>`;
+  }
+
+  route('/suppliers', () => {
+    return `
+      <div class="view" id="sc-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Supplier Contacts</h1>
+            <p class="view-sub" id="sc-sub">Loading…</p>
+          </div>
+          <div style="display:flex;gap:var(--sp-2);align-items:center;">
+            ${_scCanEdit() ? `<button class="btn btn-primary" onclick="scOpenEdit(null)">+ Add Contact</button>` : ''}
+          </div>
+        </div>
+
+        <!-- Toolbar -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input type="text" id="sc-search" placeholder="Search contacts…" autocomplete="off"
+              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="scApplyFilters()">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+          </div>
+          <select id="sc-f-supplier" onchange="scApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Suppliers</option>
+          </select>
+          <select id="sc-f-region" onchange="scApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Regions</option>
+          </select>
+          <select id="sc-f-state" onchange="scApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All States</option>
+          </select>
+        </div>
+
+        <!-- Table -->
+        <div class="table-card" style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr id="sc-thead">
+                <th onclick="scSort('supplier')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Supplier</th>
+                <th onclick="scSort('priority')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Priority</th>
+                <th onclick="scSort('accountName')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Account Name</th>
+                <th onclick="scSort('region')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Region</th>
+                <th onclick="scSort('branch')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Branch #</th>
+                <th onclick="scSort('branchCity')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">City</th>
+                <th onclick="scSort('branchState')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">State</th>
+                <th onclick="scSort('salesperson')" style="cursor:pointer;padding:11px 14px;background:var(--navy);color:#fff;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Branch Rep</th>
+                ${_scCanEdit() ? `<th style="padding:11px 14px;background:var(--navy);color:#fff;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Actions</th>` : ''}
+              </tr>
+            </thead>
+            <tbody id="sc-tbody">
+              <tr><td colspan="9" style="padding:40px;text-align:center;color:var(--muted);">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Detail slide-in panel -->
+        <div id="sc-overlay" onclick="scCloseDetail()" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.4);z-index:40;"></div>
+        <div id="sc-panel" style="position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100vw;background:var(--surface, #fff);box-shadow:-4px 0 24px rgba(27,42,74,0.18);z-index:41;display:flex;flex-direction:column;transform:translateX(100%);transition:transform 220ms cubic-bezier(0.25,0.46,0.45,0.94);">
+          <div style="background:var(--navy);color:#fff;padding:16px 20px;display:flex;align-items:flex-start;justify-content:space-between;flex-shrink:0;">
+            <div>
+              <div id="sc-panel-title" style="font-size:15px;font-weight:900;letter-spacing:0.5px;line-height:1.3;"></div>
+              <div id="sc-panel-sub" style="font-size:11px;color:rgba(255,255,255,0.6);margin-top:3px;"></div>
+            </div>
+            <button onclick="scCloseDetail()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+          </div>
+          <div id="sc-panel-body" style="flex:1;overflow-y:auto;padding:20px;"></div>
+          <div id="sc-panel-foot" style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);flex-shrink:0;">
+            ${_scCanEdit() ? `<button class="btn btn-secondary btn-sm" onclick="scPanelEdit()">Edit</button><button class="btn btn-danger btn-sm" onclick="scPanelDelete()">Delete</button>` : ''}
+          </div>
+        </div>
+
+        <!-- Add/Edit Modal -->
+        <div id="sc-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.55);z-index:50;align-items:flex-start;justify-content:center;padding:40px 20px;overflow-y:auto;">
+          <div style="background:var(--surface,#fff);width:100%;max-width:660px;border-radius:6px;box-shadow:0 10px 40px rgba(27,42,74,0.25);overflow:hidden;">
+            <div style="background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;">
+              <span id="sc-modal-title" style="font-size:14px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">Add Contact</span>
+              <button onclick="scCloseEdit()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;">×</button>
+            </div>
+            <div style="padding:20px;">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;" id="sc-form-grid"></div>
+            </div>
+            <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
+              <button class="btn btn-ghost btn-sm" onclick="scCloseEdit()">Cancel</button>
+              <button class="btn btn-primary btn-sm" onclick="scSaveContact()">Save Contact</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }, {
+    title: 'Supplier Contacts',
+    onAfterRender: () => scLoadAll()
+  });
+
+  async function scLoadAll() {
+    try {
+      const [cRes, sRes, rRes] = await Promise.all([
+        api({ resource: 'supplier_contacts' }),
+        api({ resource: 'supplier_list' }),
+        api({ resource: 'supplier_regions' }),
+      ]);
+      _scContacts  = (cRes.contacts  || []);
+      _scSuppliers = (sRes.suppliers || []);
+      _scRegions   = (rRes.regions   || []);
+      scPopulateFilters();
+      scApplyFilters();
+      const sub = document.getElementById('sc-sub');
+      if (sub) sub.textContent = _scContacts.length + ' contact' + (_scContacts.length !== 1 ? 's' : '');
+    } catch (err) {
+      const tbody = document.getElementById('sc-tbody');
+      if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--danger);">Failed to load: ${_scEscHtml(err.message)}</td></tr>`;
+    }
+  }
+
+  function scPopulateFilters() {
+    const supSel = document.getElementById('sc-f-supplier');
+    const regSel = document.getElementById('sc-f-region');
+    const stSel  = document.getElementById('sc-f-state');
+    if (!supSel) return;
+
+    const suppliers = [...new Set(_scContacts.map(c => c.supplier).filter(Boolean))].sort();
+    const regions   = [...new Set(_scContacts.map(c => c.region).filter(Boolean))].sort();
+    const states    = [...new Set(_scContacts.map(c => c.branchState).filter(Boolean))].sort();
+
+    supSel.innerHTML = '<option value="">All Suppliers</option>' + suppliers.map(s => `<option value="${_scEscHtml(s)}">${_scEscHtml(s)}</option>`).join('');
+    regSel.innerHTML = '<option value="">All Regions</option>' + regions.map(r => `<option value="${_scEscHtml(r)}">${_scEscHtml(r)}</option>`).join('');
+    stSel.innerHTML  = '<option value="">All States</option>' + states.map(s => `<option value="${_scEscHtml(s)}">${_scEscHtml(s)}</option>`).join('');
+  }
+
+  function scApplyFilters() {
+    const q   = (document.getElementById('sc-search')     ?.value || '').trim().toLowerCase();
+    const sup = (document.getElementById('sc-f-supplier')  ?.value || '');
+    const reg = (document.getElementById('sc-f-region')   ?.value || '');
+    const st  = (document.getElementById('sc-f-state')    ?.value || '');
+
+    _scView = _scContacts.filter(c => {
+      if (sup && c.supplier    !== sup) return false;
+      if (reg && c.region      !== reg) return false;
+      if (st  && c.branchState !== st)  return false;
+      if (q) {
+        const blob = [c.accountName, c.salesperson, c.salespersonPhone, c.branch,
+                      c.branchCity, c.branchState, c.branchManager, c.branchPhone,
+                      c.supplier, c.region, c.rsm, c.type, c.priority]
+                     .filter(Boolean).join(' ').toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      return true;
+    });
+
+    _scView.sort((a, b) => {
+      const av = (a[_scSortKey] || '').toLowerCase();
+      const bv = (b[_scSortKey] || '').toLowerCase();
+      return av < bv ? -_scSortDir : av > bv ? _scSortDir : 0;
+    });
+
+    scRenderTable();
+  }
+
+  function scSort(key) {
+    if (_scSortKey === key) _scSortDir = -_scSortDir;
+    else { _scSortKey = key; _scSortDir = 1; }
+    scApplyFilters();
+  }
+
+  function scRenderTable() {
+    const tbody = document.getElementById('sc-tbody');
+    if (!tbody) return;
+    const canEdit = _scCanEdit();
+    const cols = canEdit ? 9 : 8;
+
+    if (_scView.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="${cols}" style="padding:48px;text-align:center;color:var(--muted);">No contacts found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = _scView.map((c, i) => `
+      <tr style="border-top:1px solid var(--border);cursor:pointer;${i % 2 === 1 ? 'background:var(--surface-alt,#f9fbfe);' : ''}" onclick="scOpenDetail('${_scEscHtml(c.id)}')">
+        <td style="padding:10px 14px;">${_scSupplierTag(c.supplier)}</td>
+        <td style="padding:10px 14px;">${_scPriorityTag(c.priority)}</td>
+        <td style="padding:10px 14px;">${_scEscHtml(c.accountName)}</td>
+        <td style="padding:10px 14px;">${_scEscHtml(c.region)}</td>
+        <td style="padding:10px 14px;">${_scEscHtml(c.branch)}</td>
+        <td style="padding:10px 14px;">${_scEscHtml(c.branchCity)}</td>
+        <td style="padding:10px 14px;"><span style="display:inline-block;padding:2px 7px;font-size:11px;font-weight:700;background:#E8EEF7;color:var(--navy);border-radius:3px;">${_scEscHtml(c.branchState)}</span></td>
+        <td style="padding:10px 14px;">${_scEscHtml(c.salesperson)}</td>
+        ${canEdit ? `<td style="padding:10px 14px;text-align:right;white-space:nowrap;" onclick="event.stopPropagation()">
+          <button class="btn btn-ghost btn-sm" onclick="scOpenEdit('${_scEscHtml(c.id)}')">Edit</button>
+          <button class="btn btn-danger btn-sm" id="sc-del-${_scEscHtml(c.id)}" onclick="scInlineDelete('${_scEscHtml(c.id)}')">🗑</button>
+        </td>` : ''}
+      </tr>
+    `).join('');
+  }
+
+  let _scDetailId = null;
+
+  function scOpenDetail(id) {
+    const c = _scContacts.find(x => x.id === id);
+    if (!c) return;
+    _scDetailId = id;
+    const title = document.getElementById('sc-panel-title');
+    const sub   = document.getElementById('sc-panel-sub');
+    const body  = document.getElementById('sc-panel-body');
+    if (title) title.textContent = c.accountName || '—';
+    if (sub)   sub.textContent   = [c.supplier, c.region, c.branchCity, c.branchState].filter(Boolean).join(' · ');
+    if (body) body.innerHTML = `
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);margin-bottom:8px;padding-bottom:5px;border-bottom:2px solid var(--blue);">Account</div>
+      ${scDpRow('Customer #', _scEscHtml(c.customerNumber))}
+      ${scDpRow('Account #', _scEscHtml(c.accountNumber))}
+      ${scDpRow('Priority', _scPriorityTag(c.priority) || '—')}
+      ${scDpRow('Type', _scEscHtml(c.type))}
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--blue);">Branch</div>
+      ${scDpRow('Branch #', _scEscHtml(c.branch))}
+      ${scDpRow('Address', _scEscHtml(c.branchAddress))}
+      ${scDpRow('City', _scEscHtml(c.branchCity))}
+      ${scDpRow('State', _scEscHtml(c.branchState))}
+      ${scDpRow('Phone', _scFmtPhone(c.branchPhone))}
+      ${scDpRow('Orders Email', _scFmtEmail(c.ordersEmail))}
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--blue);">Branch Manager</div>
+      ${scDpRow('Name', _scEscHtml(c.branchManager))}
+      ${scDpRow('Email', _scFmtEmail(c.mgrEmail))}
+      ${scDpRow('Phone', _scFmtPhone(c.managerPhone))}
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--blue);">Branch Rep</div>
+      ${scDpRow('Name', _scEscHtml(c.salesperson))}
+      ${scDpRow('Email', _scFmtEmail(c.repEmail))}
+      ${scDpRow('Phone', _scFmtPhone(c.salespersonPhone))}
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);margin:16px 0 8px;padding-bottom:5px;border-bottom:2px solid var(--blue);">RSM</div>
+      ${scDpRow('Name', _scEscHtml(c.rsm))}
+      ${scDpRow('Phone', _scFmtPhone(c.rsmPhone))}
+      ${scDpRow('Email', _scFmtEmail(c.rsmEmail))}
+    `;
+    document.getElementById('sc-overlay').style.display = 'block';
+    document.getElementById('sc-panel').style.transform = 'translateX(0)';
+  }
+
+  function scDpRow(label, val) {
+    return `<div style="display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px;">
+      <span style="color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;min-width:110px;flex-shrink:0;">${label}</span>
+      <span style="color:var(--text);flex:1;">${val || '—'}</span>
+    </div>`;
+  }
+
+  function scCloseDetail() {
+    document.getElementById('sc-overlay').style.display = 'none';
+    document.getElementById('sc-panel').style.transform = 'translateX(100%)';
+    _scDetailId = null;
+  }
+
+  function scPanelEdit() {
+    if (_scDetailId) { scCloseDetail(); scOpenEdit(_scDetailId); }
+  }
+
+  function scPanelDelete() {
+    if (_scDetailId) { scCloseDetail(); scInlineDelete(_scDetailId); }
+  }
+
+  function scOpenEdit(id) {
+    if (!_scCanEdit()) return;
+    _scEditingId = id || null;
+    const c = id ? _scContacts.find(x => x.id === id) : {};
+    const f = c || {};
+    const modal = document.getElementById('sc-modal-backdrop');
+    const title = document.getElementById('sc-modal-title');
+    if (title) title.textContent = id ? 'Edit Contact' : 'Add Contact';
+
+    const field = (label, key, type = 'text', opts = null) => {
+      if (opts) {
+        return `<div><label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>
+          <select id="sc-f-${key}" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);">
+            ${opts.map(o => `<option value="${_scEscHtml(o)}" ${f[key] === o ? 'selected' : ''}>${_scEscHtml(o) || '— Select —'}</option>`).join('')}
+          </select></div>`;
+      }
+      return `<div><label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>
+        <input id="sc-f-${key}" type="${type}" value="${_scEscHtml(f[key] || '')}" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);"></div>`;
+    };
+
+    const supplierOpts = ['', ..._scSuppliers.map(s => s.code)];
+    const regionOpts   = ['', ..._scRegions.map(r => r.region)];
+    const priorityOpts = ['', 'Primary', 'Secondary', 'Tertiary'];
+
+    const grid = document.getElementById('sc-form-grid');
+    if (grid) grid.innerHTML =
+      field('Supplier', 'supplier', 'text', supplierOpts) +
+      field('Account Name', 'accountName') +
+      field('Customer #', 'customerNumber') +
+      field('Account #', 'accountNumber') +
+      field('Priority', 'priority', 'text', priorityOpts) +
+      field('Type', 'type') +
+      field('Region', 'region', 'text', regionOpts) +
+      field('Branch #', 'branch') +
+      `<div style="grid-column:1/-1;">` + field('Branch Address', 'branchAddress') + `</div>` +
+      field('Branch City', 'branchCity') +
+      field('Branch State', 'branchState') +
+      field('Branch Phone #', 'branchPhone', 'tel') +
+      field('Orders Email', 'ordersEmail', 'email') +
+      field('Branch Manager', 'branchManager') +
+      field('Mgr Email', 'mgrEmail', 'email') +
+      field('Manager Phone #', 'managerPhone', 'tel') +
+      field('Branch Rep', 'salesperson') +
+      field('Rep Email', 'repEmail', 'email') +
+      field('Rep Phone #', 'salespersonPhone', 'tel') +
+      field('RSM', 'rsm') +
+      field('RSM Phone #', 'rsmPhone', 'tel') +
+      field('RSM Email', 'rsmEmail', 'email');
+
+    modal.style.display = 'flex';
+  }
+
+  function scCloseEdit() {
+    document.getElementById('sc-modal-backdrop').style.display = 'none';
+    _scEditingId = null;
+  }
+
+  async function scSaveContact() {
+    if (!_scCanEdit()) return;
+    const keys = ['supplier','accountName','customerNumber','accountNumber','priority','type',
+                  'region','branch','branchAddress','branchCity','branchState','branchPhone',
+                  'ordersEmail','branchManager','mgrEmail','managerPhone','salesperson',
+                  'repEmail','salespersonPhone','rsm','rsmPhone','rsmEmail'];
+    const item = {};
+    keys.forEach(k => {
+      const el = document.getElementById('sc-f-' + k);
+      if (el) item[k] = el.value.trim();
+    });
+    if (!item.accountName) { alert('Account Name is required.'); return; }
+    if (_scEditingId) item.id = _scEditingId;
+
+    try {
+      const res = await api({}, 'POST', { action: 'savesuppliercontact', item });
+      if (!res.ok) throw new Error(res.error || 'Save failed');
+      if (_scEditingId) {
+        const idx = _scContacts.findIndex(c => c.id === _scEditingId);
+        if (idx >= 0) _scContacts[idx] = res.contact;
+      } else {
+        _scContacts.push(res.contact);
+      }
+      scCloseEdit();
+      scPopulateFilters();
+      scApplyFilters();
+      const sub = document.getElementById('sc-sub');
+      if (sub) sub.textContent = _scContacts.length + ' contact' + (_scContacts.length !== 1 ? 's' : '');
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    }
+  }
+
+  async function scInlineDelete(id) {
+    if (!_scCanEdit()) return;
+    const c = _scContacts.find(x => x.id === id);
+    if (!c) return;
+    if (!confirm('Delete contact for ' + (c.accountName || id) + '?')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'deletesuppliercontact', id });
+      if (!res.ok) throw new Error(res.error || 'Delete failed');
+      _scContacts = _scContacts.filter(x => x.id !== id);
+      scApplyFilters();
+      const sub = document.getElementById('sc-sub');
+      if (sub) sub.textContent = _scContacts.length + ' contact' + (_scContacts.length !== 1 ? 's' : '');
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+  }
+
+  window.scOpenDetail  = scOpenDetail;
+  window.scCloseDetail = scCloseDetail;
+  window.scPanelEdit   = scPanelEdit;
+  window.scPanelDelete = scPanelDelete;
+  window.scOpenEdit    = scOpenEdit;
+  window.scCloseEdit   = scCloseEdit;
+  window.scSaveContact = scSaveContact;
+  window.scInlineDelete = scInlineDelete;
+  window.scApplyFilters = scApplyFilters;
+  window.scSort        = scSort;
+
   route('/admin', () => {
     // Settings page. Sections added incrementally:
     // - v2.1.41: Data Sources (3 sheet links)
@@ -8982,7 +9401,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.48';
+  const APP_VERSION = '2.1.49';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
