@@ -10108,7 +10108,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.67';
+  const APP_VERSION = '2.1.68';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
@@ -10149,7 +10149,24 @@
         if (event.data && event.data.type === 'SW_ACTIVATED') {
           console.log('[Elite Hub 2.0] SW activated v' + event.data.version);
         }
+        // If the active SW reports a different version than this page, an update is waiting
+        if (event.data && event.data.type === 'VERSION') {
+          if (event.data.version && event.data.version !== APP_VERSION) {
+            console.log('[Elite Hub 2.0] Version mismatch — SW: ' + event.data.version + ' Page: ' + APP_VERSION);
+            // Trigger SW update check to find the newer version
+            navigator.serviceWorker.getRegistration().then(reg => {
+              if (reg) reg.update();
+            });
+          }
+        }
       });
+
+      // On load, ask the active SW what version it is
+      setTimeout(() => {
+        if (navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({ type: 'GET_VERSION' });
+        }
+      }, 1000);
 
       // After a new SW takes control, reload the page exactly once
       let _reloadedAfterSwTakeover = false;
