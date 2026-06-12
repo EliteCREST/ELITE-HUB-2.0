@@ -3962,40 +3962,43 @@
     text = text.replace(/\s*\/p:([A-Za-z0-9_-]+)/i, (_, p) => { project = p; return ''; });
 
     // /today, /tomorrow, /friday etc.
-    const today = new Date(); today.setHours(0,0,0,0);
+    // Always build dates from explicit local year/month/day to avoid timezone rollback
+    const _localToday = () => {
+      const n = new Date();
+      return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    };
     const weekdayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
 
     text = text.replace(/\s*\/today\b/i, () => {
-      due_date = formatDateForInput(today);
+      due_date = formatDateForInput(_localToday());
       return '';
     });
     text = text.replace(/\s*\/tomorrow\b/i, () => {
-      const d = new Date(today); d.setDate(d.getDate() + 1);
+      const d = _localToday(); d.setDate(d.getDate() + 1);
       due_date = formatDateForInput(d);
       return '';
     });
     text = text.replace(/\s*\/next\s*week\b/i, () => {
-      const d = new Date(today); d.setDate(d.getDate() + 7);
+      const d = _localToday(); d.setDate(d.getDate() + 7);
       due_date = formatDateForInput(d);
       return '';
     });
     // /monday, /tuesday, etc.
     text = text.replace(/\s*\/(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i, (_, wd) => {
       const target = weekdayMap[wd.toLowerCase()];
-      const d = new Date(today);
+      const d = _localToday();
       const cur = d.getDay();
       let offset = (target - cur + 7) % 7;
-      if (offset === 0) offset = 7;  // next one of this day, not today
+      if (offset === 0) offset = 7;  // next occurrence, not today
       d.setDate(d.getDate() + offset);
       due_date = formatDateForInput(d);
       return '';
     });
     // /M-D or /M/D  (e.g. /4-30, /12/25)
     text = text.replace(/\s*\/(\d{1,2})[-/](\d{1,2})\b/, (_, m, day) => {
-      const year = today.getFullYear();
-      const d = new Date(year, parseInt(m) - 1, parseInt(day));
-      // If that date already passed, assume next year
-      if (d < today) d.setFullYear(year + 1);
+      const td = _localToday();
+      const d = new Date(td.getFullYear(), parseInt(m) - 1, parseInt(day));
+      if (d < td) d.setFullYear(td.getFullYear() + 1);
       due_date = formatDateForInput(d);
       return '';
     });
@@ -10085,7 +10088,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.63';
+  const APP_VERSION = '2.1.64';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
