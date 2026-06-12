@@ -62,6 +62,10 @@
           <span class="nav-item-icon">⚖️</span>
           <span class="nav-item-label">Legal</span>
         </a>
+        <a class="nav-item" data-nav="/notices" href="#/notices">
+          <span class="nav-item-icon">📋</span>
+          <span class="nav-item-label">Notices</span>
+        </a>
         <a class="nav-item" data-nav="/suppliers" href="#/suppliers">
           <span class="nav-item-icon">🏢</span>
           <span class="nav-item-label">Suppliers</span>
@@ -8726,6 +8730,497 @@
   window.onLegalTypeChange = onLegalTypeChange;
 
   // ════════════════════════════════════════════════════════════════════
+  // ═══ NOTICES / DEMANDS (Stage 6.5) ══════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+
+  let _ndNotices   = [];
+  let _ndView      = [];
+  let _ndSortKey   = 'receivedDate';
+  let _ndSortDir   = -1;
+  let _ndEditingId = null;
+
+  const _ndStatusColors = {
+    'Open':        '#1F5FAD',
+    'In Progress': '#854F0B',
+    'Settled':     '#2E7D5B',
+    'Completed':   '#2E7D5B',
+    'Processed':   '#6A7891',
+    'Closed':      '#6A7891'
+  };
+
+  function _ndCanEdit() {
+    const me = getLoggedInUser();
+    return me && ['angel','sam','sara','emma','carlynn','jaida'].includes(me.username);
+  }
+
+  function _ndEsc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function _ndStatusBadge(status) {
+    const color = _ndStatusColors[status] || 'var(--muted)';
+    return status ? `<span style="display:inline-block;padding:2px 9px;font-size:10px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;border-radius:10px;background:${color};color:#fff;">${_ndEsc(status)}</span>` : '';
+  }
+
+  function _ndDeadlineAlert(notice) {
+    if (!notice.deadline) return '';
+    const days = parseInt(notice.deadlineAlertDays) || 7;
+    const deadline = new Date(notice.deadline);
+    const now = new Date();
+    const diff = Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
+    if (diff < 0) return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;font-weight:700;background:#FEE2E2;color:#B91C1C;border-radius:4px;border:1px solid #FECACA;">⚠️ OVERDUE ${Math.abs(diff)}d</span>`;
+    if (diff <= days) return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;font-size:11px;font-weight:700;background:#FEF3C7;color:#92400E;border-radius:4px;border:1px solid #FDE68A;">⏰ Due in ${diff}d</span>`;
+    return `<span style="font-size:11px;color:var(--muted);">${_ndEsc(notice.deadline)}</span>`;
+  }
+
+  function _ndStepProgress(notice) {
+    const steps = [
+      notice.step1_reviewed, notice.step2_read, notice.step3_gm_contacted,
+      notice.step4_info_gathered, notice.step5_researched, notice.step6_compiled,
+      notice.step7_luke_involved !== '' ? 'true' : '', notice.step8_route,
+      notice.step9_response_sent, notice.step10_legitimacy,
+      notice.step11_followup_needed !== '' ? 'true' : '', notice.step12_resolved
+    ];
+    const done = steps.filter(s => s === 'true' || s === 'yes' || s === 'TRUE').length;
+    const pct  = Math.round((done / 12) * 100);
+    return `<div style="display:flex;align-items:center;gap:6px;">
+      <div style="flex:1;height:4px;background:var(--border);border-radius:2px;">
+        <div style="width:${pct}%;height:4px;background:${pct === 100 ? '#2E7D5B' : 'var(--blue)'};border-radius:2px;transition:width 300ms;"></div>
+      </div>
+      <span style="font-size:10px;color:var(--muted);white-space:nowrap;">${done}/12</span>
+    </div>`;
+  }
+
+  route('/notices', () => {
+    const canEdit = _ndCanEdit();
+    return `
+      <div class="view" id="nd-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Notices &amp; Demands</h1>
+            <p class="view-sub" id="nd-sub">Loading…</p>
+          </div>
+          <div style="display:flex;gap:var(--sp-2);align-items:center;">
+            ${canEdit ? `<button class="btn btn-primary" onclick="ndOpenEdit(null)">+ Add Notice</button>` : ''}
+          </div>
+        </div>
+
+        <!-- Deadline alerts banner -->
+        <div id="nd-alerts"></div>
+
+        <!-- Toolbar -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input type="text" id="nd-search" placeholder="Search notices…" autocomplete="off"
+              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="ndApplyFilters()">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+          </div>
+          ${canEdit ? `
+          <select id="nd-f-status" onchange="ndApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Statuses</option>
+            <option>Open</option><option>In Progress</option><option>Settled</option>
+            <option>Completed</option><option>Processed</option><option>Closed</option>
+          </select>
+          <select id="nd-f-region" onchange="ndApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Regions</option>
+          </select>` : `
+          <select id="nd-f-status" onchange="ndApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Statuses</option>
+            <option>Open</option><option>In Progress</option><option>Settled</option>
+            <option>Completed</option><option>Processed</option><option>Closed</option>
+          </select>
+          <select id="nd-f-region" style="display:none;"></select>`}
+        </div>
+
+        <!-- List -->
+        <div id="nd-list"></div>
+
+        <!-- Detail / Edit Modal -->
+        <div id="nd-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:50;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
+          <div style="background:var(--surface,#fff);width:100%;max-width:780px;border-radius:8px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+            <div style="background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+              <span id="nd-modal-title" style="font-size:14px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">Notice / Demand</span>
+              <button onclick="ndCloseEdit()" style="background:transparent;border:0;color:#fff;font-size:24px;cursor:pointer;line-height:1;">×</button>
+            </div>
+            <div style="padding:24px;" id="nd-modal-body"></div>
+            <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);position:sticky;bottom:0;">
+              <button class="btn btn-ghost btn-sm" onclick="ndCloseEdit()">Cancel</button>
+              <button class="btn btn-primary btn-sm" onclick="ndSaveNotice()">Save Notice</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }, {
+    title: 'Notices & Demands',
+    onAfterRender: () => ndLoadAll()
+  });
+
+  async function ndLoadAll() {
+    try {
+      const res = await api({ resource: 'notices' });
+      _ndNotices = res.notices || [];
+      ndPopulateRegionFilter();
+      ndApplyFilters();
+      ndRenderAlerts();
+      const sub = document.getElementById('nd-sub');
+      if (sub) sub.textContent = _ndNotices.length + ' notice' + (_ndNotices.length !== 1 ? 's' : '');
+    } catch (err) {
+      const list = document.getElementById('nd-list');
+      if (list) list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load: ${_ndEsc(err.message)}</div>`;
+    }
+  }
+
+  function ndPopulateRegionFilter() {
+    const sel = document.getElementById('nd-f-region');
+    if (!sel || sel.style.display === 'none') return;
+    const regions = [...new Set(_ndNotices.map(n => n.region).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">All Regions</option>' +
+      regions.map(r => `<option value="${_ndEsc(r)}">${_ndEsc(r)}</option>`).join('');
+  }
+
+  function ndRenderAlerts() {
+    const wrap = document.getElementById('nd-alerts');
+    if (!wrap) return;
+    const alerts = _ndNotices.filter(n => {
+      if (!n.deadline || n.step12_resolved === 'true') return false;
+      const days  = parseInt(n.deadlineAlertDays) || 7;
+      const diff  = Math.ceil((new Date(n.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+      return diff <= days;
+    });
+    if (alerts.length === 0) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `<div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:12px 16px;margin-bottom:16px;display:flex;flex-direction:column;gap:6px;">
+      <div style="font-size:12px;font-weight:700;color:#92400E;text-transform:uppercase;letter-spacing:1px;">⏰ Deadline Alerts</div>
+      ${alerts.map(n => {
+        const diff = Math.ceil((new Date(n.deadline) - new Date()) / (1000 * 60 * 60 * 24));
+        const color = diff < 0 ? '#B91C1C' : '#92400E';
+        return `<div style="font-size:13px;color:${color};cursor:pointer;" onclick="ndOpenEdit('${_ndEsc(n.id)}')">
+          <strong>${_ndEsc(n.customerName || n.id)}</strong> — ${diff < 0 ? `Overdue by ${Math.abs(diff)} day(s)` : `Due in ${diff} day(s)`} (${_ndEsc(n.deadline)})
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  function ndApplyFilters() {
+    const q      = (document.getElementById('nd-search')   ?.value || '').trim().toLowerCase();
+    const status = (document.getElementById('nd-f-status') ?.value || '');
+    const region = (document.getElementById('nd-f-region') ?.value || '');
+
+    _ndView = _ndNotices.filter(n => {
+      if (status && n.status !== status) return false;
+      if (region && n.region !== region) return false;
+      if (q) {
+        const blob = [n.customerName, n.jobNumber, n.brand, n.region, n.status,
+                      n.lawyerName, n.lawyerFirm, n.receivedHow].filter(Boolean).join(' ').toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      return true;
+    });
+
+    _ndView.sort((a, b) => {
+      const av = (a[_ndSortKey] || '').toLowerCase();
+      const bv = (b[_ndSortKey] || '').toLowerCase();
+      return av < bv ? -_ndSortDir : av > bv ? _ndSortDir : 0;
+    });
+
+    ndRenderList();
+  }
+
+  function ndRenderList() {
+    const list = document.getElementById('nd-list');
+    if (!list) return;
+    const canEdit = _ndCanEdit();
+
+    if (_ndView.length === 0) {
+      list.innerHTML = `<div style="padding:48px;text-align:center;color:var(--muted);">No notices found.</div>`;
+      return;
+    }
+
+    list.innerHTML = _ndView.map(n => `
+      <div style="background:var(--surface,#fff);border:1px solid var(--border);border-radius:8px;padding:16px 20px;margin-bottom:10px;cursor:pointer;transition:box-shadow 150ms;"
+        onmouseover="this.style.boxShadow='0 2px 12px rgba(27,42,74,0.1)'" onmouseout="this.style.boxShadow='none'"
+        onclick="ndOpenEdit('${_ndEsc(n.id)}')">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px;">
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:3px;">${_ndEsc(n.customerName || '(No name)')}</div>
+            <div style="font-size:12px;color:var(--muted);">${[n.region, n.brand, n.jobNumber ? 'Job #'+n.jobNumber : ''].filter(Boolean).map(_ndEsc).join(' · ')}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+            ${_ndStatusBadge(n.status)}
+            ${_ndDeadlineAlert(n)}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="flex:1;">${_ndStepProgress(n)}</div>
+          <div style="display:flex;gap:6px;font-size:11px;color:var(--muted);">
+            ${n.hasLawyer === 'true' ? '<span style="background:#EEF3FB;color:var(--blue);padding:2px 7px;border-radius:3px;font-weight:700;">Has Lawyer</span>' : ''}
+            ${n.receivedDate ? `<span>Received ${_ndEsc(n.receivedDate)}</span>` : ''}
+          </div>
+        </div>
+        ${canEdit ? `<div style="margin-top:10px;display:flex;gap:6px;justify-content:flex-end;" onclick="event.stopPropagation()">
+          <button class="btn btn-danger btn-sm" onclick="ndDelete('${_ndEsc(n.id)}')">🗑 Delete</button>
+        </div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  function _ndSectionHead(title, color) {
+    color = color || 'var(--blue)';
+    return `<div style="grid-column:1/-1;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:${color};padding:14px 0 6px;border-bottom:2px solid ${color};margin-top:8px;">${title}</div>`;
+  }
+
+  function _ndField(label, key, type, opts, notice, fullWidth) {
+    const val = notice ? (notice[key] || '') : '';
+    const style = `width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;`;
+    const labelHtml = `<label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>`;
+    const wrap = fullWidth ? 'grid-column:1/-1;' : '';
+
+    if (type === 'select') {
+      return `<div style="${wrap}"><div>${labelHtml}<select id="nd-f-${key}" style="${style}">
+        ${opts.map(o => `<option value="${_ndEsc(o)}" ${val === o ? 'selected' : ''}>${_ndEsc(o) || '— Select —'}</option>`).join('')}
+      </select></div></div>`;
+    }
+    if (type === 'textarea') {
+      return `<div style="${wrap}"><div>${labelHtml}<textarea id="nd-f-${key}" rows="3" style="${style}">${_ndEsc(val)}</textarea></div></div>`;
+    }
+    if (type === 'checkbox') {
+      const checked = val === 'true' || val === 'TRUE' || val === 'yes';
+      return `<div style="${wrap}"><div style="display:flex;align-items:center;gap:8px;padding-top:20px;">
+        <input type="checkbox" id="nd-f-${key}" ${checked ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;">
+        <label for="nd-f-${key}" style="font-size:13px;color:var(--text);cursor:pointer;">${label}</label>
+      </div></div>`;
+    }
+    return `<div style="${wrap}"><div>${labelHtml}<input id="nd-f-${key}" type="${type || 'text'}" value="${_ndEsc(val)}" style="${style}"></div></div>`;
+  }
+
+  function _ndStepField(num, label, key, notice, extraFields) {
+    const checked = (notice && (notice[key] === 'true' || notice[key] === 'TRUE' || notice[key] === 'yes'));
+    const dateVal = notice ? (notice[key + '_date'] || '') : '';
+    const byVal   = notice ? (notice[key + '_by'] || '') : '';
+    const inputStyle = `padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;`;
+
+    return `<div style="grid-column:1/-1;background:${checked ? 'rgba(46,125,91,0.04)' : 'var(--surface-alt,#f9fbfe)'};border:1px solid ${checked ? 'rgba(46,125,91,0.2)' : 'var(--border)'};border-radius:6px;padding:14px;margin-bottom:2px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:${checked || extraFields ? '10px' : '0'};">
+        <input type="checkbox" id="nd-f-${key}" ${checked ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" onchange="ndStepToggle(this,'${key}')">
+        <label for="nd-f-${key}" style="font-size:13px;font-weight:700;color:var(--navy);cursor:pointer;">Step ${num}: ${label}</label>
+        ${checked ? `<span style="margin-left:auto;font-size:11px;color:#2E7D5B;font-weight:700;">✓ Done</span>` : ''}
+      </div>
+      ${checked || extraFields ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-left:26px;">
+        <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Date</label>
+          <input type="date" id="nd-f-${key}_date" value="${_ndEsc(dateVal)}" style="${inputStyle}"></div>
+        <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">By</label>
+          <input type="text" id="nd-f-${key}_by" value="${_ndEsc(byVal)}" style="${inputStyle}"></div>
+        ${extraFields || ''}
+      </div>` : ''}
+    </div>`;
+  }
+
+  function ndBuildForm(notice) {
+    const me = getLoggedInUser();
+    const canEdit = _ndCanEdit();
+    const n = notice || {};
+
+    const regions = (typeof REGIONS !== 'undefined' ? REGIONS : []).map(r => r.name || r.code);
+
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;">
+      ${_ndSectionHead('Notice Details', 'var(--blue)')}
+      ${_ndField('Region', 'region', 'select', ['', ...regions], n)}
+      ${_ndField('Status', 'status', 'select', ['', 'Open', 'In Progress', 'Settled', 'Completed', 'Processed', 'Closed'], n)}
+      ${_ndField('Date Received', 'receivedDate', 'date', null, n)}
+      ${_ndField('How Received', 'receivedHow', 'select', ['', 'Email', 'Mail', 'Certified Mail', 'Registered Mail', 'Served', 'Other'], n)}
+      ${_ndField('If Other — specify', 'receivedHowOther', 'text', null, n)}
+      ${_ndField('Brand', 'brand', 'text', null, n)}
+      ${_ndField('Customer Job #', 'jobNumber', 'text', null, n)}
+      ${_ndField('Customer Name', 'customerName', 'text', null, n)}
+      ${_ndField('Customer Phone', 'customerPhone', 'tel', null, n)}
+      ${_ndField('Customer Email', 'customerEmail', 'email', null, n)}
+      ${_ndField('Customer Address', 'customerAddress', 'text', null, n, true)}
+
+      ${_ndSectionHead('Deadline', '#854F0B')}
+      ${_ndField('Deadline Date', 'deadline', 'date', null, n)}
+      ${_ndField('Alert Days Before', 'deadlineAlertDays', 'number', null, n)}
+
+      ${_ndSectionHead('Attorney / Lawyer', 'var(--navy)')}
+      ${_ndField('Does Customer Have a Lawyer?', 'hasLawyer', 'select', ['', 'No', 'Yes'], n, true)}
+      ${_ndField('Lawyer Name', 'lawyerName', 'text', null, n)}
+      ${_ndField('Law Firm', 'lawyerFirm', 'text', null, n)}
+      ${_ndField('Lawyer Phone', 'lawyerPhone', 'tel', null, n)}
+      ${_ndField('Lawyer Email', 'lawyerEmail', 'email', null, n)}
+      ${_ndField('Lawyer Address', 'lawyerAddress', 'text', null, n, true)}
+
+      ${_ndSectionHead('Notes', 'var(--muted)')}
+      ${_ndField('Notes', 'notes', 'textarea', null, n, true)}
+
+      ${_ndSectionHead('Workflow Steps', 'var(--blue)')}
+      ${_ndStepField(1, 'Reviewed', 'step1_reviewed', n)}
+      ${_ndStepField(2, 'Read', 'step2_read', n)}
+      ${_ndStepField(3, 'GM Contacted', 'step3_gm_contacted', n)}
+      ${_ndStepField(4, 'Info Gathered', 'step4_info_gathered', n)}
+      ${_ndStepField(5, 'Researched', 'step5_researched', n)}
+      ${_ndStepField(6, 'Compiled', 'step6_compiled', n)}
+      ${_ndStepField(7, 'Luke Involved', 'step7_luke_involved', n,
+        `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Luke's Decision</label>
+            <input type="text" id="nd-f-step7_decision" value="${_ndEsc(n.step7_decision||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Summary</label>
+            <input type="text" id="nd-f-step7_summary" value="${_ndEsc(n.step7_summary||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Sara's Opinion</label>
+            <textarea id="nd-f-step7_opinion" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_opinion||'')}</textarea></div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Options Available</label>
+            <textarea id="nd-f-step7_options" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_options||'')}</textarea></div>
+          <div style="grid-column:1/-1;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Email Draft</label>
+            <textarea id="nd-f-step7_email_draft" rows="3" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_email_draft||'')}</textarea></div>
+        </div>`
+      )}
+      ${_ndStepField(8, 'Route Decision', 'step8_route', n,
+        `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Law Firm</label>
+            <input type="text" id="nd-f-step8_law_firm" value="${_ndEsc(n.step8_law_firm||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Other Firms Involved</label>
+            <input type="text" id="nd-f-step8_other_firms" value="${_ndEsc(n.step8_other_firms||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Insurance Claim #</label>
+            <input type="text" id="nd-f-step8_insurance_claim" value="${_ndEsc(n.step8_insurance_claim||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+        </div>`
+      )}
+      ${_ndStepField(9, 'Response Sent', 'step9_response_sent', n,
+        `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Response Date</label>
+            <input type="date" id="nd-f-step9_response_date" value="${_ndEsc(n.step9_response_date||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Outcome</label>
+            <select id="nd-f-step9_status" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">
+              ${['','Waiting','Countered','Resolved','Other'].map(o => `<option value="${_ndEsc(o)}" ${n.step9_status===o?'selected':''}>${_ndEsc(o)||'— Select —'}</option>`).join('')}
+            </select></div>
+        </div>`
+      )}
+      ${_ndStepField(10, 'Legitimacy Assessment', 'step10_legitimacy', n,
+        `<div style="grid-column:1/-1;margin-top:4px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Notes</label>
+          <textarea id="nd-f-step10_notes" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step10_notes||'')}</textarea></div>`
+      )}
+      ${_ndStepField(11, 'Follow-up (if they owe us)', 'step11_followup_needed', n,
+        `<div style="grid-column:1/-1;margin-top:4px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Notes</label>
+          <textarea id="nd-f-step11_notes" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step11_notes||'')}</textarea></div>`
+      )}
+      ${_ndStepField(12, 'Resolution', 'step12_resolved', n,
+        `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Resolution Type</label>
+            <select id="nd-f-step12_resolution_type" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">
+              ${['','Settled','Completed','Processed'].map(o => `<option value="${_ndEsc(o)}" ${n.step12_resolution_type===o?'selected':''}>${_ndEsc(o)||'— Select —'}</option>`).join('')}
+            </select></div>
+          <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Resolution Date</label>
+            <input type="date" id="nd-f-step12_resolution_date" value="${_ndEsc(n.step12_resolution_date||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+          <div style="grid-column:1/-1;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Resolution Notes</label>
+            <textarea id="nd-f-step12_notes" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step12_notes||'')}</textarea></div>
+        </div>`
+      )}
+    </div>`;
+  }
+
+  function ndOpenEdit(id) {
+    if (!_ndCanEdit()) return;
+    _ndEditingId = id || null;
+    const notice = id ? _ndNotices.find(n => n.id === id) : null;
+    const title  = document.getElementById('nd-modal-title');
+    const body   = document.getElementById('nd-modal-body');
+    if (title) title.textContent = id ? 'Edit Notice / Demand' : 'New Notice / Demand';
+    if (body)  body.innerHTML = ndBuildForm(notice);
+    document.getElementById('nd-modal-backdrop').style.display = 'flex';
+  }
+
+  function ndCloseEdit() {
+    document.getElementById('nd-modal-backdrop').style.display = 'none';
+    _ndEditingId = null;
+  }
+
+  function ndStepToggle(checkbox, key) {
+    // Auto-fill date/by when checking a step
+    if (checkbox.checked) {
+      const dateEl = document.getElementById('nd-f-' + key + '_date');
+      const byEl   = document.getElementById('nd-f-' + key + '_by');
+      const me = getLoggedInUser();
+      if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+      if (byEl && !byEl.value && me) byEl.value = me.display_name || me.username || '';
+    }
+  }
+
+  async function ndSaveNotice() {
+    if (!_ndCanEdit()) return;
+
+    const boolKeys = ['step1_reviewed','step2_read','step3_gm_contacted','step4_info_gathered',
+                      'step5_researched','step6_compiled','step7_luke_involved','step8_route',
+                      'step9_response_sent','step10_legitimacy','step11_followup_needed','step12_resolved'];
+
+    const textKeys = ['region','status','receivedDate','receivedHow','receivedHowOther','brand',
+                      'jobNumber','customerName','customerPhone','customerEmail','customerAddress',
+                      'hasLawyer','lawyerName','lawyerFirm','lawyerPhone','lawyerEmail','lawyerAddress',
+                      'deadline','deadlineAlertDays','notes',
+                      'step1_date','step1_by','step2_date','step2_by','step3_date','step3_by',
+                      'step4_date','step4_by','step5_date','step5_by','step6_date','step6_by',
+                      'step7_decision','step7_email_draft','step7_summary','step7_opinion','step7_options','step7_date','step7_by',
+                      'step8_law_firm','step8_other_firms','step8_insurance_claim','step8_date','step8_by',
+                      'step9_response_date','step9_status','step9_date','step9_by',
+                      'step10_notes','step10_date','step10_by',
+                      'step11_notes','step11_date','step11_by',
+                      'step12_resolution_type','step12_resolution_date','step12_notes','step12_by'];
+
+    const item = {};
+    textKeys.forEach(k => {
+      const el = document.getElementById('nd-f-' + k);
+      if (el) item[k] = el.value.trim();
+    });
+    boolKeys.forEach(k => {
+      const el = document.getElementById('nd-f-' + k);
+      if (el) item[k] = el.checked ? 'true' : 'false';
+    });
+
+    if (!item.customerName && !item.jobNumber) {
+      alert('Please enter at least a Customer Name or Job #.');
+      return;
+    }
+    if (_ndEditingId) item.id = _ndEditingId;
+
+    try {
+      const res = await api({}, 'POST', { action: 'savenotice', item });
+      if (!res.ok) throw new Error(res.error || 'Save failed');
+      if (_ndEditingId) {
+        const idx = _ndNotices.findIndex(n => n.id === _ndEditingId);
+        if (idx >= 0) _ndNotices[idx] = res.notice;
+      } else {
+        _ndNotices.push(res.notice);
+      }
+      ndCloseEdit();
+      ndRenderAlerts();
+      ndApplyFilters();
+      const sub = document.getElementById('nd-sub');
+      if (sub) sub.textContent = _ndNotices.length + ' notice' + (_ndNotices.length !== 1 ? 's' : '');
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    }
+  }
+
+  async function ndDelete(id) {
+    if (!_ndCanEdit()) return;
+    const n = _ndNotices.find(x => x.id === id);
+    if (!confirm('Delete notice for ' + (n?.customerName || id) + '? This cannot be undone.')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'deletenotice', id });
+      if (!res.ok) throw new Error(res.error || 'Delete failed');
+      _ndNotices = _ndNotices.filter(x => x.id !== id);
+      ndRenderAlerts();
+      ndApplyFilters();
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+  }
+
+  window.ndOpenEdit    = ndOpenEdit;
+  window.ndCloseEdit   = ndCloseEdit;
+  window.ndSaveNotice  = ndSaveNotice;
+  window.ndDelete      = ndDelete;
+  window.ndApplyFilters = ndApplyFilters;
+  window.ndStepToggle  = ndStepToggle;
+
+  // ════════════════════════════════════════════════════════════════════
   // ═══ SUPPLIER CONTACTS (Stage 6.4) ══════════════════════════════════
   // ════════════════════════════════════════════════════════════════════
 
@@ -9496,7 +9991,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.53';
+  const APP_VERSION = '2.1.54';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
