@@ -72,12 +72,12 @@
         </a>
 
         <!-- Regions expandable group -->
-        <div class="nav-item nav-expander" id="nav-regions-expander">
+        <div class="nav-item nav-expander" id="nav-regions-expander" style="display:none;">
           <span class="nav-item-icon">📍</span>
           <span class="nav-item-label">Regions</span>
           <span class="nav-expander-chevron">▶</span>
         </div>
-        <div class="nav-sub nav-collapsed" id="nav-regions-sub">
+        <div class="nav-sub nav-collapsed" id="nav-regions-sub" style="display:none;">
           <!-- Populated by JS -->
         </div>
       </div>
@@ -1773,6 +1773,7 @@
     if (isPrivileged(me)) {
       $('#menu-admin').style.display = '';
       $('#nav-admin-section').style.display = '';
+      $('#nav-regions-expander').style.display = '';
       const sheetAdmin = $('#sheet-admin');
       if (sheetAdmin) sheetAdmin.style.display = '';
     }
@@ -9495,7 +9496,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.52';
+  const APP_VERSION = '2.1.53';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
