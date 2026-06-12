@@ -9107,7 +9107,7 @@
       ${_ndField('Date Received', 'receivedDate', 'date', null, n)}
       ${_ndField('How Received', 'receivedHow', 'select', ['', 'Email', 'Mail', 'Certified Mail', 'Registered Mail', 'Served', 'Other'], n)}
       ${_ndField('If Other — specify', 'receivedHowOther', 'text', null, n)}
-      ${_ndField('Brand', 'brand', 'text', null, n)}
+      ${_ndField('Brand', 'brand', 'select', ['','123 Exteriors','123 Exteriors - Chicago','123 Exteriors - Cleveland','Albuquerque, NM','Aspen Exteriors, Inc - PA','Aspen Exteriors, Inc - Sales Office','Reimagine Roofing & Construction','Universal Roofing','Wildwood Roofing & Construction','Elite','Accuserve'], n)}
       ${_ndField('Customer Job #', 'jobNumber', 'text', null, n)}
       ${_ndField('Customer Name', 'customerName', 'text', null, n)}
       ${_ndField('Customer Phone', 'customerPhone', 'tel', null, n)}
@@ -9719,22 +9719,36 @@
     const field = (label, key, type = 'text', opts = null) => {
       if (opts) {
         return `<div><label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>
-          <select id="sc-f-${key}" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);">
+          <select id="sc-f-${key}" style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);">
             ${opts.map(o => `<option value="${_scEscHtml(o)}" ${f[key] === o ? 'selected' : ''}>${_scEscHtml(o) || '— Select —'}</option>`).join('')}
           </select></div>`;
       }
       return `<div><label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>
-        <input id="sc-f-${key}" type="${type}" value="${_scEscHtml(f[key] || '')}" style="width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);"></div>`;
+        <input id="sc-f-${key}" type="${type}" value="${_scEscHtml(f[key] || '')}" style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);"></div>`;
     };
 
-    const supplierOpts = ['', ..._scSuppliers.map(s => s.code)];
-    const regionOpts   = ['', ..._scRegions.map(r => r.region)];
-    const priorityOpts = ['', 'Primary', 'Secondary', 'Tertiary'];
+    const supplierOpts  = ['', ..._scSuppliers.map(s => s.code)];
+    const regionOpts    = ['', ..._scRegions.map(r => r.region)];
+    const priorityOpts  = ['', 'Primary', 'Secondary', 'Tertiary'];
+    const accountOpts   = [
+      '',
+      '123 Exteriors',
+      '123 Exteriors - Chicago',
+      '123 Exteriors - Cleveland',
+      'Albuquerque, NM',
+      'Aspen Exteriors, Inc - PA',
+      'Aspen Exteriors, Inc - Sales Office',
+      'Reimagine Roofing & Construction',
+      'Universal Roofing',
+      'Wildwood Roofing & Construction',
+      'Elite',
+      'Accuserve',
+    ];
 
     const grid = document.getElementById('sc-form-grid');
     if (grid) grid.innerHTML =
       field('Supplier', 'supplier', 'text', supplierOpts) +
-      field('Account Name', 'accountName') +
+      field('Account Name', 'accountName', 'text', accountOpts) +
       field('Customer #', 'customerNumber') +
       field('Account #', 'accountNumber') +
       field('Priority', 'priority', 'text', priorityOpts) +
@@ -10088,7 +10102,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.64';
+  const APP_VERSION = '2.1.66';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
