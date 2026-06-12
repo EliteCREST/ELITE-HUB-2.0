@@ -9116,17 +9116,13 @@
     const f = r || {};
     const me = getLoggedInUser();
 
-    // Get user's assigned regions
-    const userRegions = me ? getCurrentUserRegions(me) : [];
-    const allRegionNames = REGIONS.map(reg => reg.name || reg.code);
+    // Get user's assigned regions — codes like 'chi', 'cle'
+    const userRegionCodes = me ? getCurrentUserRegions(me) : [];
 
-    // Match user's region codes to region names
-    const availableRegions = userRegions.length > 0
-      ? REGIONS.filter(reg => userRegions.some(code =>
-          (reg.code || '').toLowerCase() === code.toLowerCase() ||
-          (reg.name || '').toLowerCase().includes(code.toLowerCase())
-        )).map(reg => reg.name || reg.code)
-      : allRegionNames; // privileged/no region = all
+    // Match codes to REGIONS array
+    const availableRegions = userRegionCodes.length > 0 && !_erIsPrivileged()
+      ? REGIONS.filter(reg => userRegionCodes.includes(reg.code))
+      : REGIONS;
 
     const inp = (label, key, type, req) => `
       <div>
@@ -9151,17 +9147,20 @@
     const recurOpts = ['', 'Weekly', 'Bi-Weekly', 'Monthly', 'Quarterly', 'Annually'];
 
     // Region field — locked if only one region, dropdown if multiple
-    const currentRegion = f.region || (availableRegions.length === 1 ? availableRegions[0] : '');
-    const regionField = availableRegions.length <= 1
+    const currentRegion = f.region || (availableRegions.length === 1 ? availableRegions[0].name : '');
+    const regionField = availableRegions.length === 1
       ? `<div>
           <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Region <span style="color:var(--danger);">*</span></label>
-          <input id="er-f-region" type="text" value="${_erEsc(currentRegion)}" readonly
+          <input id="er-f-region" type="text" value="${_erEsc(availableRegions[0].name)}" readonly
             style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface-alt,#f9fbfe);color:var(--text);box-sizing:border-box;">
         </div>`
-      : sel('Region', 'region', ['', ...availableRegions], true).replace(
-          `value="${_erEsc('')}" `,
-          `value="${_erEsc('')}" `
-        );
+      : `<div>
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Region <span style="color:var(--danger);">*</span></label>
+          <select id="er-f-region" style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);">
+            <option value="">— Select —</option>
+            ${availableRegions.map(reg => `<option value="${_erEsc(reg.name)}" ${currentRegion === reg.name ? 'selected' : ''}>${_erEsc(reg.name)}</option>`).join('')}
+          </select>
+        </div>`;
 
     const moreInfoSection = f.moreInfoQuestion ? `
       ${shead('More Information Requested')}
@@ -10730,7 +10729,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.82';
+  const APP_VERSION = '2.1.83';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
