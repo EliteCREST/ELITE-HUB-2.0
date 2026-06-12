@@ -8844,16 +8844,29 @@
   }
 
   function _ndStepProgress(notice) {
-    const keys = ['step1_reviewed','step2_read','step3_gm_contacted','step4_info_gathered',
-                  'step5_researched','step6_compiled','step7_luke_involved','step8_route',
-                  'step9_response_sent','step10_legitimacy','step11_followup_needed','step12_resolved'];
-    const done = keys.filter(k => notice[k] === 'true' || notice[k] === 'TRUE' || notice[k] === 'yes' || notice[k] === 'na').length;
+    const steps = [
+      { key: 'step1_reviewed',        label: 'Step 1: Reviewed' },
+      { key: 'step2_read',            label: 'Step 2: Read' },
+      { key: 'step3_gm_contacted',    label: 'Step 3: GM Contacted' },
+      { key: 'step4_info_gathered',   label: 'Step 4: Info Gathered' },
+      { key: 'step5_researched',      label: 'Step 5: Researched' },
+      { key: 'step6_compiled',        label: 'Step 6: Compiled' },
+      { key: 'step7_luke_involved',   label: 'Step 7: Luke Involved' },
+      { key: 'step8_route',           label: 'Step 8: Route Decision' },
+      { key: 'step9_response_sent',   label: 'Step 9: Response Sent' },
+      { key: 'step10_legitimacy',     label: 'Step 10: Legitimacy' },
+      { key: 'step11_followup_needed',label: 'Step 11: Follow-up' },
+      { key: 'step12_resolved',       label: 'Step 12: Resolution' },
+    ];
+    const done = steps.filter(s => notice[s.key] === 'true' || notice[s.key] === 'TRUE' || notice[s.key] === 'yes' || notice[s.key] === 'na').length;
     const pct  = Math.round((done / 12) * 100);
-    return `<div style="display:flex;align-items:center;gap:6px;">
+    const next = steps.find(s => notice[s.key] !== 'true' && notice[s.key] !== 'TRUE' && notice[s.key] !== 'yes' && notice[s.key] !== 'na');
+    return `<div style="display:flex;align-items:center;gap:8px;">
       <div style="flex:1;height:4px;background:var(--border);border-radius:2px;">
         <div style="width:${pct}%;height:4px;background:${pct === 100 ? '#2E7D5B' : 'var(--blue)'};border-radius:2px;transition:width 300ms;"></div>
       </div>
       <span style="font-size:10px;color:var(--muted);white-space:nowrap;">${done}/12</span>
+      ${next ? `<span style="font-size:10px;color:var(--blue);white-space:nowrap;font-weight:600;">→ ${next.label}</span>` : `<span style="font-size:10px;color:#2E7D5B;font-weight:700;">✓ Complete</span>`}
     </div>`;
   }
 
@@ -9343,6 +9356,7 @@
     if (!p) return '—';
     const d = String(p).replace(/\D/g, '');
     if (d.length === 10) return `<a href="tel:${d}" style="color:var(--blue);">(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}</a>`;
+    if (d.length === 11 && d[0] === '1') return `<a href="tel:${d}" style="color:var(--blue);">(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}</a>`;
     return _scEscHtml(p);
   }
 
@@ -9351,18 +9365,16 @@
   }
 
   function _scSupplierTag(code) {
-    const colors = { ABC: 'var(--blue)', RBS: 'var(--navy)', SRS: '#C9A961', ASC: '#2E7D5B' };
-    const textColors = { SRS: 'var(--navy)' };
-    const bg = colors[code] || 'var(--blue)';
-    const fg = textColors[code] || '#fff';
-    return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;border-radius:3px;background:${bg};color:${fg};">${_scEscHtml(code)}</span>`;
+    // All suppliers use the same gold/navy style (SRS style)
+    return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;border-radius:3px;background:#C9A961;color:#1B2A4A;">${_scEscHtml(code || '')}</span>`;
   }
 
   function _scPriorityTag(p) {
     if (!p) return '';
-    const map = { Primary: 'var(--blue)', Secondary: '#2E7D5B', Tertiary: '#854F0B' };
-    const bg = map[p] || 'var(--muted)';
-    return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;border-radius:3px;background:${bg};color:#fff;">${_scEscHtml(p)}</span>`;
+    if (p === 'Primary') {
+      return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;border-radius:3px;background:#2E7D5B;color:#fff;">${_scEscHtml(p)}</span>`;
+    }
+    return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;border-radius:3px;background:#fff;color:#1B2A4A;border:1px solid #1B2A4A;">${_scEscHtml(p)}</span>`;
   }
 
   route('/suppliers', () => {
@@ -10109,7 +10121,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.72';
+  const APP_VERSION = '2.1.73';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
