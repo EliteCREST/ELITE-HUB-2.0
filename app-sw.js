@@ -1,28 +1,25 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Elite Hub 2.0 — Service Worker v3
-   Stale-while-revalidate + proper version detection + update broadcasting
+   Elite Hub 2.0 — Service Worker v4
+   app.html and version.json always served fresh from network.
+   Everything else: stale-while-revalidate.
    ═══════════════════════════════════════════════════════════════════ */
 
-// Bump this constant every time you ship a meaningful change to app.html/css.
-// The service worker detects the change on next install and swaps itself in.
-const APP_VERSION = '2.1.69';
+const APP_VERSION = '2.1.70';
 const CACHE_NAME = 'elite-hub-2.0-' + APP_VERSION;
 
+// Never cache these — always fetch fresh from network
+const NETWORK_ONLY = ['app.html', 'version.json', '/'];
+
 const PRECACHE = [
-  './',
-  './app.html',
   './app.css',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap',
 ];
 
-/* ─── INSTALL ──────────────────────────────────────────────
-   On install: open a fresh cache for this version and
-   pre-fetch the shell. Don't take over yet (user might be
-   mid-action). skipWaiting happens via message from the
-   page when user clicks "Update now."
-*/
+/* ─── INSTALL ─────────────────────────────────────────────── */
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing v' + APP_VERSION);
+  // Skip waiting immediately — take over all tabs right away
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(PRECACHE.map(u => new Request(u, { mode: 'no-cors' }))))
@@ -30,10 +27,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-/* ─── ACTIVATE ─────────────────────────────────────────────
-   When this SW activates (replacing the old one), clear ALL
-   old caches and take control of every open tab.
-*/
+/* ─── ACTIVATE ────────────────────────────────────────────── */
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating v' + APP_VERSION);
   event.waitUntil(
@@ -49,43 +43,44 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-/* ─── MESSAGE ──────────────────────────────────────────────
-   Page can post messages to control SW behavior:
-     { type: 'SKIP_WAITING' }  → activate new SW immediately
-     { type: 'GET_VERSION' }   → reply with current version
-*/
+/* ─── MESSAGE ─────────────────────────────────────────────── */
 self.addEventListener('message', (event) => {
   if (!event.data) return;
-  if (event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  if (event.data.type === 'SKIP_WAITING') self.skipWaiting();
   if (event.data.type === 'GET_VERSION') {
     event.source.postMessage({ type: 'VERSION', version: APP_VERSION });
   }
 });
 
-/* ─── FETCH — Stale-While-Revalidate ───────────────────────
-   Serve from cache instantly, revalidate in background.
-*/
+/* ─── FETCH ───────────────────────────────────────────────── */
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Don't cache Apps Script calls — always hit network for data
+  // Never intercept Apps Script / Google API calls
   if (url.hostname.includes('script.google.com') ||
       url.hostname.includes('googleusercontent.com')) {
     return;
   }
 
-  // Don't cache non-GET
+  // Only handle GET
   if (event.request.method !== 'GET') return;
 
-  // Opt-out via ?nocache=1 for dev testing — always hit network
-  if (url.searchParams.has('nocache')) {
-    event.respondWith(fetch(event.request));
+  // Network-only: app.html, version.json, root — always fresh
+  const pathname = url.pathname;
+  const isNetworkOnly = NETWORK_ONLY.some(n =>
+    pathname.endsWith(n) || pathname === '/' || pathname === ''
+  );
+  if (isNetworkOnly) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).catch(() => {
+        // If offline, fall back to cache as last resort
+        return caches.match(event.request);
+      })
+    );
     return;
   }
 
-  // Stale-while-revalidate
+  // Everything else: stale-while-revalidate
   event.respondWith(
     caches.open(CACHE_NAME).then((cache) =>
       cache.match(event.request).then((cached) => {
@@ -97,7 +92,6 @@ self.addEventListener('fetch', (event) => {
             return response;
           })
           .catch(() => cached);
-
         return cached || networkFetch;
       })
     )

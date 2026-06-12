@@ -10108,7 +10108,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.69';
+  const APP_VERSION = '2.1.70';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
@@ -10117,8 +10117,6 @@
   let _pendingSwUpdate = null;   // The waiting service worker, if an update is ready
 
   // ── Immediate version check against GitHub ───────────────────────────
-  // Fetches version.json from the repo root on every page load.
-  // If the live version is newer than this page, shows the update toast.
   (async function checkLiveVersion() {
     try {
       const res = await fetch('./version.json?_=' + Date.now(), { cache: 'no-store' });
@@ -10127,10 +10125,15 @@
       const liveVersion = data && data.version;
       if (liveVersion && liveVersion !== APP_VERSION) {
         console.log('[Elite Hub] Version mismatch — live: ' + liveVersion + ' this page: ' + APP_VERSION);
-        showUpdateAvailable();
+        // Clear all caches then reload to get the fresh version
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+        location.reload(true);
       }
     } catch (e) {
-      // Network error or file missing — fail silently
+      // Network error — fail silently
     }
   })();
 
