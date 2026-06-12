@@ -320,8 +320,8 @@
 
           <!-- Compliance-only: To user (optional) -->
           <div class="new-sub-field" id="new-sub-touser-field" style="display:none;">
-            <label for="new-sub-touser">To user <span class="new-sub-optional">(optional)</span></label>
-            <select id="new-sub-touser" class="new-sub-select">
+            <label for="new-sub-touser">To <span class="new-sub-optional">(hold Ctrl/Cmd to select multiple)</span></label>
+            <select id="new-sub-touser" class="new-sub-select" multiple size="6" style="height:auto;">
               <option value="">(Anyone in that region)</option>
             </select>
           </div>
@@ -2892,10 +2892,11 @@
 
   function formatDateForInput(d) {
     if (!d) return '';
-    const dt = new Date(d);
+    const dt = (d instanceof Date) ? d : new Date(d);
     if (isNaN(dt)) return '';
-    const y = dt.getFullYear();
-    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    // Use local date parts to avoid timezone offset rolling the date back
+    const y   = dt.getFullYear();
+    const m   = String(dt.getMonth() + 1).padStart(2, '0');
     const day = String(dt.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
   }
@@ -3088,9 +3089,9 @@
       const regionSel = $('#new-sub-region');
       regionSel.innerHTML = '<option value="">— Select a region —</option>' +
         REGIONS.map(r => `<option value="${r.code}" ${defaults.region === r.code ? 'selected' : ''}>${escapeHtml(r.name)}</option>`).join('');
-      // Wire change handler to populate to-user dropdown based on region
       regionSel.onchange = () => refreshNewSubUserList(regionSel.value);
-      refreshNewSubUserList(regionSel.value || '');
+      // Ensure users cache is loaded before populating
+      ensureAllUsersCache().then(() => refreshNewSubUserList(regionSel.value || ''));
     }
 
     // Reset form fields
@@ -3109,23 +3110,70 @@
   function refreshNewSubUserList(regionCode) {
     const sel = $('#new-sub-touser');
     if (!sel) return;
-    sel.innerHTML = '<option value="">(Anyone in that region)</option>';
-    if (!regionCode) return;
-    // Office manager + admin usernames follow a predictable pattern from Stage 2.5 seed
-    // (the USERS tab has full data; for simplicity we hard-code the 2 per region here)
-    // A future enhancement could fetch the USERS list and filter by regions_allowed.
-    const rc = String(regionCode).toLowerCase();
-    // Map of region code → expected username prefixes
-    // e.g. 'stl' → omstl, adminstl
-    const omUser    = 'om' + rc;
-    const adminUser = 'admin' + rc;
-    // The albuquerque region has code 'abq' but usernames use 'aqe' suffix
-    const specialMap = { abq: { om: 'omaqe', admin: 'adminaqe' } };
-    const omName    = specialMap[rc] ? specialMap[rc].om    : omUser;
-    const adminName = specialMap[rc] ? specialMap[rc].admin : adminUser;
+    sel.innerHTML = '';
 
-    sel.innerHTML += `<option value="${omName}">Office Manager (${omName})</option>`;
-    sel.innerHTML += `<option value="${adminName}">Office Admin (${adminName})</option>`;
+    const allUsers = _allUsersCache || [];
+    const rc = String(regionCode || '').toUpperCase();
+
+    // Helper to build an option
+    const opt = (val, label, selected) =>
+      `<option value="${escapeAttr(val)}" ${selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+
+    // ── Region broadcast ─────────────────────────────────────────────
+    sel.innerHTML += `<optgroup label="— Region Broadcast —">`;
+    sel.innerHTML += opt('', '(Anyone in that region)');
+    sel.innerHTML += `</optgroup>`;
+
+    // ── Compliance Team ──────────────────────────────────────────────
+    const complianceUsers = TEAM_USERS;
+    sel.innerHTML += `<optgroup label="Compliance Team">`;
+    complianceUsers.forEach(u => {
+      sel.innerHTML += opt(u.username, u.name + ' (' + u.username + ')');
+    });
+    sel.innerHTML += `</optgroup>`;
+
+    if (!rc || allUsers.length === 0) return;
+
+    // Filter users that belong to this region
+    const regionUsers = allUsers.filter(u => {
+      if (!u.regions) return false;
+      const codes = String(u.regions).toUpperCase().split(',').map(s => s.trim());
+      return codes.includes(rc);
+    });
+
+    // Group by role
+    const roleGroups = {
+      'General Manager':   [],
+      'Regional Manager':  [],
+      'Operations':        [],
+      'Admin':             [],
+      'Other':             [],
+    };
+
+    regionUsers.forEach(u => {
+      const role = String(u.role || u.job_title || '').toLowerCase();
+      if (role.includes('general manager') || role.includes('gm')) {
+        roleGroups['General Manager'].push(u);
+      } else if (role.includes('regional manager') || role.includes('rm')) {
+        roleGroups['Regional Manager'].push(u);
+      } else if (role.includes('operations') || role.includes('office manager') || role.includes('om')) {
+        roleGroups['Operations'].push(u);
+      } else if (role.includes('admin')) {
+        roleGroups['Admin'].push(u);
+      } else {
+        roleGroups['Other'].push(u);
+      }
+    });
+
+    Object.entries(roleGroups).forEach(([groupLabel, users]) => {
+      if (users.length === 0) return;
+      sel.innerHTML += `<optgroup label="${escapeAttr(groupLabel)}">`;
+      users.forEach(u => {
+        const displayName = u.display_name || u.name || u.username;
+        sel.innerHTML += opt(u.username, displayName + ' (' + u.username + ')');
+      });
+      sel.innerHTML += `</optgroup>`;
+    });
   }
 
   async function submitNewSubmission() {
@@ -3137,7 +3185,12 @@
     const subject  = $('#new-sub-subject').value.trim();
     const message  = $('#new-sub-message').value.trim();
     const region   = isCompliance ? $('#new-sub-region').value : (me.regions && me.regions !== 'all' ? me.regions.split(',')[0].trim() : '');
-    const toUser   = isCompliance ? $('#new-sub-touser').value : '';
+    const toUserSel = isCompliance ? $('#new-sub-touser') : null;
+    const toUserVals = toUserSel
+      ? Array.from(toUserSel.selectedOptions).map(o => o.value).filter(Boolean)
+      : [];
+    // If multiple selected, join with comma; if none or "anyone", leave blank
+    const toUser = toUserVals.length > 0 ? toUserVals.join(',') : '';
     const dueDate  = isCompliance ? $('#new-sub-duedate').value : '';
 
     const err = $('#new-sub-error');
@@ -3493,12 +3546,13 @@
     renderLinks();
     renderContacts();
 
-    // Wire quick-add Enter key
+    // Wire quick-add Enter key — guard against re-wiring on re-render
     const qa = $('#ws-quickadd-input');
-    if (qa) {
-      qa.onkeydown = (e) => {
+    if (qa && !qa.dataset.wired) {
+      qa.dataset.wired = '1';
+      qa.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); wsQuickAdd(); }
-      };
+      });
     }
   }
 
@@ -4964,6 +5018,7 @@
       filtered = filtered.filter(c =>
         c.contractor_name.toLowerCase().includes(search) ||
         (c.pay_id || '').toLowerCase().includes(search) ||
+        (c.contact_name || '').toLowerCase().includes(search) ||
         (c.contact_name_1 || '').toLowerCase().includes(search) ||
         (c.contact_name_2 || '').toLowerCase().includes(search) ||
         (c.email || '').toLowerCase().includes(search)
@@ -10020,7 +10075,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.57';
+  const APP_VERSION = '2.1.62';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
@@ -10145,25 +10200,23 @@
    * disrupt the user's UI.
    * ═══════════════════════════════════════════════════════════════════ */
   const BG_REFRESH = (function() {
-    const INTERVAL_MS = 30 * 1000;
+    const INTERVAL_MS = 3 * 60 * 1000;  // 3 minutes — was 30s, too aggressive for workspace
     let timer = null;
     let consecutiveFailures = 0;
     let inFlight = false;
 
     async function refresh() {
-      if (inFlight) return;       // prevent overlapping refreshes
-      if (document.hidden) return; // shouldn't happen but defensive
+      if (inFlight) return;
+      if (document.hidden) return;
       inFlight = true;
       try {
         const data = await BOOTSTRAP_CACHE.fetchAndStore();
         if (data) {
           consecutiveFailures = 0;
-          // Re-render current route if it's a safe list view (same logic as
-          // post-write refresh). Modals and detail views handle their own
-          // re-render to avoid clobbering user input.
           if (typeof resolveRoute === 'function') {
             const hash = (location.hash || '').replace(/^#/, '').split('?')[0];
-            const safeToRerender = ['/home', '/workspace', '/inbox', '/contractors', ''].indexOf(hash) >= 0
+            // Removed /workspace — it has its own state and flashes badly on re-render
+            const safeToRerender = ['/home', '/inbox', '/contractors', ''].indexOf(hash) >= 0
               || /^\/region\//.test(hash);
             const modalOpen = !!document.querySelector('.modal-backdrop.open');
             const ae = document.activeElement;
