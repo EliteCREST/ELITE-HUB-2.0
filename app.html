@@ -8776,14 +8776,10 @@
   }
 
   function _ndStepProgress(notice) {
-    const steps = [
-      notice.step1_reviewed, notice.step2_read, notice.step3_gm_contacted,
-      notice.step4_info_gathered, notice.step5_researched, notice.step6_compiled,
-      notice.step7_luke_involved !== '' ? 'true' : '', notice.step8_route,
-      notice.step9_response_sent, notice.step10_legitimacy,
-      notice.step11_followup_needed !== '' ? 'true' : '', notice.step12_resolved
-    ];
-    const done = steps.filter(s => s === 'true' || s === 'yes' || s === 'TRUE').length;
+    const keys = ['step1_reviewed','step2_read','step3_gm_contacted','step4_info_gathered',
+                  'step5_researched','step6_compiled','step7_luke_involved','step8_route',
+                  'step9_response_sent','step10_legitimacy','step11_followup_needed','step12_resolved'];
+    const done = keys.filter(k => notice[k] === 'true' || notice[k] === 'TRUE' || notice[k] === 'yes' || notice[k] === 'na').length;
     const pct  = Math.round((done / 12) * 100);
     return `<div style="display:flex;align-items:center;gap:6px;">
       <div style="flex:1;height:4px;background:var(--border);border-radius:2px;">
@@ -8998,17 +8994,28 @@
 
   function _ndStepField(num, label, key, notice, extraFields) {
     const checked = (notice && (notice[key] === 'true' || notice[key] === 'TRUE' || notice[key] === 'yes'));
+    const na      = (notice && notice[key] === 'na');
     const dateVal = notice ? (notice[key + '_date'] || '') : '';
     const byVal   = notice ? (notice[key + '_by'] || '') : '';
     const inputStyle = `padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;`;
 
-    return `<div style="grid-column:1/-1;background:${checked ? 'rgba(46,125,91,0.04)' : 'var(--surface-alt,#f9fbfe)'};border:1px solid ${checked ? 'rgba(46,125,91,0.2)' : 'var(--border)'};border-radius:6px;padding:14px;margin-bottom:2px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:${checked || extraFields ? '10px' : '0'};">
-        <input type="checkbox" id="nd-f-${key}" ${checked ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" onchange="ndStepToggle(this,'${key}')">
+    const bg     = checked ? 'rgba(46,125,91,0.04)' : na ? 'rgba(107,136,174,0.06)' : 'var(--surface-alt,#f9fbfe)';
+    const border = checked ? 'rgba(46,125,91,0.2)'  : na ? 'rgba(107,136,174,0.3)' : 'var(--border)';
+    const showExpanded = checked || extraFields;
+
+    return `<div style="grid-column:1/-1;background:${bg};border:1px solid ${border};border-radius:6px;padding:14px;margin-bottom:2px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:${showExpanded ? '10px' : '0'};">
+        <input type="checkbox" id="nd-f-${key}" ${checked ? 'checked' : ''} ${na ? 'disabled' : ''}
+          style="width:16px;height:16px;cursor:pointer;flex-shrink:0;" onchange="ndStepToggle(this,'${key}')">
         <label for="nd-f-${key}" style="font-size:13px;font-weight:700;color:var(--navy);cursor:pointer;">Step ${num}: ${label}</label>
-        ${checked ? `<span style="margin-left:auto;font-size:11px;color:#2E7D5B;font-weight:700;">✓ Done</span>` : ''}
+        <label style="display:flex;align-items:center;gap:5px;margin-left:12px;font-size:12px;color:var(--muted);cursor:pointer;">
+          <input type="checkbox" id="nd-f-${key}_na" ${na ? 'checked' : ''} ${checked ? 'disabled' : ''}
+            style="width:14px;height:14px;cursor:pointer;" onchange="ndStepNaToggle(this,'${key}')">
+          N/A
+        </label>
+        ${checked ? `<span style="margin-left:auto;font-size:11px;color:#2E7D5B;font-weight:700;">✓ Done</span>` : na ? `<span style="margin-left:auto;font-size:11px;color:var(--muted);font-weight:700;">— N/A</span>` : ''}
       </div>
-      ${checked || extraFields ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-left:26px;">
+      ${showExpanded ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-left:26px;">
         <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Date</label>
           <input type="date" id="nd-f-${key}_date" value="${_ndEsc(dateVal)}" style="${inputStyle}"></div>
         <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">By</label>
@@ -9135,13 +9142,27 @@
   }
 
   function ndStepToggle(checkbox, key) {
-    // Auto-fill date/by when checking a step
+    // When checking done, uncheck N/A and auto-fill date/by
+    const naEl = document.getElementById('nd-f-' + key + '_na');
     if (checkbox.checked) {
+      if (naEl) { naEl.checked = false; naEl.disabled = true; }
       const dateEl = document.getElementById('nd-f-' + key + '_date');
       const byEl   = document.getElementById('nd-f-' + key + '_by');
       const me = getLoggedInUser();
       if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
       if (byEl && !byEl.value && me) byEl.value = me.display_name || me.username || '';
+    } else {
+      if (naEl) naEl.disabled = false;
+    }
+  }
+
+  function ndStepNaToggle(checkbox, key) {
+    // When checking N/A, uncheck done and disable it
+    const doneEl = document.getElementById('nd-f-' + key);
+    if (checkbox.checked) {
+      if (doneEl) { doneEl.checked = false; doneEl.disabled = true; }
+    } else {
+      if (doneEl) doneEl.disabled = false;
     }
   }
 
@@ -9171,8 +9192,13 @@
       if (el) item[k] = el.value.trim();
     });
     boolKeys.forEach(k => {
-      const el = document.getElementById('nd-f-' + k);
-      if (el) item[k] = el.checked ? 'true' : 'false';
+      const el   = document.getElementById('nd-f-' + k);
+      const naEl = document.getElementById('nd-f-' + k + '_na');
+      if (naEl && naEl.checked) {
+        item[k] = 'na';
+      } else if (el) {
+        item[k] = el.checked ? 'true' : 'false';
+      }
     });
 
     if (!item.customerName && !item.jobNumber) {
@@ -9221,6 +9247,7 @@
   window.ndDelete      = ndDelete;
   window.ndApplyFilters = ndApplyFilters;
   window.ndStepToggle  = ndStepToggle;
+  window.ndStepNaToggle = ndStepNaToggle;
 
   // ════════════════════════════════════════════════════════════════════
   // ═══ SUPPLIER CONTACTS (Stage 6.4) ══════════════════════════════════
@@ -9993,7 +10020,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.56';
+  const APP_VERSION = '2.1.57';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
