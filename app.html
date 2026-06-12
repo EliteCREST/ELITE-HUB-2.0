@@ -9739,21 +9739,16 @@
 
     // Build account name list from existing contacts + standard names, deduped
     const standardAccounts = [
-      '123 Exteriors',
-      '123 Exteriors - Chicago',
-      '123 Exteriors - Cleveland',
-      'Albuquerque, NM',
-      'Aspen Exteriors, Inc - PA',
-      'Aspen Exteriors, Inc - Sales Office',
-      'Reimagine Roofing & Construction',
-      'Universal Roofing',
+      'Grove Exteriors LLC (123 Exteriors)',
+      'Universal Roofing LLC',
+      'Aspen Exteriors Inc',
+      'Reimagine Roofing & Construction LLC',
       'Wildwood Roofing & Construction',
       'Elite',
       'Accuserve',
     ];
     const existingAccounts = _scContacts.map(c => c.accountName).filter(Boolean);
     const allAccounts = [...new Set([...standardAccounts, ...existingAccounts])].sort();
-    // Always include the current value even if not in the list
     if (f.accountName && !allAccounts.includes(f.accountName)) allAccounts.unshift(f.accountName);
     const accountOpts = ['', ...allAccounts];
 
@@ -10114,7 +10109,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.71';
+  const APP_VERSION = '2.1.72';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
