@@ -8731,6 +8731,7 @@
   let _scSortKey   = 'supplier';
   let _scSortDir   = 1;
   let _scEditingId = null;
+  let _scViewMode  = null; // set after auth check in scLoadAll
 
   function _scCanEdit() {
     const me = getLoggedInUser();
@@ -8776,6 +8777,12 @@
             <p class="view-sub" id="sc-sub">Loading…</p>
           </div>
           <div style="display:flex;gap:var(--sp-2);align-items:center;">
+            <div style="display:flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+              <button id="sc-toggle-cards" onclick="scSetView('cards')" title="Card view"
+                style="padding:6px 10px;border:none;cursor:pointer;font-size:14px;background:var(--surface);color:var(--muted);transition:background 120ms;">⊞</button>
+              <button id="sc-toggle-rows" onclick="scSetView('rows')" title="Row view"
+                style="padding:6px 10px;border:none;border-left:1px solid var(--border);cursor:pointer;font-size:14px;background:var(--surface);color:var(--muted);transition:background 120ms;">☰</button>
+            </div>
             ${_scCanEdit() ? `<button class="btn btn-primary" onclick="scOpenEdit(null)">+ Add Contact</button>` : ''}
           </div>
         </div>
@@ -8788,6 +8795,7 @@
               oninput="scApplyFilters()">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
           </div>
+          ${_scCanEdit() ? `
           <select id="sc-f-supplier" onchange="scApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Suppliers</option>
           </select>
@@ -8796,11 +8804,14 @@
           </select>
           <select id="sc-f-state" onchange="scApplyFilters()" style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All States</option>
-          </select>
+          </select>` : `
+          <select id="sc-f-supplier" style="display:none;"></select>
+          <select id="sc-f-region" style="display:none;"></select>
+          <select id="sc-f-state" style="display:none;"></select>`}
         </div>
 
         <!-- Table -->
-        <div class="table-card" style="overflow-x:auto;">
+        <div id="sc-table-wrap" class="table-card" style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:13px;">
             <thead>
               <tr id="sc-thead">
@@ -8820,6 +8831,9 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Card grid -->
+        <div id="sc-cards-wrap" style="display:none;"></div>
 
         <!-- Detail slide-in panel -->
         <div id="sc-overlay" onclick="scCloseDetail()" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.4);z-index:40;"></div>
@@ -8870,6 +8884,16 @@
       _scContacts  = (cRes.contacts  || []);
       _scSuppliers = (sRes.suppliers || []);
       _scRegions   = (rRes.regions   || []);
+
+      // Set default view mode based on user type, persisted in localStorage
+      const stored = localStorage.getItem('sc_view_mode');
+      if (stored) {
+        _scViewMode = stored;
+      } else {
+        _scViewMode = _scCanEdit() ? 'rows' : 'cards';
+      }
+      scSetView(_scViewMode, true);
+
       scPopulateFilters();
       scApplyFilters();
       const sub = document.getElementById('sc-sub');
@@ -8878,6 +8902,37 @@
       const tbody = document.getElementById('sc-tbody');
       if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="padding:40px;text-align:center;color:var(--danger);">Failed to load: ${_scEscHtml(err.message)}</td></tr>`;
     }
+  }
+
+  function scSetView(mode, silent) {
+    _scViewMode = mode;
+    if (!silent) localStorage.setItem('sc_view_mode', mode);
+
+    const tableWrap = document.getElementById('sc-table-wrap');
+    const cardsWrap = document.getElementById('sc-cards-wrap');
+    const btnCards  = document.getElementById('sc-toggle-cards');
+    const btnRows   = document.getElementById('sc-toggle-rows');
+
+    if (!tableWrap || !cardsWrap) return;
+
+    if (mode === 'cards') {
+      tableWrap.style.display = 'none';
+      cardsWrap.style.display = 'block';
+      if (btnCards) { btnCards.style.background = 'var(--blue)'; btnCards.style.color = '#fff'; }
+      if (btnRows)  { btnRows.style.background  = 'var(--surface)'; btnRows.style.color = 'var(--muted)'; }
+    } else {
+      tableWrap.style.display = 'block';
+      cardsWrap.style.display = 'none';
+      if (btnRows)  { btnRows.style.background  = 'var(--blue)'; btnRows.style.color = '#fff'; }
+      if (btnCards) { btnCards.style.background = 'var(--surface)'; btnCards.style.color = 'var(--muted)'; }
+    }
+
+    scRender();
+  }
+
+  function scRender() {
+    if (_scViewMode === 'cards') scRenderCards();
+    else scRenderTable();
   }
 
   function scPopulateFilters() {
@@ -8921,13 +8976,47 @@
       return av < bv ? -_scSortDir : av > bv ? _scSortDir : 0;
     });
 
-    scRenderTable();
+    scRender();
   }
 
   function scSort(key) {
     if (_scSortKey === key) _scSortDir = -_scSortDir;
     else { _scSortKey = key; _scSortDir = 1; }
     scApplyFilters();
+  }
+
+  function scRenderCards() {
+    const wrap = document.getElementById('sc-cards-wrap');
+    if (!wrap) return;
+    const canEdit = _scCanEdit();
+
+    if (_scView.length === 0) {
+      wrap.innerHTML = `<div style="padding:48px;text-align:center;color:var(--muted);">No contacts found.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;padding:4px 0;">` +
+      _scView.map(c => `
+        <div onclick="scOpenDetail('${_scEscHtml(c.id)}')" style="background:var(--surface,#fff);border:1px solid var(--border);border-radius:8px;padding:16px;cursor:pointer;transition:box-shadow 150ms,transform 150ms;"
+          onmouseover="this.style.boxShadow='0 4px 16px rgba(27,42,74,0.12)';this.style.transform='translateY(-1px)'"
+          onmouseout="this.style.boxShadow='none';this.style.transform='none'">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
+            ${_scSupplierTag(c.supplier)}
+            ${_scPriorityTag(c.priority)}
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px;line-height:1.3;">${_scEscHtml(c.accountName)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">${[c.region, c.branchCity, c.branchState].filter(Boolean).map(v => _scEscHtml(v)).join(' · ')}</div>
+          <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:6px;">
+            ${c.branchPhone ? `<div style="font-size:12px;color:var(--text);">📞 ${_scFmtPhone(c.branchPhone)}</div>` : ''}
+            ${c.salesperson ? `<div style="font-size:12px;color:var(--text);">👤 <strong>${_scEscHtml(c.salesperson)}</strong>${c.salespersonPhone ? ' — ' + _scFmtPhone(c.salespersonPhone) : ''}</div>` : ''}
+            ${c.branch ? `<div style="font-size:11px;color:var(--muted);">Branch #${_scEscHtml(c.branch)}</div>` : ''}
+          </div>
+          ${canEdit ? `<div style="margin-top:12px;display:flex;gap:6px;justify-content:flex-end;" onclick="event.stopPropagation()">
+            <button class="btn btn-ghost btn-sm" onclick="scOpenEdit('${_scEscHtml(c.id)}')">Edit</button>
+            <button class="btn btn-danger btn-sm" onclick="scInlineDelete('${_scEscHtml(c.id)}')">🗑</button>
+          </div>` : ''}
+        </div>
+      `).join('') + `</div>`;
   }
 
   function scRenderTable() {
@@ -9138,6 +9227,7 @@
   window.scInlineDelete = scInlineDelete;
   window.scApplyFilters = scApplyFilters;
   window.scSort        = scSort;
+  window.scSetView     = scSetView;
 
   route('/admin', () => {
     // Settings page. Sections added incrementally:
@@ -9401,7 +9491,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.49';
+  const APP_VERSION = '2.1.51';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
