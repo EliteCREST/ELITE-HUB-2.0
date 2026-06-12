@@ -7742,44 +7742,47 @@
         <div class="ctr-msg-modal" onclick="event.stopPropagation()">
           <form id="rev-msg-form" onsubmit="event.preventDefault(); submitReviewMessage();">
             <div class="ctr-msg-header">
-              <h2 class="ctr-msg-title">Message about review</h2>
-              <button type="button" class="ctr-msg-close" onclick="closeReviewMessage()">×</button>
+              <h3 class="ctr-msg-title">📨 Message about review</h3>
+              <button type="button" class="ctr-panel-close" onclick="closeReviewMessage()" title="Close">×</button>
             </div>
             <div class="ctr-msg-body">
-              <div class="ctr-msg-context">
-                <div class="ctr-msg-context-label">About this review</div>
-                <div class="ctr-msg-context-value">
-                  <strong>${rating}★ ${escapeHtml(platformLabel)}</strong> from ${escapeHtml(author)}${regionUp ? ` · ${escapeHtml(regionUp)}` : ''}
-                </div>
-              </div>
 
-              <label class="ctr-msg-label">To
-                <select id="rev-msg-to" class="ctr-msg-input" required>
-                  <option value="">Choose a recipient…</option>
+              <div class="ctr-msg-field">
+                <label class="ctr-edit-label">To <span class="ctr-required">*</span></label>
+                <select id="rev-msg-to" class="ctr-edit-input" required>
+                  <option value="">Select recipient…</option>
                   ${poolOpt}
                   ${userOpts}
                 </select>
-              </label>
+              </div>
 
-              <label class="ctr-msg-label">Priority
-                <select id="rev-msg-priority" class="ctr-msg-input">
-                  <option value="high">High</option>
-                  <option value="med" selected>Medium</option>
-                  <option value="low">Low</option>
-                </select>
-              </label>
+              <div class="ctr-msg-field">
+                <label class="ctr-edit-label">Priority</label>
+                <div class="ctr-msg-priority-row">
+                  <label class="ctr-msg-priority-opt">
+                    <input type="radio" name="rev-priority" value="low"> <span>Low</span>
+                  </label>
+                  <label class="ctr-msg-priority-opt">
+                    <input type="radio" name="rev-priority" value="med" checked> <span>Normal</span>
+                  </label>
+                  <label class="ctr-msg-priority-opt">
+                    <input type="radio" name="rev-priority" value="high"> <span>High</span>
+                  </label>
+                </div>
+              </div>
 
-              <label class="ctr-msg-label">Subject
-                <input id="rev-msg-subject" class="ctr-msg-input" type="text" value="${escapeAttr(defaultSubject)}" required>
-              </label>
+              <div class="ctr-msg-field">
+                <label class="ctr-edit-label">Message <span class="ctr-required">*</span></label>
+                <textarea id="rev-msg-body" class="ctr-edit-input ctr-msg-textarea" rows="6" required placeholder="What do you want to say about this review?"></textarea>
+              </div>
 
-              <label class="ctr-msg-label">Message
-                <textarea id="rev-msg-body" class="ctr-msg-input ctr-msg-textarea" rows="5" required placeholder="What do you want to say?"></textarea>
-              </label>
+              <div class="ctr-msg-context">
+                Context: <strong>${rating}★ ${escapeHtml(platformLabel)}</strong> from ${escapeHtml(author)}${regionUp ? ` · ${escapeHtml(regionUp)}` : ''}
+              </div>
             </div>
             <div class="ctr-msg-footer">
-              <button type="button" class="btn btn-secondary" onclick="closeReviewMessage()">Cancel</button>
-              <button type="submit" class="btn btn-primary">📨 Send message</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="closeReviewMessage()">Cancel</button>
+              <button type="submit" class="btn btn-primary btn-sm">Send message</button>
             </div>
           </form>
         </div>
@@ -7803,13 +7806,12 @@
     const review = _reviewMessageTarget;
 
     const toEl       = document.getElementById('rev-msg-to');
-    const priorityEl = document.getElementById('rev-msg-priority');
-    const subjectEl  = document.getElementById('rev-msg-subject');
+    const priorityEl = document.querySelector('input[name="rev-priority"]:checked');
     const bodyEl     = document.getElementById('rev-msg-body');
 
     const to       = toEl ? String(toEl.value || '').trim() : '';
     const priority = priorityEl ? priorityEl.value : 'med';
-    const subject  = subjectEl ? String(subjectEl.value || '').trim() : '';
+    const subject  = defaultSubject;
     const message  = bodyEl ? String(bodyEl.value || '').trim() : '';
 
     if (!to) { showToast('Choose a recipient.', 'error'); return; }
@@ -8972,7 +8974,7 @@
 
   function _ndField(label, key, type, opts, notice, fullWidth) {
     const val = notice ? (notice[key] || '') : '';
-    const style = `width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;`;
+    const style = `width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;`;
     const labelHtml = `<label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>`;
     const wrap = fullWidth ? 'grid-column:1/-1;' : '';
 
@@ -8998,7 +9000,7 @@
     const checked = (notice && (notice[key] === 'true' || notice[key] === 'TRUE' || notice[key] === 'yes'));
     const dateVal = notice ? (notice[key + '_date'] || '') : '';
     const byVal   = notice ? (notice[key + '_by'] || '') : '';
-    const inputStyle = `padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;`;
+    const inputStyle = `padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;`;
 
     return `<div style="grid-column:1/-1;background:${checked ? 'rgba(46,125,91,0.04)' : 'var(--surface-alt,#f9fbfe)'};border:1px solid ${checked ? 'rgba(46,125,91,0.2)' : 'var(--border)'};border-radius:6px;padding:14px;margin-bottom:2px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:${checked || extraFields ? '10px' : '0'};">
@@ -9062,55 +9064,55 @@
       ${_ndStepField(7, 'Luke Involved', 'step7_luke_involved', n,
         `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Luke's Decision</label>
-            <input type="text" id="nd-f-step7_decision" value="${_ndEsc(n.step7_decision||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+            <input type="text" id="nd-f-step7_decision" value="${_ndEsc(n.step7_decision||'')}" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Summary</label>
-            <input type="text" id="nd-f-step7_summary" value="${_ndEsc(n.step7_summary||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+            <input type="text" id="nd-f-step7_summary" value="${_ndEsc(n.step7_summary||'')}" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Sara's Opinion</label>
-            <textarea id="nd-f-step7_opinion" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_opinion||'')}</textarea></div>
+            <textarea id="nd-f-step7_opinion" rows="2" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_opinion||'')}</textarea></div>
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Options Available</label>
-            <textarea id="nd-f-step7_options" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_options||'')}</textarea></div>
+            <textarea id="nd-f-step7_options" rows="2" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_options||'')}</textarea></div>
           <div style="grid-column:1/-1;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Email Draft</label>
-            <textarea id="nd-f-step7_email_draft" rows="3" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_email_draft||'')}</textarea></div>
+            <textarea id="nd-f-step7_email_draft" rows="3" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step7_email_draft||'')}</textarea></div>
         </div>`
       )}
       ${_ndStepField(8, 'Route Decision', 'step8_route', n,
         `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Law Firm</label>
-            <input type="text" id="nd-f-step8_law_firm" value="${_ndEsc(n.step8_law_firm||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+            <input type="text" id="nd-f-step8_law_firm" value="${_ndEsc(n.step8_law_firm||'')}" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Other Firms Involved</label>
-            <input type="text" id="nd-f-step8_other_firms" value="${_ndEsc(n.step8_other_firms||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+            <input type="text" id="nd-f-step8_other_firms" value="${_ndEsc(n.step8_other_firms||'')}" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Insurance Claim #</label>
-            <input type="text" id="nd-f-step8_insurance_claim" value="${_ndEsc(n.step8_insurance_claim||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+            <input type="text" id="nd-f-step8_insurance_claim" value="${_ndEsc(n.step8_insurance_claim||'')}" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
         </div>`
       )}
       ${_ndStepField(9, 'Response Sent', 'step9_response_sent', n,
         `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Response Date</label>
-            <input type="date" id="nd-f-step9_response_date" value="${_ndEsc(n.step9_response_date||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+            <input type="date" id="nd-f-step9_response_date" value="${_ndEsc(n.step9_response_date||'')}" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Outcome</label>
-            <select id="nd-f-step9_status" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">
+            <select id="nd-f-step9_status" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">
               ${['','Waiting','Countered','Resolved','Other'].map(o => `<option value="${_ndEsc(o)}" ${n.step9_status===o?'selected':''}>${_ndEsc(o)||'— Select —'}</option>`).join('')}
             </select></div>
         </div>`
       )}
       ${_ndStepField(10, 'Legitimacy Assessment', 'step10_legitimacy', n,
         `<div style="grid-column:1/-1;margin-top:4px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Notes</label>
-          <textarea id="nd-f-step10_notes" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step10_notes||'')}</textarea></div>`
+          <textarea id="nd-f-step10_notes" rows="2" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step10_notes||'')}</textarea></div>`
       )}
       ${_ndStepField(11, 'Follow-up (if they owe us)', 'step11_followup_needed', n,
         `<div style="grid-column:1/-1;margin-top:4px;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Notes</label>
-          <textarea id="nd-f-step11_notes" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step11_notes||'')}</textarea></div>`
+          <textarea id="nd-f-step11_notes" rows="2" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step11_notes||'')}</textarea></div>`
       )}
       ${_ndStepField(12, 'Resolution', 'step12_resolved', n,
         `<div style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px;">
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Resolution Type</label>
-            <select id="nd-f-step12_resolution_type" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">
+            <select id="nd-f-step12_resolution_type" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">
               ${['','Settled','Completed','Processed'].map(o => `<option value="${_ndEsc(o)}" ${n.step12_resolution_type===o?'selected':''}>${_ndEsc(o)||'— Select —'}</option>`).join('')}
             </select></div>
           <div><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Resolution Date</label>
-            <input type="date" id="nd-f-step12_resolution_date" value="${_ndEsc(n.step12_resolution_date||'')}" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
+            <input type="date" id="nd-f-step12_resolution_date" value="${_ndEsc(n.step12_resolution_date||'')}" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;"></div>
           <div style="grid-column:1/-1;"><label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:3px;">Resolution Notes</label>
-            <textarea id="nd-f-step12_notes" rows="2" style="padding:8px 10px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step12_notes||'')}</textarea></div>
+            <textarea id="nd-f-step12_notes" rows="2" style="padding:8px 10px;border:1px solid #000;border-radius:4px;font-size:12px;background:var(--surface,#fff);color:var(--text);width:100%;box-sizing:border-box;">${_ndEsc(n.step12_notes||'')}</textarea></div>
         </div>`
       )}
     </div>`;
@@ -9991,7 +9993,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.54';
+  const APP_VERSION = '2.1.56';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
