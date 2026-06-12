@@ -9622,7 +9622,7 @@
           </div>
           ${canEdit ? `<div style="margin-top:12px;display:flex;gap:6px;justify-content:flex-end;" onclick="event.stopPropagation()">
             <button class="btn btn-ghost btn-sm" onclick="scOpenEdit('${_scEscHtml(c.id)}')">Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="scInlineDelete('${_scEscHtml(c.id)}')">🗑</button>
+            <button style="padding:4px 8px;background:#fff;border:1px solid #E5C6C6;border-radius:4px;cursor:pointer;color:#B23A3A;font-size:13px;" onclick="scInlineDelete('${_scEscHtml(c.id)}')">🗑</button>
           </div>` : ''}
         </div>
       `).join('') + `</div>`;
@@ -9651,7 +9651,7 @@
         <td style="padding:10px 14px;">${_scEscHtml(c.salesperson)}</td>
         ${canEdit ? `<td style="padding:10px 14px;text-align:right;white-space:nowrap;" onclick="event.stopPropagation()">
           <button class="btn btn-ghost btn-sm" onclick="scOpenEdit('${_scEscHtml(c.id)}')">Edit</button>
-          <button class="btn btn-danger btn-sm" id="sc-del-${_scEscHtml(c.id)}" onclick="scInlineDelete('${_scEscHtml(c.id)}')">🗑</button>
+          <button style="padding:4px 8px;background:#fff;border:1px solid #E5C6C6;border-radius:4px;cursor:pointer;color:#B23A3A;font-size:13px;" id="sc-del-${_scEscHtml(c.id)}" onclick="scInlineDelete('${_scEscHtml(c.id)}')">🗑</button>
         </td>` : ''}
       </tr>
     `).join('');
@@ -10121,7 +10121,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.73';
+  const APP_VERSION = '2.1.74';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
