@@ -1773,13 +1773,16 @@
       ? 'Stub session'
       : (isPrivileged(me) ? 'Compliance team' : 'Team member');
 
-    // Show admin entry in menu for privileged users
+    // Show admin section for privileged users
     if (isPrivileged(me)) {
-      $('#menu-admin').style.display = '';
-      $('#nav-admin-section').style.display = '';
       $('#nav-regions-expander').style.display = '';
       const sheetAdmin = $('#sheet-admin');
       if (sheetAdmin) sheetAdmin.style.display = '';
+      // Entire admin section (Settings + Users) only for angel
+      if (me.username === 'angel') {
+        $('#nav-admin-section').style.display = '';
+        if ($('#menu-admin')) $('#menu-admin').style.display = '';
+      }
     }
   }
 
@@ -9291,17 +9294,15 @@
     try {
       const res = await api({}, 'POST', { action: 'savenotice', item });
       if (!res.ok) throw new Error(res.error || 'Save failed');
-      if (_ndEditingId) {
-        const idx = _ndNotices.findIndex(n => n.id === _ndEditingId);
-        if (idx >= 0) _ndNotices[idx] = res.notice;
-      } else {
-        _ndNotices.push(res.notice);
-      }
+      // Re-fetch all notices from backend to guarantee sync with sheet
+      const fresh = await api({ resource: 'notices' });
+      _ndNotices = fresh.notices || _ndNotices;
       ndCloseEdit();
       ndRenderAlerts();
       ndApplyFilters();
       const sub = document.getElementById('nd-sub');
       if (sub) sub.textContent = _ndNotices.length + ' notice' + (_ndNotices.length !== 1 ? 's' : '');
+      showToast('Notice saved', 'success');
     } catch (err) {
       alert('Save failed: ' + err.message);
     }
@@ -9736,9 +9737,10 @@
 
     const field = (label, key, type = 'text', opts = null) => {
       if (opts) {
+        const curVal = String(f[key] || '');
         return `<div><label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>
           <select id="sc-f-${key}" style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);">
-            ${opts.map(o => `<option value="${_scEscHtml(o)}" ${f[key] === o ? 'selected' : ''}>${_scEscHtml(o) || '— Select —'}</option>`).join('')}
+            ${opts.map(o => `<option value="${_scEscHtml(o)}" ${String(o) === curVal ? 'selected' : ''}>${_scEscHtml(o) || '— Select —'}</option>`).join('')}
           </select></div>`;
       }
       return `<div><label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}</label>
@@ -9814,17 +9816,15 @@
     try {
       const res = await api({}, 'POST', { action: 'savesuppliercontact', item });
       if (!res.ok) throw new Error(res.error || 'Save failed');
-      if (_scEditingId) {
-        const idx = _scContacts.findIndex(c => c.id === _scEditingId);
-        if (idx >= 0) _scContacts[idx] = res.contact;
-      } else {
-        _scContacts.push(res.contact);
-      }
+      // Re-fetch all contacts from backend to guarantee sync with sheet
+      const fresh = await api({ resource: 'supplier_contacts' });
+      _scContacts = fresh.contacts || _scContacts;
       scCloseEdit();
       scPopulateFilters();
       scApplyFilters();
       const sub = document.getElementById('sc-sub');
       if (sub) sub.textContent = _scContacts.length + ' contact' + (_scContacts.length !== 1 ? 's' : '');
+      showToast('Contact saved', 'success');
     } catch (err) {
       alert('Save failed: ' + err.message);
     }
@@ -9860,6 +9860,10 @@
   window.scSetView     = scSetView;
 
   route('/admin', () => {
+    const me = getLoggedInUser();
+    if (!me || me.username !== 'angel') {
+      return `<div class="view"><div style="padding:60px;text-align:center;color:var(--muted);">⛔ Access restricted.</div></div>`;
+    }
     // Settings page. Sections added incrementally:
     // - v2.1.41: Data Sources (3 sheet links)
     // - Stage 7 will add: Users, Scoring rules, Project defaults, Audit log, System health
@@ -9867,6 +9871,7 @@
       { name: 'Operations',     id: '1xjScTPREBc4URVOSvO8r1y_wCLt6i39ZrXUtfMpQnig', desc: 'Main data: VEHICLES, CONTRACTORS, SUBMISSIONS, REVIEWS, USERS, etc.' },
       { name: 'UserWorkspaces', id: '1R7FOdwrDlbuoM2yhl37GXBG5w766cu1RZKCGgvRNpSU', desc: 'Per-user inbox, tasks, notifications, widgets.' },
       { name: 'Config',         id: '1EOImypAdeH4lMTbQ59fltztKBwS9x7Ef99BCU6QPxCE', desc: 'App config, region map, role permissions, scoring rules.' },
+      { name: 'Pricing',        id: '1-fHxAfGmBr-kN-a2z9ScPvqUx0SWYAZ79SuNKr7HBQw', desc: 'Master pricing data for all suppliers and regions.' },
     ];
     const sheetCards = sheets.map(s => `
       <div class="settings-card">
@@ -9919,7 +9924,12 @@
     `;
   }, { title: 'Settings' });
 
-  route('/admin/users', () => placeholder('Admin · Users', 'Stage 7',
+  route('/admin/users', () => {
+    const me = getLoggedInUser();
+    if (!me || me.username !== 'angel') {
+      return `<div class="view"><div style="padding:60px;text-align:center;color:var(--muted);">⛔ Access restricted.</div></div>`;
+    }
+    return placeholder('Admin · Users', 'Stage 7',
     'Manage user accounts and permissions.',
     [
       'Add/edit/deactivate users',
@@ -9928,8 +9938,8 @@
       'Assigned regions',
       'Tools configuration',
       'Audit log integration',
-    ]
-  ), { title: 'Users' });
+    ]);
+  }, { title: 'Users' });
 
 
   /* ═══════════════════════════════════════════════════════════════
@@ -10121,7 +10131,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.74';
+  const APP_VERSION = '2.1.80';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
