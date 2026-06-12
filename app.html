@@ -9114,6 +9114,20 @@
 
   function erBuildForm(r) {
     const f = r || {};
+    const me = getLoggedInUser();
+
+    // Get user's assigned regions
+    const userRegions = me ? getCurrentUserRegions(me) : [];
+    const allRegionNames = REGIONS.map(reg => reg.name || reg.code);
+
+    // Match user's region codes to region names
+    const availableRegions = userRegions.length > 0
+      ? REGIONS.filter(reg => userRegions.some(code =>
+          (reg.code || '').toLowerCase() === code.toLowerCase() ||
+          (reg.name || '').toLowerCase().includes(code.toLowerCase())
+        )).map(reg => reg.name || reg.code)
+      : allRegionNames; // privileged/no region = all
+
     const inp = (label, key, type, req) => `
       <div>
         <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}${req ? ' <span style="color:var(--danger);">*</span>' : ''}</label>
@@ -9134,8 +9148,20 @@
       </div>`;
     const shead = (label) => `<div style="grid-column:1/-1;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);padding:12px 0 6px;border-bottom:2px solid var(--blue);margin-top:8px;">${label}</div>`;
 
-    const regionOpts = ['', ...REGIONS.map(r => r.name || r.code)];
-    const recurOpts  = ['', 'Weekly', 'Bi-Weekly', 'Monthly', 'Quarterly', 'Annually'];
+    const recurOpts = ['', 'Weekly', 'Bi-Weekly', 'Monthly', 'Quarterly', 'Annually'];
+
+    // Region field — locked if only one region, dropdown if multiple
+    const currentRegion = f.region || (availableRegions.length === 1 ? availableRegions[0] : '');
+    const regionField = availableRegions.length <= 1
+      ? `<div>
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Region <span style="color:var(--danger);">*</span></label>
+          <input id="er-f-region" type="text" value="${_erEsc(currentRegion)}" readonly
+            style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface-alt,#f9fbfe);color:var(--text);box-sizing:border-box;">
+        </div>`
+      : sel('Region', 'region', ['', ...availableRegions], true).replace(
+          `value="${_erEsc('')}" `,
+          `value="${_erEsc('')}" `
+        );
 
     const moreInfoSection = f.moreInfoQuestion ? `
       ${shead('More Information Requested')}
@@ -9147,7 +9173,7 @@
 
     return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;">
       ${shead('Request Details')}
-      ${sel('Region', 'region', regionOpts, true)}
+      ${regionField}
       ${sel('Category', 'category', ['', ...ER_CATEGORIES], true)}
       ${inp('Vendor / Source', 'vendor', 'text', true)}
       ${inp('Estimated Amount ($)', 'estimatedAmount', 'number', true)}
@@ -10704,7 +10730,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.81';
+  const APP_VERSION = '2.1.82';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
