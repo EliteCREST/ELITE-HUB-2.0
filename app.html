@@ -66,6 +66,10 @@
           <span class="nav-item-icon">📋</span>
           <span class="nav-item-label">Notices</span>
         </a>
+        <a class="nav-item" data-nav="/expenses" href="#/expenses">
+          <span class="nav-item-icon">💰</span>
+          <span class="nav-item-label">Expense Requests</span>
+        </a>
         <a class="nav-item" data-nav="/suppliers" href="#/suppliers">
           <span class="nav-item-icon">🏢</span>
           <span class="nav-item-label">Suppliers</span>
@@ -8803,6 +8807,575 @@
   window.onLegalTypeChange = onLegalTypeChange;
 
   // ════════════════════════════════════════════════════════════════════
+  // ═══ EXPENSE REQUESTS (Stage 6.6) ═══════════════════════════════════
+  // ════════════════════════════════════════════════════════════════════
+
+  let _erRequests  = [];
+  let _erView      = [];
+  let _erEditingId = null;
+  let _erReviewId  = null;
+
+  const ER_CATEGORIES = [
+    'Office Supplies', 'Marketing & Advertising', 'Signage',
+    'Client Entertainment / Gifts', 'Software / Subscriptions',
+    'Equipment', 'Training / Education', 'Travel & Mileage',
+    'Postage / Shipping', 'Repairs & Maintenance',
+    'Meals / Team Events', 'Uniforms / Apparel',
+    'Photography / Video', 'Miscellaneous'
+  ];
+
+  const ER_APPROVERS_LIST = ['angel', 'sam', 'sara', 'emma'];
+
+  function _erCanApprove() {
+    const me = getLoggedInUser();
+    return me && ER_APPROVERS_LIST.includes(me.username);
+  }
+
+  function _erIsPrivileged() {
+    const me = getLoggedInUser();
+    return me && isPrivileged(me);
+  }
+
+  function _erEsc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function _erFmt$(v) {
+    if (!v) return '—';
+    const n = parseFloat(String(v).replace(/[^0-9.]/g, ''));
+    return isNaN(n) ? _erEsc(v) : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  const ER_STATUS_CONFIG = {
+    submitted:    { label: 'Submitted',       bg: '#1F5FAD', color: '#fff' },
+    under_review: { label: 'Under Review',    bg: '#854F0B', color: '#fff' },
+    approved:     { label: 'Approved',        bg: '#2E7D5B', color: '#fff' },
+    partial:      { label: 'Partial Approval',bg: '#2E7D5B', color: '#fff' },
+    denied:       { label: 'Denied',          bg: '#B23A3A', color: '#fff' },
+    moreinfo:     { label: 'More Info Needed',bg: '#C9A961', color: '#1B2A4A' },
+    draft:        { label: 'Draft',           bg: '#6A7891', color: '#fff' },
+  };
+
+  function _erStatusBadge(status) {
+    const cfg = ER_STATUS_CONFIG[status] || { label: status, bg: '#6A7891', color: '#fff' };
+    return `<span style="display:inline-block;padding:3px 10px;font-size:10px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;border-radius:10px;background:${cfg.bg};color:${cfg.color};">${cfg.label}</span>`;
+  }
+
+  route('/expenses', () => {
+    const canApprove  = _erCanApprove();
+    const isPriv      = _erIsPrivileged();
+    return `
+      <div class="view" id="er-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Expense Requests</h1>
+            <p class="view-sub" id="er-sub">Loading…</p>
+          </div>
+          <button class="btn btn-primary" onclick="erOpenEdit(null)">+ New Request</button>
+        </div>
+
+        <!-- Summary (privileged only, rendered by JS) -->
+        <div id="er-summary"></div>
+
+        <!-- Toolbar -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px;">
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input type="text" id="er-search" placeholder="Search requests…" autocomplete="off"
+              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="erApplyFilters()">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+          </div>
+          <select id="er-f-status" onchange="erApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Statuses</option>
+            ${Object.entries(ER_STATUS_CONFIG).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join('')}
+          </select>
+          ${isPriv ? `
+          <select id="er-f-region" onchange="erApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Regions</option>
+          </select>
+          <select id="er-f-category" onchange="erApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Categories</option>
+            ${ER_CATEGORIES.map(c => `<option value="${_erEsc(c)}">${_erEsc(c)}</option>`).join('')}
+          </select>` : `
+          <select id="er-f-region" style="display:none;"></select>
+          <select id="er-f-category" style="display:none;"></select>`}
+        </div>
+
+        <!-- List -->
+        <div id="er-list"></div>
+
+        <!-- Request Form Modal -->
+        <div id="er-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:50;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
+          <div style="background:var(--surface,#fff);width:100%;max-width:700px;border-radius:8px;box-shadow:0 16px 48px rgba(27,42,74,0.25);overflow:hidden;">
+            <div style="background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+              <span id="er-modal-title" style="font-size:14px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">New Expense Request</span>
+              <button onclick="erCloseEdit()" style="background:transparent;border:0;color:#fff;font-size:24px;cursor:pointer;">×</button>
+            </div>
+            <div style="padding:24px;" id="er-modal-body"></div>
+            <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);position:sticky;bottom:0;">
+              <button class="btn btn-ghost btn-sm" onclick="erCloseEdit()">Cancel</button>
+              <button class="btn btn-secondary btn-sm" onclick="erSaveRequest('draft')">Save Draft</button>
+              <button class="btn btn-primary btn-sm" onclick="erSaveRequest('submitted')">Submit Request</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Review Modal (approvers only) -->
+        <div id="er-review-backdrop" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:50;align-items:center;justify-content:center;padding:24px 16px;">
+          <div style="background:var(--surface,#fff);width:100%;max-width:520px;border-radius:8px;box-shadow:0 16px 48px rgba(27,42,74,0.25);overflow:hidden;">
+            <div style="background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-size:14px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">Review Request</span>
+              <button onclick="erCloseReview()" style="background:transparent;border:0;color:#fff;font-size:24px;cursor:pointer;">×</button>
+            </div>
+            <div style="padding:24px;" id="er-review-body"></div>
+            <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
+              <button class="btn btn-ghost btn-sm" onclick="erCloseReview()">Cancel</button>
+              <button class="btn btn-primary btn-sm" onclick="erSubmitReview()">Submit Review</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }, {
+    title: 'Expense Requests',
+    onAfterRender: () => erLoadAll()
+  });
+
+  async function erLoadAll() {
+    try {
+      const res = await api({ resource: 'expense_requests' });
+      _erRequests = res.requests || [];
+      erPopulateFilters();
+      erRenderSummary();
+      erApplyFilters();
+      const sub = document.getElementById('er-sub');
+      if (sub) sub.textContent = _erRequests.length + ' request' + (_erRequests.length !== 1 ? 's' : '');
+    } catch (err) {
+      const list = document.getElementById('er-list');
+      if (list) list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load: ${_erEsc(err.message)}</div>`;
+    }
+  }
+
+  function erPopulateFilters() {
+    const regSel = document.getElementById('er-f-region');
+    if (regSel && regSel.style.display !== 'none') {
+      const regions = [...new Set(_erRequests.map(r => r.region).filter(Boolean))].sort();
+      regSel.innerHTML = '<option value="">All Regions</option>' +
+        regions.map(r => `<option value="${_erEsc(r)}">${_erEsc(r)}</option>`).join('');
+    }
+  }
+
+  function erRenderSummary() {
+    const wrap = document.getElementById('er-summary');
+    if (!wrap || !_erIsPrivileged()) return;
+
+    const total    = _erRequests.length;
+    const pending  = _erRequests.filter(r => ['submitted','under_review','moreinfo'].includes(r.status)).length;
+    const approved = _erRequests.filter(r => ['approved','partial'].includes(r.status)).length;
+    const denied   = _erRequests.filter(r => r.status === 'denied').length;
+    const totalAmt = _erRequests
+      .filter(r => ['approved','partial'].includes(r.status))
+      .reduce((sum, r) => sum + (parseFloat(r.approvedAmount) || 0), 0);
+    const totalReq = _erRequests
+      .reduce((sum, r) => sum + (parseFloat(r.estimatedAmount) || 0), 0);
+
+    // By region
+    const byRegion = {};
+    _erRequests.forEach(r => {
+      if (!r.region) return;
+      if (!byRegion[r.region]) byRegion[r.region] = { count: 0, requested: 0, approved: 0 };
+      byRegion[r.region].count++;
+      byRegion[r.region].requested += parseFloat(r.estimatedAmount) || 0;
+      if (['approved','partial'].includes(r.status)) byRegion[r.region].approved += parseFloat(r.approvedAmount) || 0;
+    });
+
+    wrap.innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;">
+        ${[
+          { label: 'Total Requests', value: total, color: 'var(--navy)' },
+          { label: 'Pending Review', value: pending, color: '#854F0B' },
+          { label: 'Approved', value: approved, color: '#2E7D5B' },
+          { label: 'Denied', value: denied, color: '#B23A3A' },
+          { label: 'Total Requested', value: '$' + totalReq.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}), color: 'var(--blue)' },
+          { label: 'Total Approved', value: '$' + totalAmt.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}), color: '#2E7D5B' },
+        ].map(s => `
+          <div style="background:var(--surface,#fff);border:1px solid var(--border);border-radius:8px;padding:16px;text-align:center;">
+            <div style="font-size:22px;font-weight:900;color:${s.color};margin-bottom:4px;">${s.value}</div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);">${s.label}</div>
+          </div>
+        `).join('')}
+      </div>
+      ${Object.keys(byRegion).length > 0 ? `
+      <div style="background:var(--surface,#fff);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:20px;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid var(--blue);">By Region</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;">
+          ${Object.entries(byRegion).map(([region, data]) => `
+            <div style="padding:10px 14px;background:var(--surface-alt,#f9fbfe);border-radius:6px;border:1px solid var(--border);">
+              <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px;">${_erEsc(region)}</div>
+              <div style="font-size:12px;color:var(--muted);">${data.count} request${data.count !== 1 ? 's' : ''}</div>
+              <div style="font-size:12px;color:var(--muted);">Requested: <strong style="color:var(--text);">$${data.requested.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
+              <div style="font-size:12px;color:var(--muted);">Approved: <strong style="color:#2E7D5B;">$${data.approved.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
+            </div>
+          `).join('')}
+        </div>
+      </div>` : ''}
+    `;
+  }
+
+  function erApplyFilters() {
+    const q        = (document.getElementById('er-search')     ?.value || '').trim().toLowerCase();
+    const status   = (document.getElementById('er-f-status')   ?.value || '');
+    const region   = (document.getElementById('er-f-region')   ?.value || '');
+    const category = (document.getElementById('er-f-category') ?.value || '');
+
+    _erView = _erRequests.filter(r => {
+      if (status   && r.status   !== status)   return false;
+      if (region   && r.region   !== region)   return false;
+      if (category && r.category !== category) return false;
+      if (q) {
+        const blob = [r.requestor, r.category, r.vendor, r.description, r.purpose, r.region, r.status]
+          .filter(Boolean).join(' ').toLowerCase();
+        if (!blob.includes(q)) return false;
+      }
+      return true;
+    });
+
+    _erView.sort((a, b) => new Date(b.submittedDate || b.createdAt) - new Date(a.submittedDate || a.createdAt));
+    erRenderList();
+  }
+
+  function erRenderList() {
+    const list = document.getElementById('er-list');
+    if (!list) return;
+    const canApprove = _erCanApprove();
+    const me = getLoggedInUser();
+
+    if (_erView.length === 0) {
+      list.innerHTML = `<div style="padding:48px;text-align:center;color:var(--muted);">No expense requests found.</div>`;
+      return;
+    }
+
+    list.innerHTML = _erView.map(r => {
+      const isOwn = me && String(r.requestor || '').toLowerCase() === me.username.toLowerCase();
+      const canEdit = isOwn && ['draft','moreinfo'].includes(r.status);
+      const canReview = canApprove && ['submitted','under_review'].includes(r.status);
+      const needsInfo = isOwn && r.status === 'moreinfo';
+
+      return `
+        <div style="background:var(--surface,#fff);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:10px;${needsInfo ? 'border-left:4px solid #C9A961;' : ''}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--navy);margin-bottom:3px;">${_erEsc(r.description || '(No description)')}</div>
+              <div style="font-size:12px;color:var(--muted);">${[r.region, r.category, r.vendor].filter(Boolean).map(_erEsc).join(' · ')}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+              ${_erStatusBadge(r.status)}
+              <div style="font-size:14px;font-weight:800;color:var(--navy);">${_erFmt$(r.estimatedAmount)}</div>
+            </div>
+          </div>
+
+          ${needsInfo && r.moreInfoQuestion ? `
+            <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#92400E;margin-bottom:4px;">⚠️ More Information Needed</div>
+              <div style="font-size:13px;color:#92400E;">${_erEsc(r.moreInfoQuestion)}</div>
+            </div>` : ''}
+
+          ${r.status === 'approved' || r.status === 'partial' ? `
+            <div style="background:#EAF5EF;border:1px solid #A7D7BC;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#2E7D5B;margin-bottom:4px;">✓ ${r.status === 'partial' ? 'Partially ' : ''}Approved — ${_erFmt$(r.approvedAmount)}</div>
+              ${r.approvalNotes ? `<div style="font-size:12px;color:#2E7D5B;">${_erEsc(r.approvalNotes)}</div>` : ''}
+            </div>` : ''}
+
+          ${r.status === 'denied' ? `
+            <div style="background:#FEE2E2;border:1px solid #FECACA;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#B23A3A;margin-bottom:4px;">✗ Denied</div>
+              ${r.approvalNotes ? `<div style="font-size:12px;color:#B23A3A;">${_erEsc(r.approvalNotes)}</div>` : ''}
+            </div>` : ''}
+
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div style="font-size:11px;color:var(--muted);">
+              ${r.requestor ? `By <strong>${_erEsc(r.requestor)}</strong> · ` : ''}
+              ${r.submittedDate ? `Submitted ${new Date(r.submittedDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}` : ''}
+              ${r.requestedByDate ? ` · Needed by ${_erEsc(r.requestedByDate)}` : ''}
+            </div>
+            <div style="display:flex;gap:6px;">
+              ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="erOpenEdit('${_erEsc(r.id)}')">✏️ ${r.status === 'moreinfo' ? 'Add Info & Resubmit' : 'Edit'}</button>` : ''}
+              ${canReview ? `<button class="btn btn-primary btn-sm" onclick="erOpenReview('${_erEsc(r.id)}')">Review</button>` : ''}
+              ${canApprove ? `<button style="padding:4px 8px;background:#fff;border:1px solid #E5C6C6;border-radius:4px;cursor:pointer;color:#B23A3A;font-size:13px;" onclick="erDelete('${_erEsc(r.id)}')">🗑</button>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function erBuildForm(r) {
+    const f = r || {};
+    const inp = (label, key, type, req) => `
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}${req ? ' <span style="color:var(--danger);">*</span>' : ''}</label>
+        <input id="er-f-${key}" type="${type || 'text'}" value="${_erEsc(f[key] || '')}"
+          style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;">
+      </div>`;
+    const sel = (label, key, opts, req) => `
+      <div>
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}${req ? ' <span style="color:var(--danger);">*</span>' : ''}</label>
+        <select id="er-f-${key}" style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);">
+          ${opts.map(o => `<option value="${_erEsc(o)}" ${f[key] === o ? 'selected' : ''}>${_erEsc(o) || '— Select —'}</option>`).join('')}
+        </select>
+      </div>`;
+    const txt = (label, key, req) => `
+      <div style="grid-column:1/-1;">
+        <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">${label}${req ? ' <span style="color:var(--danger);">*</span>' : ''}</label>
+        <textarea id="er-f-${key}" rows="3" style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;">${_erEsc(f[key] || '')}</textarea>
+      </div>`;
+    const shead = (label) => `<div style="grid-column:1/-1;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--blue);padding:12px 0 6px;border-bottom:2px solid var(--blue);margin-top:8px;">${label}</div>`;
+
+    const regionOpts = ['', ...REGIONS.map(r => r.name || r.code)];
+    const recurOpts  = ['', 'Weekly', 'Bi-Weekly', 'Monthly', 'Quarterly', 'Annually'];
+
+    const moreInfoSection = f.moreInfoQuestion ? `
+      ${shead('More Information Requested')}
+      <div style="grid-column:1/-1;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:12px 14px;">
+        <div style="font-size:12px;font-weight:700;color:#92400E;margin-bottom:6px;">Question from reviewer:</div>
+        <div style="font-size:13px;color:#92400E;">${_erEsc(f.moreInfoQuestion)}</div>
+      </div>
+      ${txt('Your Response', 'moreInfoAnswer')}` : '';
+
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;">
+      ${shead('Request Details')}
+      ${sel('Region', 'region', regionOpts, true)}
+      ${sel('Category', 'category', ['', ...ER_CATEGORIES], true)}
+      ${inp('Vendor / Source', 'vendor', 'text', true)}
+      ${inp('Estimated Amount ($)', 'estimatedAmount', 'number', true)}
+      ${inp('Date Needed By', 'requestedByDate', 'date')}
+      ${sel('Is This Recurring?', 'isRecurring', ['', 'No', 'Yes'])}
+      ${sel('If Recurring — Frequency', 'recurringFrequency', recurOpts)}
+      ${txt('Description', 'description', true)}
+      ${txt('Purpose / Justification', 'purpose', true)}
+      ${txt('Additional Notes', 'notes')}
+      ${moreInfoSection}
+    </div>`;
+  }
+
+  function erOpenEdit(id) {
+    _erEditingId = id || null;
+    const r = id ? _erRequests.find(x => x.id === id) : null;
+    const title = document.getElementById('er-modal-title');
+    const body  = document.getElementById('er-modal-body');
+    if (title) title.textContent = id ? (r?.status === 'moreinfo' ? 'Add Info & Resubmit' : 'Edit Request') : 'New Expense Request';
+    if (body)  body.innerHTML = erBuildForm(r);
+    document.getElementById('er-modal-backdrop').style.display = 'flex';
+  }
+
+  function erCloseEdit() {
+    document.getElementById('er-modal-backdrop').style.display = 'none';
+    _erEditingId = null;
+  }
+
+  async function erSaveRequest(submitStatus) {
+    const keys = ['region','category','vendor','estimatedAmount','requestedByDate',
+                  'isRecurring','recurringFrequency','description','purpose','notes','moreInfoAnswer'];
+    const item = {};
+    keys.forEach(k => {
+      const el = document.getElementById('er-f-' + k);
+      if (el) item[k] = el.value.trim();
+    });
+
+    if (!item.region)       { alert('Region is required.');      return; }
+    if (!item.category)     { alert('Category is required.');    return; }
+    if (!item.vendor)       { alert('Vendor is required.');      return; }
+    if (!item.estimatedAmount) { alert('Amount is required.');   return; }
+    if (!item.description)  { alert('Description is required.'); return; }
+
+    item.status = submitStatus;
+    if (_erEditingId) item.id = _erEditingId;
+
+    const me = getLoggedInUser();
+    if (!item.id) {
+      item.requestor = me ? (me.display_name || me.username) : '';
+      item.submittedDate = new Date().toISOString().slice(0, 10);
+    }
+
+    try {
+      const res = await api({}, 'POST', { action: 'saveexpenserequest', item });
+      if (!res.ok) throw new Error(res.error || 'Save failed');
+
+      // Send inbox notification to approvers if submitting
+      if (submitStatus === 'submitted') {
+        try {
+          await api({}, 'POST', {
+            action: 'savesubmission',
+            submission: {
+              to_user: 'angel,sam,sara,emma',
+              from_user: me ? me.username : '',
+              subject: 'New Expense Request: ' + (item.description || ''),
+              message: `${item.requestor} submitted an expense request for $${item.estimatedAmount} — ${item.category} from ${item.vendor}. Region: ${item.region}.`,
+              priority: 'med',
+              source_page: 'expenses',
+              source_id: res.request?.id || '',
+            }
+          });
+        } catch(e) { /* notification failure shouldn't block save */ }
+      }
+
+      const fresh = await api({ resource: 'expense_requests' });
+      _erRequests = fresh.requests || _erRequests;
+      erCloseEdit();
+      erRenderSummary();
+      erPopulateFilters();
+      erApplyFilters();
+      const sub = document.getElementById('er-sub');
+      if (sub) sub.textContent = _erRequests.length + ' request' + (_erRequests.length !== 1 ? 's' : '');
+      showToast(submitStatus === 'draft' ? 'Draft saved' : 'Request submitted', 'success');
+    } catch (err) {
+      alert('Save failed: ' + err.message);
+    }
+  }
+
+  function erOpenReview(id) {
+    if (!_erCanApprove()) return;
+    _erReviewId = id;
+    const r = _erRequests.find(x => x.id === id);
+    if (!r) return;
+
+    document.getElementById('er-review-body').innerHTML = `
+      <div style="background:var(--surface-alt,#f9fbfe);border:1px solid var(--border);border-radius:6px;padding:14px;margin-bottom:16px;">
+        <div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px;">${_erEsc(r.description)}</div>
+        <div style="font-size:12px;color:var(--muted);">${[r.region, r.category, r.vendor].filter(Boolean).map(_erEsc).join(' · ')}</div>
+        <div style="font-size:16px;font-weight:900;color:var(--navy);margin-top:8px;">${_erFmt$(r.estimatedAmount)}</div>
+        ${r.purpose ? `<div style="font-size:12px;color:var(--text);margin-top:6px;">${_erEsc(r.purpose)}</div>` : ''}
+        ${r.notes ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;">${_erEsc(r.notes)}</div>` : ''}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div style="grid-column:1/-1;">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;">Decision <span style="color:var(--danger);">*</span></label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${[
+              ['approved', '✓ Approve Full', '#2E7D5B'],
+              ['partial',  '◑ Partial Approval', '#1F5FAD'],
+              ['moreinfo', '? More Info Needed', '#854F0B'],
+              ['denied',   '✗ Deny', '#B23A3A'],
+            ].map(([val, label, color]) => `
+              <label style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:2px solid ${color};border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;color:${color};">
+                <input type="radio" name="er-decision" value="${val}" style="width:14px;height:14px;"> ${label}
+              </label>
+            `).join('')}
+          </div>
+        </div>
+        <div id="er-partial-amt-wrap" style="display:none;grid-column:1/-1;">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Approved Amount ($) <span style="color:var(--danger);">*</span></label>
+          <input id="er-review-amount" type="number" placeholder="0.00"
+            style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;">
+        </div>
+        <div id="er-moreinfo-wrap" style="display:none;grid-column:1/-1;">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Your Question <span style="color:var(--danger);">*</span></label>
+          <textarea id="er-review-question" rows="3"
+            style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;"></textarea>
+        </div>
+        <div style="grid-column:1/-1;">
+          <label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:4px;">Notes / Comments</label>
+          <textarea id="er-review-notes" rows="3"
+            style="width:100%;padding:9px 11px;border:1px solid #000;border-radius:4px;font-size:13px;background:var(--surface,#fff);color:var(--text);box-sizing:border-box;"></textarea>
+        </div>
+      </div>
+    `;
+
+    // Wire radio change to show/hide conditional fields
+    document.querySelectorAll('input[name="er-decision"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        document.getElementById('er-partial-amt-wrap').style.display = radio.value === 'partial' ? '' : 'none';
+        document.getElementById('er-moreinfo-wrap').style.display    = radio.value === 'moreinfo' ? '' : 'none';
+      });
+    });
+
+    document.getElementById('er-review-backdrop').style.display = 'flex';
+  }
+
+  function erCloseReview() {
+    document.getElementById('er-review-backdrop').style.display = 'none';
+    _erReviewId = null;
+  }
+
+  async function erSubmitReview() {
+    if (!_erCanApprove() || !_erReviewId) return;
+    const selected = document.querySelector('input[name="er-decision"]:checked');
+    if (!selected) { alert('Please select a decision.'); return; }
+
+    const approvalType   = selected.value;
+    const approvalNotes  = document.getElementById('er-review-notes')?.value.trim() || '';
+    const approvedAmount = approvalType === 'partial' ? document.getElementById('er-review-amount')?.value.trim() : '';
+    const moreInfoQuestion = approvalType === 'moreinfo' ? document.getElementById('er-review-question')?.value.trim() : '';
+
+    if (approvalType === 'partial' && !approvedAmount) { alert('Please enter the approved amount.'); return; }
+    if (approvalType === 'moreinfo' && !moreInfoQuestion) { alert('Please enter your question.'); return; }
+
+    const decision = { approvalType, approvalNotes, approvedAmount, moreInfoQuestion };
+
+    try {
+      const res = await api({}, 'POST', { action: 'reviewexpenserequest', id: _erReviewId, decision });
+      if (!res.ok) throw new Error(res.error || 'Review failed');
+
+      // Notify requestor
+      const r = _erRequests.find(x => x.id === _erReviewId);
+      if (r && r.requestor) {
+        const me = getLoggedInUser();
+        const statusLabels = { approved: 'approved', partial: 'partially approved', denied: 'denied', moreinfo: 'has a question for you' };
+        try {
+          await api({}, 'POST', {
+            action: 'savesubmission',
+            submission: {
+              to_user: r.requestor,
+              from_user: me ? me.username : '',
+              subject: 'Expense Request Update: ' + (r.description || ''),
+              message: `Your expense request for ${_erFmt$(r.estimatedAmount)} (${r.category}) has been ${statusLabels[approvalType] || approvalType}.${approvalNotes ? ' Note: ' + approvalNotes : ''}${moreInfoQuestion ? ' Question: ' + moreInfoQuestion : ''}`,
+              priority: 'med',
+              source_page: 'expenses',
+              source_id: _erReviewId,
+            }
+          });
+        } catch(e) { /* notification failure shouldn't block */ }
+      }
+
+      const fresh = await api({ resource: 'expense_requests' });
+      _erRequests = fresh.requests || _erRequests;
+      erCloseReview();
+      erRenderSummary();
+      erApplyFilters();
+      showToast('Review submitted', 'success');
+    } catch (err) {
+      alert('Review failed: ' + err.message);
+    }
+  }
+
+  async function erDelete(id) {
+    if (!_erCanApprove()) return;
+    const r = _erRequests.find(x => x.id === id);
+    if (!confirm('Delete this expense request? This cannot be undone.')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'deleteexpenserequest', id });
+      if (!res.ok) throw new Error(res.error || 'Delete failed');
+      _erRequests = _erRequests.filter(x => x.id !== id);
+      erRenderSummary();
+      erApplyFilters();
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+  }
+
+  window.erOpenEdit    = erOpenEdit;
+  window.erCloseEdit   = erCloseEdit;
+  window.erSaveRequest = erSaveRequest;
+  window.erOpenReview  = erOpenReview;
+  window.erCloseReview = erCloseReview;
+  window.erSubmitReview = erSubmitReview;
+  window.erApplyFilters = erApplyFilters;
+  window.erDelete      = erDelete;
+
+  // ════════════════════════════════════════════════════════════════════
   // ═══ NOTICES / DEMANDS (Stage 6.5) ══════════════════════════════════
   // ════════════════════════════════════════════════════════════════════
 
@@ -10131,7 +10704,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.80';
+  const APP_VERSION = '2.1.81';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
