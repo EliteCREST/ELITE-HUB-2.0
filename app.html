@@ -58,14 +58,21 @@
           <span class="nav-item-icon">⭐</span>
           <span class="nav-item-label">Reviews</span>
         </a>
-        <a class="nav-item" data-nav="/legal" href="#/legal">
+        <div class="nav-item nav-expander" id="nav-legal-expander">
           <span class="nav-item-icon">⚖️</span>
           <span class="nav-item-label">Legal</span>
-        </a>
-        <a class="nav-item" data-nav="/notices" href="#/notices">
-          <span class="nav-item-icon">📋</span>
-          <span class="nav-item-label">Notices</span>
-        </a>
+          <span class="nav-expander-chevron">▶</span>
+        </div>
+        <div class="nav-sub nav-collapsed" id="nav-legal-sub">
+          <a class="nav-sub-item" data-nav="/legal" href="#/legal">Legal Cases</a>
+          <a class="nav-sub-item" data-nav="/legal/escalated-complaints" href="#/legal/escalated-complaints">Escalated Complaints</a>
+          <a class="nav-sub-item" data-nav="/legal/lawsuits" href="#/legal/lawsuits">Lawsuits</a>
+          <a class="nav-sub-item" data-nav="/legal/escalated-accounts" href="#/legal/escalated-accounts">Escalated Accounts</a>
+          <a class="nav-sub-item" data-nav="/legal/liens" href="#/legal/liens">Liens</a>
+          <a class="nav-sub-item" data-nav="/legal/delinquent-accounts" href="#/legal/delinquent-accounts">Delinquent Accounts</a>
+          <a class="nav-sub-item" data-nav="/legal/collection-agencies" href="#/legal/collection-agencies">Collection Agencies</a>
+          <a class="nav-sub-item" data-nav="/notices" href="#/notices">Notices</a>
+        </div>
         <a class="nav-item" data-nav="/expenses" href="#/expenses">
           <span class="nav-item-icon">💰</span>
           <span class="nav-item-label">Expense Requests</span>
@@ -73,6 +80,10 @@
         <a class="nav-item" data-nav="/suppliers" href="#/suppliers">
           <span class="nav-item-icon">🏢</span>
           <span class="nav-item-label">Suppliers</span>
+        </a>
+        <a class="nav-item" data-nav="/permits" href="#/permits">
+          <span class="nav-item-icon">📄</span>
+          <span class="nav-item-label">Contractor Registrations</span>
         </a>
         <a class="nav-item" href="https://elitecrest.github.io/2026_Pricing/PricingApp.html" target="_blank" rel="noopener">
           <span class="nav-item-icon">💲</span>
@@ -1810,6 +1821,14 @@
   // Regions nav expander
   document.addEventListener('click', (e) => {
     const expander = e.target.closest('#nav-regions-expander');
+    if (expander) {
+      expander.classList.toggle('open');
+    }
+  });
+
+  // Legal nav expander
+  document.addEventListener('click', (e) => {
+    const expander = e.target.closest('#nav-legal-expander');
     if (expander) {
       expander.classList.toggle('open');
     }
@@ -9976,6 +9995,423 @@
     return `<span style="display:inline-block;padding:2px 8px;font-size:10px;font-weight:800;border-radius:3px;background:#fff;color:#1B2A4A;border:1px solid #1B2A4A;">${_scEscHtml(p)}</span>`;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  //  PERMIT REQUESTS  (Stage 6.5)
+  //  All 27 users can submit. Field users see only their region's records.
+  //  Compliance team (angel/sam/sara/emma/carlynn) and super_admin see all.
+  //  Delete is restricted to isPrivileged() users (compliance + jaida + angel).
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let _prRecords = [];   // all permit records fetched this session
+  let _prLoaded  = false;
+
+  const PR_BRANDS = [
+    'Universal Roofing, LLC',
+    'Wildwood Roofing & Construction, Inc',
+    'Reimagine Roofing & Construction, LLC',
+    'Aspen Exteriors, Inc',
+    'Grove Exteriors, LLC dba 123 Exteriors',
+    'Elite',
+    'Accuserve',
+  ];
+
+  const PR_REGIONS = [
+    'RE01 — New Mexico',
+    'RE02 — Arizona',
+    'RE03 — Minnesota',
+    'RE04 — Wisconsin',
+    'RE05 — Illinois',
+    'RE06 — Missouri',
+    'RE07 — Indiana',
+    'RE08 — Ohio',
+    'RE09 — Pennsylvania',
+    'RE10 — Other',
+  ];
+
+  function _prEsc(s) { return escapeHtml ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function _prCanDelete() { return isPrivileged(getLoggedInUser()); }
+  function _prCanSeeAll() { return isComplianceTeam(getLoggedInUser()); }
+
+  route('/permits', () => {
+    const me = getLoggedInUser();
+    const canSeeAll = _prCanSeeAll();
+    const regionLabel = canSeeAll ? 'All regions' : (me.regions || 'your region');
+
+    return `
+      <div class="view" id="pr-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Contractor Registrations</h1>
+            <p class="view-sub" id="pr-sub">Loading…</p>
+          </div>
+          <button class="btn btn-primary" onclick="prOpenForm()">+ New Request</button>
+        </div>
+
+        <!-- FILTER BAR -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input type="text" id="pr-search" placeholder="Search jurisdiction, brand, notes…"
+              autocomplete="off"
+              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="prApplyFilters()">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+          </div>
+          ${canSeeAll ? `
+          <select id="pr-f-region" onchange="prApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Regions</option>
+            ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
+          </select>
+          <select id="pr-f-brand" onchange="prApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Brands</option>
+            ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
+          </select>` : ''}
+          <select id="pr-f-pure" onchange="prApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">PURE: All</option>
+            <option value="Yes">PURE: Yes</option>
+            <option value="No">PURE: No</option>
+          </select>
+        </div>
+
+        <!-- TABLE -->
+        <div id="pr-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
+          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+        </div>
+
+        <!-- SUBMIT FORM MODAL -->
+        <div id="pr-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:50;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
+          <div style="background:var(--surface,#fff);width:100%;max-width:720px;border-radius:8px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+            <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+              <span style="font-size:13px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">Contractor Registration / License Request</span>
+              <button onclick="prCloseForm()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+            </div>
+            <div style="padding:20px 24px;" id="pr-form-body">
+              <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Fields marked <span style="color:var(--danger)">*</span> are required.</p>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 16px;">
+
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requestor Name <span style="color:var(--danger)">*</span></label>
+                  <input type="text" id="pr-f-name" autocomplete="off"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                  <div id="pr-e-name" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Brand <span style="color:var(--danger)">*</span></label>
+                  <select id="pr-f-brand"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                    <option value="">— Select —</option>
+                    ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
+                  </select>
+                  <div id="pr-e-brand" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Date Submitted <span style="color:var(--danger)">*</span></label>
+                  <input type="date" id="pr-f-date"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                  <div id="pr-e-date" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 2;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Region <span style="color:var(--danger)">*</span></label>
+                  <select id="pr-f-region"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                    <option value="">— Select region —</option>
+                    ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
+                  </select>
+                  <div id="pr-e-region" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">PURE <span style="color:var(--danger)">*</span></label>
+                  <div style="display:flex;gap:16px;padding:8px 0;">
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="pr-pure" value="Yes" style="accent-color:var(--blue);"> Yes</label>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="pr-pure" value="No" style="accent-color:var(--blue);"> No</label>
+                  </div>
+                  <div id="pr-e-pure" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Jurisdiction <span style="color:var(--danger)">*</span></label>
+                  <input type="text" id="pr-f-jurisdiction" placeholder="City, county, or municipality" autocomplete="off"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                  <div id="pr-e-jurisdiction" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requirements <span style="color:var(--danger)">*</span></label>
+                  <textarea id="pr-f-requirements" rows="3" placeholder="Describe permit requirements for this jurisdiction…"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
+                  <div id="pr-e-requirements" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Website</label>
+                  <input type="url" id="pr-f-website" placeholder="https://…" autocomplete="off"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                  <div id="pr-e-website" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Phone</label>
+                  <input type="tel" id="pr-f-phone" placeholder="(000) 000-0000" autocomplete="off"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                  <div style="min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Email</label>
+                  <input type="email" id="pr-f-email" placeholder="contact@example.com" autocomplete="off"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+                  <div id="pr-e-email" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
+                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Notes</label>
+                  <textarea id="pr-f-notes" rows="2" placeholder="Any additional context…"
+                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
+                </div>
+
+              </div>
+            </div>
+            <div style="padding:12px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);position:sticky;bottom:0;">
+              <button class="btn btn-ghost btn-sm" onclick="prCloseForm()">Cancel</button>
+              <button class="btn btn-primary btn-sm" id="pr-submit-btn" onclick="prSubmit()">Submit Request</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }, {
+    title: 'Contractor Registrations',
+    onAfterRender: () => {
+      prSetDefaultDate();
+      prLoad();
+    }
+  });
+
+  function prSetDefaultDate() {
+    const d = document.getElementById('pr-f-date');
+    if (d) d.value = new Date().toISOString().split('T')[0];
+  }
+
+  function prOpenForm() {
+    const bd = document.getElementById('pr-modal-backdrop');
+    if (!bd) return;
+    bd.style.display = 'flex';
+    prSetDefaultDate();
+  }
+
+  function prCloseForm() {
+    const bd = document.getElementById('pr-modal-backdrop');
+    if (bd) bd.style.display = 'none';
+    prResetForm();
+  }
+
+  function prResetForm() {
+    ['pr-f-name','pr-f-brand','pr-f-region','pr-f-jurisdiction','pr-f-requirements','pr-f-website','pr-f-phone','pr-f-email','pr-f-notes'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = el.tagName === 'SELECT' ? '' : (id === 'pr-f-date' ? new Date().toISOString().split('T')[0] : ''); el.style.borderColor = ''; }
+    });
+    document.querySelectorAll('input[name="pr-pure"]').forEach(r => r.checked = false);
+    ['name','brand','region','date','jurisdiction','requirements','website','email','pure'].forEach(id => {
+      const el = document.getElementById('pr-e-' + id);
+      if (el) el.textContent = '';
+    });
+    prSetDefaultDate();
+  }
+
+  function prSetErr(field, msg) {
+    const el = document.getElementById('pr-e-' + field);
+    const inp = document.getElementById('pr-f-' + field);
+    if (el) el.textContent = msg;
+    if (inp) inp.style.borderColor = msg ? 'var(--danger)' : '';
+  }
+
+  function prValidate() {
+    let ok = true;
+    [['name','Name is required'],['brand','Select a brand'],['date','Date is required'],
+     ['region','Select a region'],['jurisdiction','Jurisdiction is required'],
+     ['requirements','Requirements are required']].forEach(([f, msg]) => {
+      const el = document.getElementById('pr-f-' + f);
+      const val = el ? el.value.trim() : '';
+      if (!val) { prSetErr(f, msg); ok = false; } else prSetErr(f, '');
+    });
+    const pure = document.querySelector('input[name="pr-pure"]:checked');
+    if (!pure) { prSetErr('pure', 'Select Yes or No'); ok = false; } else prSetErr('pure', '');
+    const email = (document.getElementById('pr-f-email') || {}).value || '';
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { prSetErr('email', 'Invalid email'); ok = false; } else prSetErr('email', '');
+    const website = (document.getElementById('pr-f-website') || {}).value || '';
+    if (website.trim() && !/^https?:\/\/.+/.test(website.trim())) { prSetErr('website', 'Must start with https://'); ok = false; } else prSetErr('website', '');
+    return ok;
+  }
+
+  async function prSubmit() {
+    if (!prValidate()) return;
+    const btn = document.getElementById('pr-submit-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+    const me = getLoggedInUser();
+    const payload = {
+      action:        'savePermitRequest',
+      submitted_by:  me.username,
+      name:          document.getElementById('pr-f-name').value.trim(),
+      brand:         document.getElementById('pr-f-brand').value,
+      region:        document.getElementById('pr-f-region').value,
+      date:          document.getElementById('pr-f-date').value,
+      jurisdiction:  document.getElementById('pr-f-jurisdiction').value.trim(),
+      pure:          (document.querySelector('input[name="pr-pure"]:checked') || {}).value || '',
+      requirements:  document.getElementById('pr-f-requirements').value.trim(),
+      website:       document.getElementById('pr-f-website').value.trim(),
+      phone:         document.getElementById('pr-f-phone').value.trim(),
+      email:         document.getElementById('pr-f-email').value.trim(),
+      notes:         document.getElementById('pr-f-notes').value.trim(),
+    };
+    try {
+      const res = await api({}, 'POST', payload);
+      if (res && res.status === 'ok') {
+        prCloseForm();
+        _prLoaded = false;
+        prLoad();
+        if (typeof showToast === 'function') showToast('Request submitted!', 'success');
+      } else {
+        alert('Save failed: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit Request'; }
+    }
+  }
+
+  async function prLoad() {
+    const list = document.getElementById('pr-list');
+    if (!list) return;
+    if (_prLoaded) { prApplyFilters(); return; }
+    list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>';
+    try {
+      const me = getLoggedInUser();
+      const params = { resource: 'permitRequests' };
+      if (!_prCanSeeAll()) params.region = me.regions || '';
+      const res = await api(params);
+      _prRecords = res.records || [];
+      _prLoaded = true;
+      prApplyFilters();
+      const sub = document.getElementById('pr-sub');
+      if (sub) sub.textContent = _prRecords.length + ' record' + (_prRecords.length !== 1 ? 's' : '');
+    } catch (e) {
+      if (list) list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load: ${_prEsc(e.message)}</div>`;
+    }
+  }
+
+  function prApplyFilters() {
+    const q      = (document.getElementById('pr-search')   || {}).value || '';
+    const region = (document.getElementById('pr-f-region') || {}).value || '';
+    const brand  = (document.getElementById('pr-f-brand')  || {}).value || '';
+    const pure   = (document.getElementById('pr-f-pure')   || {}).value || '';
+    const ql = q.toLowerCase();
+
+    let rows = _prRecords.filter(r => {
+      if (region && r.region !== region) return false;
+      if (brand  && r.brand  !== brand)  return false;
+      if (pure   && r.pure   !== pure)   return false;
+      if (ql) {
+        const hay = [r.jurisdiction, r.brand, r.region, r.name, r.requirements, r.notes, r.email].join(' ').toLowerCase();
+        if (!hay.includes(ql)) return false;
+      }
+      return true;
+    });
+    prRenderTable(rows);
+  }
+
+  function prRenderTable(rows) {
+    const list = document.getElementById('pr-list');
+    if (!list) return;
+    const canDel = _prCanDelete();
+    const canSeeAll = _prCanSeeAll();
+
+    if (!rows.length) {
+      list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">No permit requests found.</div>';
+      return;
+    }
+
+    const cols = [
+      { label: '#',            w: '40px'  },
+      { label: 'Date',         w: '96px'  },
+      { label: 'Requestor',    w: '130px' },
+      { label: 'Brand',        w: '160px' },
+      { label: 'Region',       w: '120px' },
+      { label: 'Jurisdiction', w: '130px' },
+      { label: 'PURE',         w: '60px'  },
+      { label: 'Requirements', w: ''      },
+      { label: 'Website',      w: '70px'  },
+      { label: 'Phone',        w: '110px' },
+      { label: 'Email',        w: '140px' },
+      { label: 'Notes',        w: '130px' },
+    ];
+    if (canDel) cols.push({ label: '', w: '60px' });
+
+    const thStyle = 'padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;color:#fff;';
+    const thead = `<thead style="background:var(--navy);position:sticky;top:0;z-index:2;"><tr>${
+      cols.map(c => `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`).join('')
+    }</tr></thead>`;
+
+    const tdBase = 'padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px;';
+
+    const tbody = rows.map((r, i) => {
+      const pureCell = r.pure === 'Yes'
+        ? `<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:700;background:#E3F0FF;color:var(--blue);">Yes</span>`
+        : `<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:700;background:#F0F0F0;color:var(--muted);">No</span>`;
+      const websiteCell = r.website
+        ? `<a href="${_prEsc(r.website)}" target="_blank" style="color:var(--blue);font-size:11px;text-decoration:none;">Link ↗</a>`
+        : '';
+      const delCell = canDel
+        ? `<td style="${tdBase}"><button onclick="prDelete('${_prEsc(r.row_index)}')" style="background:none;border:1px solid #e0b0b0;color:var(--danger);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;">Del</button></td>`
+        : '';
+      return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
+        <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
+        <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
+        <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.region)}</td>
+        <td style="${tdBase}font-weight:600;">${_prEsc(r.jurisdiction)}</td>
+        <td style="${tdBase}">${pureCell}</td>
+        <td style="${tdBase}min-width:180px;">${_prEsc(r.requirements)}</td>
+        <td style="${tdBase}">${websiteCell}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.phone)}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.email)}</td>
+        <td style="${tdBase}min-width:100px;font-size:11px;">${_prEsc(r.notes)}</td>
+        ${delCell}
+      </tr>`;
+    }).join('');
+
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">${thead}<tbody>${tbody}</tbody></table>`;
+  }
+
+  async function prDelete(rowIndex) {
+    if (!_prCanDelete()) return;
+    if (!confirm('Delete this permit request? This cannot be undone.')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'deletePermitRequest', row_index: rowIndex });
+      if (res && res.status === 'ok') {
+        _prLoaded = false;
+        prLoad();
+        if (typeof showToast === 'function') showToast('Deleted.', 'success');
+      } else {
+        alert('Delete failed: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  END PERMIT REQUESTS
+  // ─────────────────────────────────────────────────────────────────────────
+
   route('/suppliers', () => {
     return `
       <div class="view" id="sc-view">
@@ -10729,7 +11165,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.83';
+  const APP_VERSION = '2.1.85';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
