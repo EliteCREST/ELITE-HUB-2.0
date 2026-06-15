@@ -11165,7 +11165,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.85';
+  const APP_VERSION = '2.1.86';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
@@ -11182,12 +11182,7 @@
       const liveVersion = data && data.version;
       if (liveVersion && liveVersion !== APP_VERSION) {
         console.log('[Elite Hub] Version mismatch — live: ' + liveVersion + ' this page: ' + APP_VERSION);
-        // Clear all caches then reload to get the fresh version
-        if ('caches' in window) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map(k => caches.delete(k)));
-        }
-        location.reload(true);
+        // Log only — do not reload (prevents infinite loop if version.json is stale)
       }
     } catch (e) {
       // Network error — fail silently

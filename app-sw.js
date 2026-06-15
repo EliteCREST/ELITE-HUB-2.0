@@ -4,7 +4,7 @@
    Everything else: stale-while-revalidate.
    ═══════════════════════════════════════════════════════════════════ */
 
-const APP_VERSION = '2.1.85';
+const APP_VERSION = '2.1.86';
 const CACHE_NAME = 'elite-hub-2.0-' + APP_VERSION;
 
 // Never cache these — always fetch fresh from network
