@@ -10645,6 +10645,7 @@
     const cols = [
       { label: '#',            w: '40px'  },
       { label: 'Status',       w: '96px'  },
+      { label: 'Action',       w: '110px' },
       { label: 'Date',         w: '96px'  },
       { label: 'Requestor',    w: '130px' },
       { label: 'Brand',        w: '160px' },
@@ -10676,9 +10677,14 @@
       const delCell = canDel
         ? `<td style="${tdBase}"><button onclick="orDelete('${_prEsc(r.row_index)}')" style="background:none;border:1px solid #e0b0b0;color:var(--danger);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;">Del</button></td>`
         : '';
+      const st = String(r.status || 'New').toLowerCase();
+      const actLabel = st === 'new' ? 'Research' : (st === 'researched' ? 'View / Edit' : 'View');
+      const actBg = st === 'new' ? 'var(--navy)' : 'var(--blue)';
+      const actionCell = `<td style="${tdBase}"><button onclick="orOpenResearch('${_prEsc(r.id)}')" style="background:${actBg};border:none;color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;">${actLabel}</button></td>`;
       return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
         <td style="${tdBase}">${_orStatusBadge(r.status)}</td>
+        ${actionCell}
         <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
         <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
@@ -10711,6 +10717,287 @@
       }
     } catch (e) {
       alert('Network error: ' + e.message);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  RESEARCH MODAL (Chunk 2) — opens from Open Registrations action button
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let _orResearchPermitId = null;   // permit id currently open in the research modal
+  let _orResearchStatus   = 'New';  // status of the permit currently open
+
+  // Toggle group definitions — mirror the uploaded SubmissionForm layout
+  const _OR_GROUPS = [
+    { section: 'License Type', groups: [
+      { key: 'contractor_license',       label: 'Contractor License',     mode: 'multi',  opts: ['New', 'Renewal'] },
+      { key: 'business_license',         label: 'Business License',       mode: 'multi',  opts: ['New', 'Renewal'] },
+      { key: 'contractor_registration',  label: 'Contractor Registration',mode: 'multi',  opts: ['New', 'Renewal'] },
+    ]},
+    { section: 'Bonds & Insurance', groups: [
+      { key: 'bond', label: 'Bond', sub: '(none required)', mode: 'multi', gold: true, opts: ['Original', 'Electronic', 'Special Bond'] },
+      { key: 'coi',  label: 'COI',  sub: '(choose one)',    mode: 'single', opts: ['General', 'Spec Req', 'Additional Insured'] },
+    ]},
+    { section: 'Payment', groups: [
+      { key: 'payment_status', label: 'Status', mode: 'single', opts: ['Pending', 'Paid'] },
+      { key: 'payment_method', label: 'Method', mode: 'single', opts: ['Check', 'In Person', 'Phone CC', 'Online CC', 'Other'] },
+    ]},
+    { section: 'Documents Included', groups: [
+      { key: 'documents_included',     label: 'Items', sub: '(none required)', mode: 'multi', opts: ['Driver License','Check Request','Other Certifications','References','Application','State License','Wet Signatures','Test Results','Other'] },
+      { key: 'submission_form_method', label: 'Submission Form Method', mode: 'single', opts: ['Email', 'Mail', 'In Person'] },
+    ]},
+  ];
+
+  function _orTogGroupHTML(g) {
+    const subTxt = g.sub ? ` <span style="font-size:11px;color:var(--muted);font-weight:normal;text-transform:none;">${g.sub}</span>` : '';
+    const btns = g.opts.map(o =>
+      `<button type="button" class="or-tog${g.gold ? ' gold' : ''}" data-key="${g.key}" data-mode="${g.mode}" data-val="${_prEsc(o)}" aria-pressed="false"
+         onclick="orToggle(this)"
+         style="border:1.5px solid var(--border);background:#fff;color:var(--text);padding:7px 13px;border-radius:7px;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700;">${_prEsc(o)}</button>`
+    ).join('');
+    return `<div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:bold;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">${_prEsc(g.label)}${subTxt}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;" data-group="${g.key}">${btns}</div>
+    </div>`;
+  }
+
+  function _orSectionHTML(s) {
+    return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
+      <div style="background:#fafbfe;border-bottom:1px solid var(--border);padding:10px 16px;">
+        <h3 style="margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);">${_prEsc(s.section)}</h3>
+        <div style="height:2px;background:var(--blue);margin-top:5px;width:48px;"></div>
+      </div>
+      <div style="padding:14px 16px;">${s.groups.map(_orTogGroupHTML).join('')}</div>
+    </div>`;
+  }
+
+  function orToggle(btn) {
+    const mode = btn.dataset.mode;
+    const on = btn.getAttribute('aria-pressed') === 'true';
+    if (mode === 'single') {
+      const wrap = btn.closest('[data-group]');
+      if (wrap) wrap.querySelectorAll('.or-tog').forEach(b => { b.setAttribute('aria-pressed', 'false'); _orStyleTog(b); });
+      btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    } else {
+      btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    }
+    _orStyleTog(btn);
+  }
+
+  function _orStyleTog(b) {
+    const on = b.getAttribute('aria-pressed') === 'true';
+    const gold = b.classList.contains('gold');
+    if (on && gold) {
+      b.style.background = 'var(--gold,#C9A961)'; b.style.borderColor = 'var(--gold,#C9A961)'; b.style.color = 'var(--navy)';
+    } else if (on) {
+      b.style.background = 'var(--blue)'; b.style.borderColor = 'var(--blue)'; b.style.color = '#fff';
+    } else {
+      b.style.background = '#fff'; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text)';
+    }
+  }
+
+  function _orGetGroupValue(key, mode) {
+    const btns = document.querySelectorAll(`.or-tog[data-key="${key}"][aria-pressed="true"]`);
+    const vals = Array.from(btns).map(b => b.dataset.val);
+    return mode === 'single' ? (vals[0] || '') : vals.join(', ');
+  }
+
+  function _orSetGroupValue(key, value) {
+    const want = String(value || '').split(',').map(s => s.trim()).filter(Boolean);
+    document.querySelectorAll(`.or-tog[data-key="${key}"]`).forEach(b => {
+      const on = want.indexOf(b.dataset.val) >= 0;
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      _orStyleTog(b);
+    });
+  }
+
+  function orOpenResearch(permitId) {
+    _orResearchPermitId = permitId;
+    const rec = (_orRecords || []).find(r => String(r.id) === String(permitId)) || {};
+    _orResearchStatus = String(rec.status || 'New');
+
+    const dateField = (id, label) =>
+      `<div><label style="display:block;font-size:11px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">${label}</label>
+        <input type="date" id="${id}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;"></div>`;
+
+    const submittedAlready = _orResearchStatus.toLowerCase() === 'submitted' || _orResearchStatus.toLowerCase() === 'closed';
+    const canSubmitLicense = _orResearchStatus.toLowerCase() === 'researched' || submittedAlready;
+
+    const body = `
+      ${_OR_GROUPS.map(_orSectionHTML).join('')}
+
+      <!-- Dates & Notes -->
+      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
+        <div style="background:#fafbfe;border-bottom:1px solid var(--border);padding:10px 16px;">
+          <h3 style="margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);">Dates &amp; Notes</h3>
+          <div style="height:2px;background:var(--blue);margin-top:5px;width:48px;"></div>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;">
+            ${dateField('or-d-requested','Requested Date')}
+            ${dateField('or-d-reqreceived','Request Received Date')}
+            ${dateField('or-d-submission','Submission Date')}
+            ${dateField('or-d-received','Received Date')}
+          </div>
+          <div style="margin-top:13px;">
+            <label style="display:block;font-size:11px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Notes</label>
+            <textarea id="or-notes" placeholder="Add any relevant notes…" style="width:100%;padding:9px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;resize:vertical;min-height:70px;"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- License Submitted (starts grey; greens when 'Submitted' clicked) -->
+      <div id="or-license-card" style="background:#fff;border:2px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
+        <div id="or-license-head" style="background:#fafbfe;border-bottom:1px solid var(--border);padding:10px 16px;">
+          <h3 id="or-license-title" style="margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);">License Submitted</h3>
+          <div id="or-license-rule" style="height:2px;background:var(--blue);margin-top:5px;width:48px;"></div>
+        </div>
+        <div style="padding:14px 16px;">
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+            <div style="flex:1;min-width:220px;">
+              <label style="display:block;font-size:11px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">License Submitted Date</label>
+              <input type="date" id="or-d-license" disabled style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;color:var(--text);background:#f4f6fa;">
+            </div>
+            <button type="button" id="or-license-btn" onclick="orMarkSubmitted()" ${canSubmitLicense ? '' : 'disabled'}
+              style="background:${canSubmitLicense ? 'var(--navy)' : '#cbd3e0'};border:none;color:#fff;font-size:13px;font-weight:bold;padding:10px 18px;border-radius:8px;cursor:${canSubmitLicense ? 'pointer' : 'not-allowed'};font-family:inherit;">Submitted</button>
+          </div>
+          <p id="or-license-note" style="font-size:11px;color:var(--muted);margin:8px 0 0;">${canSubmitLicense ? 'Click “Submitted” when the registration packet has gone out.' : 'Available after research is submitted.'}</p>
+        </div>
+      </div>
+    `;
+
+    const footer = `
+      <button class="btn btn-ghost btn-sm" onclick="orCloseResearch()">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="or-research-submit" onclick="orSubmitResearch()">Submit Research</button>
+    `;
+
+    let modal = document.getElementById('or-research-backdrop');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'or-research-backdrop';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;';
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div style="background:var(--surface,#fff);width:100%;max-width:860px;border-radius:10px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+        <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+          <span style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">Compliance Research — ${_prEsc(rec.jurisdiction || '')} ${rec.brand ? '· ' + _prEsc(rec.brand) : ''}</span>
+          <button onclick="orCloseResearch()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <div style="padding:16px 20px;max-height:none;">${body}</div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);position:sticky;bottom:0;">${footer}</div>
+      </div>`;
+    modal.style.display = 'flex';
+
+    // Prefill from saved research (if any)
+    _orPrefillResearch(permitId, submittedAlready);
+  }
+
+  async function _orPrefillResearch(permitId, submittedAlready) {
+    try {
+      const res = await api({ resource: 'permitResearch', permit_id: permitId });
+      const r = res && res.research;
+      if (!r) return;
+      ['contractor_license','business_license','contractor_registration','bond','coi','payment_status','payment_method','documents_included','submission_form_method']
+        .forEach(k => _orSetGroupValue(k, r[k]));
+      const setD = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+      setD('or-d-requested', r.requested_date);
+      setD('or-d-reqreceived', r.request_received_date);
+      setD('or-d-submission', r.submission_date);
+      setD('or-d-received', r.received_date);
+      const notes = document.getElementById('or-notes'); if (notes) notes.value = r.notes || '';
+      // License submitted state
+      const wasSubmitted = String(r.license_submitted || '').toUpperCase() === 'TRUE' || submittedAlready;
+      if (wasSubmitted) {
+        const licD = document.getElementById('or-d-license');
+        if (licD && r.license_submitted_date) licD.value = r.license_submitted_date;
+        _orGreenLicenseCard();
+      }
+    } catch (e) { /* no saved research yet — leave blank */ }
+  }
+
+  function _orGreenLicenseCard() {
+    const card = document.getElementById('or-license-card');
+    const head = document.getElementById('or-license-head');
+    const title = document.getElementById('or-license-title');
+    const rule = document.getElementById('or-license-rule');
+    const note = document.getElementById('or-license-note');
+    const btn  = document.getElementById('or-license-btn');
+    if (card)  card.style.border = '2px solid #1F8A4C';
+    if (head)  { head.style.background = '#dff1e6'; head.style.borderBottomColor = '#bfe2cd'; }
+    if (title) title.style.color = '#1F8A4C';
+    if (rule)  rule.style.background = '#1F8A4C';
+    if (card)  card.style.background = '#e8f6ee';
+    if (note)  { note.textContent = 'Form Submitted'; note.style.color = '#1F8A4C'; note.style.fontWeight = '700'; }
+    if (btn)   { btn.disabled = true; btn.style.background = '#1F8A4C'; btn.style.cursor = 'default'; btn.textContent = 'Submitted ✓'; }
+  }
+
+  function orCloseResearch() {
+    const modal = document.getElementById('or-research-backdrop');
+    if (modal) modal.style.display = 'none';
+    _orResearchPermitId = null;
+  }
+
+  function _orCollectResearch() {
+    const v = {};
+    ['contractor_license','business_license','contractor_registration','bond','coi','payment_status','payment_method','documents_included','submission_form_method']
+      .forEach(k => {
+        const mode = document.querySelector(`.or-tog[data-key="${k}"]`)?.dataset.mode || 'multi';
+        v[k] = _orGetGroupValue(k, mode);
+      });
+    v.requested_date        = (document.getElementById('or-d-requested')   || {}).value || '';
+    v.request_received_date = (document.getElementById('or-d-reqreceived') || {}).value || '';
+    v.submission_date       = (document.getElementById('or-d-submission')  || {}).value || '';
+    v.received_date         = (document.getElementById('or-d-received')    || {}).value || '';
+    v.notes                 = (document.getElementById('or-notes')         || {}).value || '';
+    return v;
+  }
+
+  async function orSubmitResearch() {
+    if (!_orResearchPermitId) return;
+    const btn = document.getElementById('or-research-submit');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      const res = await api({}, 'POST', {
+        action: 'savePermitResearch',
+        permit_id: _orResearchPermitId,
+        research: _orCollectResearch(),
+      });
+      if (res && res.status === 'ok') {
+        if (typeof showToast === 'function') showToast('Research submitted.', 'success');
+        orCloseResearch();
+        _orLoaded = false;
+        orLoad();
+      } else {
+        alert('Save failed: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit Research'; }
+    }
+  }
+
+  async function orMarkSubmitted() {
+    if (!_orResearchPermitId) return;
+    const btn = document.getElementById('or-license-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+    try {
+      const res = await api({}, 'POST', { action: 'markPermitSubmitted', permit_id: _orResearchPermitId });
+      if (res && res.status === 'ok') {
+        const licD = document.getElementById('or-d-license');
+        if (licD) { licD.disabled = false; licD.value = res.license_submitted_date || new Date().toISOString().split('T')[0]; }
+        _orGreenLicenseCard();
+        if (typeof showToast === 'function') showToast('Marked as submitted.', 'success');
+        _orLoaded = false;   // refresh list status in background
+        orLoad();
+      } else {
+        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Submitted'; }
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Submitted'; }
     }
   }
 
@@ -11471,7 +11758,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.2.0';
+  const APP_VERSION = '2.2.1';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
