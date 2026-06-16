@@ -10749,25 +10749,25 @@
   ];
 
   function _orTogGroupHTML(g) {
-    const subTxt = g.sub ? ` <span style="font-size:11px;color:var(--muted);font-weight:normal;text-transform:none;">${g.sub}</span>` : '';
+    const subTxt = g.sub ? ` <span style="font-size:10px;color:var(--muted);font-weight:normal;text-transform:none;">${g.sub}</span>` : '';
     const btns = g.opts.map(o =>
       `<button type="button" class="or-tog${g.gold ? ' gold' : ''}" data-key="${g.key}" data-mode="${g.mode}" data-val="${_prEsc(o)}" aria-pressed="false"
          onclick="orToggle(this)"
-         style="border:1.5px solid var(--border);background:#fff;color:var(--text);padding:7px 13px;border-radius:7px;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700;">${_prEsc(o)}</button>`
+         style="border:1.5px solid #b9c2d4;background:#fff;color:var(--text);padding:5px 11px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;font-weight:700;line-height:1.2;">${_prEsc(o)}</button>`
     ).join('');
-    return `<div style="margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:bold;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">${_prEsc(g.label)}${subTxt}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:7px;" data-group="${g.key}">${btns}</div>
+    return `<div style="margin-bottom:10px;break-inside:avoid;">
+      <div style="font-size:10px;font-weight:bold;color:var(--blue);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">${_prEsc(g.label)}${subTxt}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;" data-group="${g.key}">${btns}</div>
     </div>`;
   }
 
   function _orSectionHTML(s) {
-    return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
-      <div style="background:#fafbfe;border-bottom:1px solid var(--border);padding:10px 16px;">
-        <h3 style="margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);">${_prEsc(s.section)}</h3>
-        <div style="height:2px;background:var(--blue);margin-top:5px;width:48px;"></div>
+    return `<div style="background:#fff;border:1px solid #cbd3e0;border-radius:8px;margin-top:10px;overflow:hidden;">
+      <div style="background:#fafbfe;border-bottom:1px solid #cbd3e0;padding:7px 14px;">
+        <h3 style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">${_prEsc(s.section)}</h3>
+        <div style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
       </div>
-      <div style="padding:14px 16px;">${s.groups.map(_orTogGroupHTML).join('')}</div>
+      <div style="padding:11px 14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:6px 22px;">${s.groups.map(_orTogGroupHTML).join('')}</div>
     </div>`;
   }
 
@@ -10792,7 +10792,7 @@
     } else if (on) {
       b.style.background = 'var(--blue)'; b.style.borderColor = 'var(--blue)'; b.style.color = '#fff';
     } else {
-      b.style.background = '#fff'; b.style.borderColor = 'var(--border)'; b.style.color = 'var(--text)';
+      b.style.background = '#fff'; b.style.borderColor = '#b9c2d4'; b.style.color = 'var(--text)';
     }
   }
 
@@ -10817,8 +10817,8 @@
     _orResearchStatus = String(rec.status || 'New');
 
     const dateField = (id, label) =>
-      `<div><label style="display:block;font-size:11px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">${label}</label>
-        <input type="date" id="${id}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;"></div>`;
+      `<div><label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">${label}</label>
+        <input type="date" id="${id}" style="width:100%;padding:6px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;"></div>`;
 
     const submittedAlready = _orResearchStatus.toLowerCase() === 'submitted' || _orResearchStatus.toLowerCase() === 'closed';
     const canSubmitLicense = _orResearchStatus.toLowerCase() === 'researched' || submittedAlready;
@@ -10827,41 +10827,41 @@
       ${_OR_GROUPS.map(_orSectionHTML).join('')}
 
       <!-- Dates & Notes -->
-      <div style="background:#fff;border:1px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
-        <div style="background:#fafbfe;border-bottom:1px solid var(--border);padding:10px 16px;">
-          <h3 style="margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);">Dates &amp; Notes</h3>
-          <div style="height:2px;background:var(--blue);margin-top:5px;width:48px;"></div>
+      <div style="background:#fff;border:1px solid #cbd3e0;border-radius:8px;margin-top:10px;overflow:hidden;">
+        <div style="background:#fafbfe;border-bottom:1px solid #cbd3e0;padding:7px 14px;">
+          <h3 style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">Dates &amp; Notes</h3>
+          <div style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
         </div>
-        <div style="padding:14px 16px;">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;">
+        <div style="padding:11px 14px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;">
             ${dateField('or-d-requested','Requested Date')}
             ${dateField('or-d-reqreceived','Request Received Date')}
             ${dateField('or-d-submission','Submission Date')}
             ${dateField('or-d-received','Received Date')}
           </div>
-          <div style="margin-top:13px;">
-            <label style="display:block;font-size:11px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Notes</label>
-            <textarea id="or-notes" placeholder="Add any relevant notes…" style="width:100%;padding:9px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;resize:vertical;min-height:70px;"></textarea>
+          <div style="margin-top:9px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Notes</label>
+            <textarea id="or-notes" placeholder="Add any relevant notes…" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;resize:vertical;min-height:54px;"></textarea>
           </div>
         </div>
       </div>
 
       <!-- License Submitted (starts grey; greens when 'Submitted' clicked) -->
-      <div id="or-license-card" style="background:#fff;border:2px solid var(--border);border-radius:10px;margin-top:14px;overflow:hidden;">
-        <div id="or-license-head" style="background:#fafbfe;border-bottom:1px solid var(--border);padding:10px 16px;">
-          <h3 id="or-license-title" style="margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);">License Submitted</h3>
-          <div id="or-license-rule" style="height:2px;background:var(--blue);margin-top:5px;width:48px;"></div>
+      <div id="or-license-card" style="background:#fff;border:2px solid #cbd3e0;border-radius:8px;margin-top:10px;overflow:hidden;">
+        <div id="or-license-head" style="background:#fafbfe;border-bottom:1px solid #cbd3e0;padding:7px 14px;">
+          <h3 id="or-license-title" style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">License Submitted</h3>
+          <div id="or-license-rule" style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
         </div>
-        <div style="padding:14px 16px;">
+        <div style="padding:11px 14px;">
           <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
-            <div style="flex:1;min-width:220px;">
-              <label style="display:block;font-size:11px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">License Submitted Date</label>
-              <input type="date" id="or-d-license" disabled style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-family:inherit;font-size:13px;color:var(--text);background:#f4f6fa;">
+            <div style="flex:1;min-width:200px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">License Submitted Date</label>
+              <input type="date" id="or-d-license" disabled style="width:100%;padding:6px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#f4f6fa;">
             </div>
             <button type="button" id="or-license-btn" onclick="orMarkSubmitted()" ${canSubmitLicense ? '' : 'disabled'}
-              style="background:${canSubmitLicense ? 'var(--navy)' : '#cbd3e0'};border:none;color:#fff;font-size:13px;font-weight:bold;padding:10px 18px;border-radius:8px;cursor:${canSubmitLicense ? 'pointer' : 'not-allowed'};font-family:inherit;">Submitted</button>
+              style="background:${canSubmitLicense ? 'var(--navy)' : '#cbd3e0'};border:none;color:#fff;font-size:13px;font-weight:bold;padding:8px 16px;border-radius:7px;cursor:${canSubmitLicense ? 'pointer' : 'not-allowed'};font-family:inherit;">Submitted</button>
           </div>
-          <p id="or-license-note" style="font-size:11px;color:var(--muted);margin:8px 0 0;">${canSubmitLicense ? 'Click “Submitted” when the registration packet has gone out.' : 'Available after research is submitted.'}</p>
+          <p id="or-license-note" style="font-size:10px;color:var(--muted);margin:7px 0 0;">${canSubmitLicense ? 'Click “Submitted” when the registration packet has gone out.' : 'Available after research is submitted.'}</p>
         </div>
       </div>
     `;
@@ -11758,7 +11758,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.2.1';
+  const APP_VERSION = '2.2.2';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
