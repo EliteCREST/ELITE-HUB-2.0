@@ -10457,6 +10457,7 @@
       'new':        'background:#FBF1D9;color:#8A6D1F;font-weight:800;',
       'researched': 'background:#E3F0FF;color:var(--blue);font-weight:700;',  // shown as "Pending"
       'submitted':  'background:#E6F6EC;color:#1F8A4C;font-weight:700;',
+      'active':     'background:#E6F6EC;color:#1F8A4C;font-weight:800;',
       'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
     };
     const css = styles[key] || styles['new'];
@@ -10648,7 +10649,7 @@
       return true;
     });
     // New submissions float to the top so they're easy to spot at a glance
-    const _statusRank = { 'new': 0, 'researched': 1, 'submitted': 2, 'closed': 3 };
+    const _statusRank = { 'new': 0, 'researched': 1, 'submitted': 2, 'active': 3, 'closed': 4 };
     rows.sort((a, b) => {
       const ra = _statusRank[String(a.status || 'New').toLowerCase()] ?? 9;
       const rb = _statusRank[String(b.status || 'New').toLowerCase()] ?? 9;
@@ -10668,6 +10669,7 @@
       'new':        'background:#FBF1D9;color:#8A6D1F;font-weight:800;',
       'researched': 'background:#E3F0FF;color:var(--blue);font-weight:700;',
       'submitted':  'background:#E6F6EC;color:#1F8A4C;font-weight:700;',
+      'active':     'background:#E6F6EC;color:#1F8A4C;font-weight:800;',
       'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
     };
     const css = styles[key] || styles['new'];
@@ -10687,7 +10689,7 @@
     const cols = [
       { label: '#',            w: '40px'  },
       { label: 'Status',       w: '96px'  },
-      { label: 'Action',       w: '110px' },
+      { label: 'Action',       w: '180px' },
       { label: 'Date',         w: '96px'  },
       { label: 'Requestor',    w: '130px' },
       { label: 'Brand',        w: '160px' },
@@ -10722,7 +10724,10 @@
       const st = String(r.status || 'New').toLowerCase();
       const actLabel = st === 'new' ? 'Research' : (st === 'researched' ? 'View / Edit' : 'View');
       const actBg = st === 'new' ? 'var(--navy)' : 'var(--blue)';
-      const actionCell = `<td style="${tdBase}"><button onclick="orOpenResearch('${_prEsc(r.id)}')" style="background:${actBg};border:none;color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;">${actLabel}</button></td>`;
+      const followBtn = st === 'submitted'
+        ? `<button onclick="orOpenFollowup('${_prEsc(r.id)}')" style="background:var(--gold,#C9A961);border:none;color:var(--navy);font-size:10px;font-weight:800;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:5px;">Follow Up</button>`
+        : '';
+      const actionCell = `<td style="${tdBase}white-space:nowrap;"><button onclick="orOpenResearch('${_prEsc(r.id)}')" style="background:${actBg};border:none;color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;">${actLabel}</button>${followBtn}</td>`;
       return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
         <td style="${tdBase}">${_orStatusBadge(r.status)}</td>
@@ -11057,6 +11062,178 @@
       alert('Network error: ' + e.message);
       if (btn) { btn.disabled = false; btn.textContent = 'Submitted'; }
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  FOLLOW-UP MODAL (Chunk 4/5) — 5 auto-saving notes + License Received
+  // ─────────────────────────────────────────────────────────────────────────
+
+  let _orFollowPermitId = null;
+
+  function orOpenFollowup(permitId) {
+    _orFollowPermitId = permitId;
+    const rec = (_orRecords || []).find(r => String(r.id) === String(permitId)) || {};
+
+    const noteRow = (n) =>
+      `<div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <label style="font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">Note ${n}</label>
+          <span id="or-note${n}-date" style="font-size:10px;color:var(--muted);"></span>
+        </div>
+        <textarea id="or-note${n}" rows="2" placeholder="Type a follow-up note…"
+          oninput="orNoteDirty(${n})" onblur="orSaveNote(${n})"
+          style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;resize:vertical;min-height:42px;"></textarea>
+      </div>`;
+
+    const body = `
+      <div style="background:#fff;border:1px solid #cbd3e0;border-radius:8px;overflow:hidden;">
+        <div style="background:#fafbfe;border-bottom:1px solid #cbd3e0;padding:7px 14px;">
+          <h3 style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">Follow-Up Notes</h3>
+          <div style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
+        </div>
+        <div style="padding:13px 14px;">
+          <p style="font-size:11px;color:var(--muted);margin:0 0 11px;">Notes auto-save when you click away. Each note is date-stamped on edit.</p>
+          ${[1,2,3,4,5].map(noteRow).join('')}
+        </div>
+      </div>
+
+      <!-- License Received box -->
+      <div id="or-lr-card" style="background:#fff;border:2px solid #cbd3e0;border-radius:8px;margin-top:12px;overflow:hidden;">
+        <div id="or-lr-head" style="background:#fafbfe;border-bottom:1px solid #cbd3e0;padding:7px 14px;">
+          <h3 id="or-lr-title" style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">License Received</h3>
+          <div id="or-lr-rule" style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
+        </div>
+        <div style="padding:13px 14px;">
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+            <div style="flex:1;min-width:180px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Contractor Number</label>
+              <input type="text" id="or-lr-cnum" autocomplete="off" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+            </div>
+            <div style="flex:1;min-width:160px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Expiration Date</label>
+              <input type="date" id="or-lr-exp" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+            </div>
+            <button type="button" id="or-lr-btn" onclick="orMarkReceived()" style="background:var(--navy);border:none;color:#fff;font-size:13px;font-weight:bold;padding:8px 16px;border-radius:7px;cursor:pointer;font-family:inherit;">Received</button>
+          </div>
+          <p id="or-lr-note" style="font-size:10px;color:var(--muted);margin:8px 0 0;">Enter the contractor number &amp; expiration, then click “Received” to move this to Active Registrations.</p>
+        </div>
+      </div>
+    `;
+
+    let modal = document.getElementById('or-followup-backdrop');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'or-followup-backdrop';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;';
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div style="background:var(--surface,#fff);width:100%;max-width:680px;border-radius:10px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+        <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+          <span style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">Follow-Up — ${_prEsc(rec.jurisdiction || '')} ${rec.brand ? '· ' + _prEsc(rec.brand) : ''}</span>
+          <button onclick="orCloseFollowup()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <div style="padding:16px 20px;">${body}</div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);position:sticky;bottom:0;">
+          <button class="btn btn-primary btn-sm" onclick="orCloseFollowup()">Done</button>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+
+    _orPrefillFollowup(permitId);
+  }
+
+  async function _orPrefillFollowup(permitId) {
+    try {
+      const res = await api({ resource: 'permitResearch', permit_id: permitId });
+      const r = res && res.research;
+      if (!r) return;
+      for (let n = 1; n <= 5; n++) {
+        const ta = document.getElementById('or-note' + n);
+        const dt = document.getElementById('or-note' + n + '-date');
+        if (ta) ta.value = r['note' + n] || '';
+        if (dt && r['note' + n + '_date']) dt.textContent = r['note' + n + '_date'];
+      }
+      const cnum = document.getElementById('or-lr-cnum'); if (cnum) cnum.value = r.contractor_number || '';
+      const exp  = document.getElementById('or-lr-exp');  if (exp && r.license_expiration_date) exp.value = r.license_expiration_date;
+      if (String(r.license_received || '').toUpperCase() === 'TRUE') _orGreenLrCard(r.license_received_date);
+    } catch (e) { /* none yet */ }
+  }
+
+  // Show today's date immediately as the user types (optimistic), real stamp on save
+  function orNoteDirty(n) {
+    const dt = document.getElementById('or-note' + n + '-date');
+    const ta = document.getElementById('or-note' + n);
+    if (dt && ta) dt.textContent = ta.value.trim() ? new Date().toISOString().split('T')[0] : '';
+  }
+
+  let _orNoteSaving = {};
+  async function orSaveNote(n) {
+    if (!_orFollowPermitId) return;
+    const ta = document.getElementById('or-note' + n);
+    if (!ta) return;
+    if (_orNoteSaving[n]) return;
+    _orNoteSaving[n] = true;
+    try {
+      const res = await api({}, 'POST', {
+        action: 'savePermitFollowupNote',
+        permit_id: _orFollowPermitId,
+        which: n,
+        text: ta.value,
+      });
+      const dt = document.getElementById('or-note' + n + '-date');
+      if (res && res.status === 'ok' && dt) dt.textContent = ta.value.trim() ? (res.note_date || '') : '';
+    } catch (e) { /* keep optimistic date; will retry on next blur */ }
+    finally { _orNoteSaving[n] = false; }
+  }
+
+  function _orGreenLrCard(dateStr) {
+    const card = document.getElementById('or-lr-card');
+    const head = document.getElementById('or-lr-head');
+    const title = document.getElementById('or-lr-title');
+    const rule = document.getElementById('or-lr-rule');
+    const note = document.getElementById('or-lr-note');
+    const btn  = document.getElementById('or-lr-btn');
+    if (card) { card.style.border = '2px solid #1F8A4C'; card.style.background = '#e8f6ee'; }
+    if (head) { head.style.background = '#dff1e6'; head.style.borderBottomColor = '#bfe2cd'; }
+    if (title) title.style.color = '#1F8A4C';
+    if (rule)  rule.style.background = '#1F8A4C';
+    if (note)  { note.textContent = 'License received' + (dateStr ? ' on ' + dateStr : '') + ' — moved to Active Registrations.'; note.style.color = '#1F8A4C'; note.style.fontWeight = '700'; }
+    if (btn)   { btn.disabled = true; btn.style.background = '#1F8A4C'; btn.style.cursor = 'default'; btn.textContent = 'Received ✓'; }
+  }
+
+  async function orMarkReceived() {
+    if (!_orFollowPermitId) return;
+    const btn = document.getElementById('or-lr-btn');
+    const cnum = (document.getElementById('or-lr-cnum') || {}).value || '';
+    const exp  = (document.getElementById('or-lr-exp')  || {}).value || '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      const res = await api({}, 'POST', {
+        action: 'markPermitReceived',
+        permit_id: _orFollowPermitId,
+        contractor_number: cnum,
+        expiration_date: exp,
+      });
+      if (res && res.status === 'ok') {
+        _orGreenLrCard(res.license_received_date);
+        if (typeof showToast === 'function') showToast('License received — moved to Active Registrations.', 'success');
+        _orLoaded = false;
+        orLoad();
+      } else {
+        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Received'; }
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Received'; }
+    }
+  }
+
+  function orCloseFollowup() {
+    const modal = document.getElementById('or-followup-backdrop');
+    if (modal) modal.style.display = 'none';
+    _orFollowPermitId = null;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -11816,7 +11993,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.2.9';
+  const APP_VERSION = '2.3.0';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
