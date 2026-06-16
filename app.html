@@ -83,10 +83,12 @@
         </a>
         <div class="nav-item nav-expander" id="nav-registrations-expander">
           <span class="nav-item-icon">📄</span>
-          <span class="nav-item-label">Contractor Registrations</span>
+          <span class="nav-item-label">Registrations/Licenses</span>
           <span class="nav-expander-chevron">▶</span>
         </div>
         <div class="nav-sub nav-collapsed" id="nav-registrations-sub">
+          <a class="nav-sub-item" data-nav="/registrations/request" href="#/registrations/request">Registration/License Request</a>
+          <a class="nav-sub-item" data-nav="/registrations" href="#/registrations">Contractor Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/open" href="#/registrations/open" id="nav-reg-open" style="display:none;">Open Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/closed" href="#/registrations/closed" id="nav-reg-closed" style="display:none;">Closed Registrations</a>
         </div>
@@ -10054,6 +10056,99 @@
   function _prCanDelete() { return isPrivileged(getLoggedInUser()); }
   function _prCanSeeAll() { return isComplianceTeam(getLoggedInUser()); }
 
+  // Shared form fields markup (used by the inline Registration/License Request page)
+  function prFormFieldsHTML() {
+    return `
+      <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Fields marked <span style="color:var(--danger)">*</span> are required.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 16px;">
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requestor Name <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="pr-f-name" autocomplete="off"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+          <div id="pr-e-name" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Brand <span style="color:var(--danger)">*</span></label>
+          <select id="pr-f-brand"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            <option value="">— Select —</option>
+            ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
+          </select>
+          <div id="pr-e-brand" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Date Submitted <span style="color:var(--danger)">*</span></label>
+          <input type="date" id="pr-f-date"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+          <div id="pr-e-date" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 2;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Region <span style="color:var(--danger)">*</span></label>
+          <select id="pr-f-region"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            <option value="">— Select region —</option>
+            ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
+          </select>
+          <div id="pr-e-region" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">PURE <span style="color:var(--danger)">*</span></label>
+          <div style="display:flex;gap:16px;padding:8px 0;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="pr-pure" value="Yes" style="accent-color:var(--blue);"> Yes</label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="pr-pure" value="No" style="accent-color:var(--blue);"> No</label>
+          </div>
+          <div id="pr-e-pure" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Jurisdiction <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="pr-f-jurisdiction" placeholder="City, county, or municipality" autocomplete="off"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+          <div id="pr-e-jurisdiction" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requirements <span style="color:var(--danger)">*</span></label>
+          <textarea id="pr-f-requirements" rows="3" placeholder="Describe permit requirements for this jurisdiction…"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
+          <div id="pr-e-requirements" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Website</label>
+          <input type="url" id="pr-f-website" placeholder="https://…" autocomplete="off"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+          <div id="pr-e-website" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Phone</label>
+          <input type="tel" id="pr-f-phone" placeholder="(000) 000-0000" autocomplete="off"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+          <div style="min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Email</label>
+          <input type="email" id="pr-f-email" placeholder="contact@example.com" autocomplete="off"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+          <div id="pr-e-email" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Notes</label>
+          <textarea id="pr-f-notes" rows="2" placeholder="Any additional context…"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
+        </div>
+
+      </div>`;
+  }
+
   route('/registrations', () => {
     const me = getLoggedInUser();
     const canSeeAll = _prCanSeeAll();
@@ -10066,7 +10161,7 @@
             <h1 class="view-title">Contractor Registrations</h1>
             <p class="view-sub" id="pr-sub">Loading…</p>
           </div>
-          <button class="btn btn-primary" onclick="prOpenForm()">+ New Request</button>
+          <a class="btn btn-primary" href="#/registrations/request">+ New Request</a>
         </div>
 
         <!-- FILTER BAR -->
@@ -10102,116 +10197,44 @@
           <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
         </div>
 
-        <!-- SUBMIT FORM MODAL -->
-        <div id="pr-modal-backdrop" style="display:none;position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:50;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;">
-          <div style="background:var(--surface,#fff);width:100%;max-width:720px;border-radius:8px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
-            <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
-              <span style="font-size:13px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">Contractor Registration / License Request</span>
-              <button onclick="prCloseForm()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
-            </div>
-            <div style="padding:20px 24px;" id="pr-form-body">
-              <p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Fields marked <span style="color:var(--danger)">*</span> are required.</p>
-              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 16px;">
-
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requestor Name <span style="color:var(--danger)">*</span></label>
-                  <input type="text" id="pr-f-name" autocomplete="off"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                  <div id="pr-e-name" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Brand <span style="color:var(--danger)">*</span></label>
-                  <select id="pr-f-brand"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                    <option value="">— Select —</option>
-                    ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
-                  </select>
-                  <div id="pr-e-brand" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Date Submitted <span style="color:var(--danger)">*</span></label>
-                  <input type="date" id="pr-f-date"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                  <div id="pr-e-date" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 2;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Region <span style="color:var(--danger)">*</span></label>
-                  <select id="pr-f-region"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                    <option value="">— Select region —</option>
-                    ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
-                  </select>
-                  <div id="pr-e-region" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">PURE <span style="color:var(--danger)">*</span></label>
-                  <div style="display:flex;gap:16px;padding:8px 0;">
-                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="pr-pure" value="Yes" style="accent-color:var(--blue);"> Yes</label>
-                    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;"><input type="radio" name="pr-pure" value="No" style="accent-color:var(--blue);"> No</label>
-                  </div>
-                  <div id="pr-e-pure" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Jurisdiction <span style="color:var(--danger)">*</span></label>
-                  <input type="text" id="pr-f-jurisdiction" placeholder="City, county, or municipality" autocomplete="off"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                  <div id="pr-e-jurisdiction" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requirements <span style="color:var(--danger)">*</span></label>
-                  <textarea id="pr-f-requirements" rows="3" placeholder="Describe permit requirements for this jurisdiction…"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
-                  <div id="pr-e-requirements" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Website</label>
-                  <input type="url" id="pr-f-website" placeholder="https://…" autocomplete="off"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                  <div id="pr-e-website" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Phone</label>
-                  <input type="tel" id="pr-f-phone" placeholder="(000) 000-0000" autocomplete="off"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                  <div style="min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Email</label>
-                  <input type="email" id="pr-f-email" placeholder="contact@example.com" autocomplete="off"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
-                  <div id="pr-e-email" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-                </div>
-
-                <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
-                  <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Notes</label>
-                  <textarea id="pr-f-notes" rows="2" placeholder="Any additional context…"
-                    style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
-                </div>
-
-              </div>
-            </div>
-            <div style="padding:12px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);position:sticky;bottom:0;">
-              <button class="btn btn-ghost btn-sm" onclick="prCloseForm()">Cancel</button>
-              <button class="btn btn-primary btn-sm" id="pr-submit-btn" onclick="prSubmit()">Submit Request</button>
-            </div>
-          </div>
-        </div>
       </div>
     `;
   }, {
     title: 'Contractor Registrations',
     onAfterRender: () => {
-      prSetDefaultDate();
       prLoad();
+    }
+  });
+
+  // ── Registration / License Request (inline form page) ──
+  route('/registrations/request', () => {
+    return `
+      <div class="view" id="pr-request-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Registration/License Request</h1>
+            <p class="view-sub">Submit a new contractor registration or license request.</p>
+          </div>
+          <a class="btn btn-ghost" href="#/registrations">← Back to Registrations</a>
+        </div>
+
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 1px 4px rgba(27,42,74,.06);overflow:hidden;max-width:820px;">
+          <div style="background:var(--navy);color:#fff;padding:13px 20px;">
+            <span style="font-size:13px;font-weight:900;letter-spacing:1.5px;text-transform:uppercase;">Contractor Registration / License Request</span>
+          </div>
+          <div style="padding:20px 24px;">
+            ${prFormFieldsHTML()}
+          </div>
+          <div style="padding:12px 24px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
+            <button class="btn btn-primary btn-sm" id="pr-submit-btn" onclick="prSubmit()">Submit Request</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }, {
+    title: 'Registration/License Request',
+    onAfterRender: () => {
+      prResetForm();
     }
   });
 
@@ -10294,10 +10317,11 @@
     try {
       const res = await api({}, 'POST', payload);
       if (res && res.status === 'ok') {
-        prCloseForm();
-        _prLoaded = false;
-        prLoad();
-        if (typeof showToast === 'function') showToast('Request submitted!', 'success');
+        const submittedOn = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        if (typeof showToast === 'function') showToast('Your Request Has Been Submitted on ' + submittedOn, 'success');
+        prResetForm();
+        _prLoaded = false;            // force the list to re-fetch
+        location.hash = '#/registrations';
       } else {
         alert('Save failed: ' + (res && res.error ? res.error : 'Unknown error'));
       }
