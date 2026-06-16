@@ -10215,6 +10215,9 @@
           <a class="btn btn-primary" href="#/registrations/request">+ New Request</a>
         </div>
 
+        <!-- COMPLIANCE BANNERS (region-targeted) -->
+        <div id="pr-banners"></div>
+
         <!-- FILTER BAR -->
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
           <div style="position:relative;flex:1;min-width:200px;">
@@ -10254,8 +10257,30 @@
     title: 'Contractor Registrations',
     onAfterRender: () => {
       prLoad();
+      prLoadBanners();
     }
   });
+
+  // Load + render region-targeted compliance banners on Contractor Registrations
+  async function prLoadBanners() {
+    const wrap = document.getElementById('pr-banners');
+    if (!wrap) return;
+    try {
+      const res = await api({ resource: 'banners' });
+      const banners = (res && res.banners) || [];
+      if (!banners.length) { wrap.innerHTML = ''; return; }
+      wrap.innerHTML = banners.map(b => `
+        <div style="display:flex;align-items:flex-start;gap:10px;background:#FBF1D9;border:1px solid #E6D29A;border-left:4px solid var(--gold,#C9A961);border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+          <span style="font-size:16px;line-height:1.2;">📢</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8A6D1F;margin-bottom:2px;">From Compliance</div>
+            <div style="font-size:13px;color:var(--navy);white-space:pre-wrap;">${_prEsc(b.message)}</div>
+          </div>
+        </div>`).join('');
+    } catch (e) {
+      wrap.innerHTML = '';
+    }
+  }
 
   // ── Registration / License Request (inline form page) ──
   route('/registrations/request', () => {
@@ -10589,6 +10614,7 @@
             <h1 class="view-title">Open Registrations</h1>
             <p class="view-sub" id="or-sub">Loading…</p>
           </div>
+          <button class="btn btn-primary" onclick="orOpenBanners()">📢 Banners</button>
         </div>
 
         <!-- FILTER BAR -->
@@ -11336,6 +11362,161 @@
     } catch (e) {
       alert('Network error: ' + e.message);
     }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  BANNER MANAGEMENT (Chunk 7) — region-targeted compliance notices
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const _OR_BANNER_REGIONS = ['MIL','CHI','CLE','AQE','PIT','MIN','PHX','IND','STL'];
+
+  function orOpenBanners() {
+    let modal = document.getElementById('or-banner-backdrop');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'or-banner-backdrop';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;';
+      document.body.appendChild(modal);
+    }
+    const regionChips = _OR_BANNER_REGIONS.map(code =>
+      `<label style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid #b9c2d4;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:#fff;">
+        <input type="checkbox" class="or-ban-region" value="${code}" onchange="orBannerRegionToggle()" style="accent-color:var(--blue);"> ${code}
+      </label>`).join('');
+
+    modal.innerHTML = `
+      <div style="background:var(--surface,#fff);width:100%;max-width:640px;border-radius:10px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+        <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+          <span style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">📢 Compliance Banners</span>
+          <button onclick="orCloseBanners()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <div style="padding:16px 20px;">
+
+          <!-- NEW BANNER -->
+          <div style="background:#fff;border:1px solid #cbd3e0;border-radius:8px;overflow:hidden;">
+            <div style="background:#fafbfe;border-bottom:1px solid #cbd3e0;padding:8px 14px;">
+              <h3 style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">New Banner</h3>
+              <div style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
+            </div>
+            <div style="padding:13px 14px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">Show on these regions</label>
+              <label style="display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border:1.5px solid var(--blue);border-radius:7px;font-size:12px;font-weight:800;cursor:pointer;background:#E3F0FF;color:var(--blue);margin-bottom:8px;">
+                <input type="checkbox" id="or-ban-all" onchange="orBannerAllToggle()" style="accent-color:var(--blue);"> All Regions
+              </label>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;" id="or-ban-region-chips">${regionChips}</div>
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Message</label>
+              <textarea id="or-ban-msg" rows="2" placeholder="Type the banner message…" style="width:100%;padding:8px 10px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;resize:vertical;min-height:50px;"></textarea>
+              <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+                <button class="btn btn-primary btn-sm" id="or-ban-post" onclick="orPostBanner()">Post Banner</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACTIVE BANNERS -->
+          <div style="margin-top:14px;">
+            <h3 style="margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">Active Banners</h3>
+            <div id="or-ban-list"><div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">Loading…</div></div>
+          </div>
+
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
+          <button class="btn btn-ghost btn-sm" onclick="orCloseBanners()">Done</button>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+    orLoadBannerList();
+  }
+
+  // "All Regions" checkbox disables the individual region chips
+  function orBannerAllToggle() {
+    const all = document.getElementById('or-ban-all');
+    const on = all && all.checked;
+    document.querySelectorAll('.or-ban-region').forEach(cb => {
+      if (on) cb.checked = false;
+      cb.disabled = on;
+      cb.closest('label').style.opacity = on ? '0.4' : '1';
+    });
+  }
+  // Checking any region unchecks "All"
+  function orBannerRegionToggle() {
+    const anyChecked = Array.from(document.querySelectorAll('.or-ban-region')).some(cb => cb.checked);
+    const all = document.getElementById('or-ban-all');
+    if (anyChecked && all) all.checked = false;
+  }
+
+  async function orLoadBannerList() {
+    const list = document.getElementById('or-ban-list');
+    if (!list) return;
+    try {
+      const res = await api({ resource: 'allBanners' });
+      const banners = (res && res.banners) || [];
+      if (!banners.length) {
+        list.innerHTML = '<div style="padding:18px;text-align:center;color:var(--muted);font-size:12px;">No active banners.</div>';
+        return;
+      }
+      list.innerHTML = banners.map(b => `
+        <div style="display:flex;align-items:flex-start;gap:10px;background:#FBF1D9;border:1px solid #E6D29A;border-radius:6px;padding:9px 12px;margin-bottom:8px;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#8A6D1F;margin-bottom:3px;">${b.regions === 'ALL' ? 'All Regions' : _prEsc(b.regions)} · ${_prEsc(b.created_at || '')}</div>
+            <div style="font-size:13px;color:var(--navy);white-space:pre-wrap;">${_prEsc(b.message)}</div>
+          </div>
+          <button onclick="orDeleteBanner('${_prEsc(b.id)}')" title="Delete banner" style="background:none;border:1px solid #e0b0b0;color:var(--danger);font-size:13px;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:inherit;line-height:1;">🗑</button>
+        </div>`).join('');
+    } catch (e) {
+      list.innerHTML = `<div style="padding:18px;text-align:center;color:var(--danger);font-size:12px;">Failed to load: ${_prEsc(e.message)}</div>`;
+    }
+  }
+
+  async function orPostBanner() {
+    const msgEl = document.getElementById('or-ban-msg');
+    const msg = msgEl ? msgEl.value.trim() : '';
+    if (!msg) { alert('Please enter a banner message.'); return; }
+    const all = document.getElementById('or-ban-all');
+    let regions;
+    if (all && all.checked) {
+      regions = 'ALL';
+    } else {
+      const picked = Array.from(document.querySelectorAll('.or-ban-region')).filter(cb => cb.checked).map(cb => cb.value);
+      if (!picked.length) { alert('Select All Regions or at least one region.'); return; }
+      regions = picked.join(',');
+    }
+    const btn = document.getElementById('or-ban-post');
+    if (btn) { btn.disabled = true; btn.textContent = 'Posting…'; }
+    try {
+      const res = await api({}, 'POST', { action: 'saveBanner', message: msg, regions: regions });
+      if (res && res.status === 'ok') {
+        if (msgEl) msgEl.value = '';
+        if (all) { all.checked = false; }
+        document.querySelectorAll('.or-ban-region').forEach(cb => { cb.checked = false; cb.disabled = false; cb.closest('label').style.opacity = '1'; });
+        if (typeof showToast === 'function') showToast('Banner posted.', 'success');
+        orLoadBannerList();
+      } else {
+        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Post Banner'; }
+    }
+  }
+
+  async function orDeleteBanner(id) {
+    if (!confirm('Delete this banner? It will stop showing immediately.')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'deleteBanner', id: id });
+      if (res && res.status === 'ok') {
+        orLoadBannerList();
+        if (typeof showToast === 'function') showToast('Banner deleted.', 'success');
+      } else {
+        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    }
+  }
+
+  function orCloseBanners() {
+    const modal = document.getElementById('or-banner-backdrop');
+    if (modal) modal.style.display = 'none';
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -12095,7 +12276,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.3.3';
+  const APP_VERSION = '2.3.4';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
