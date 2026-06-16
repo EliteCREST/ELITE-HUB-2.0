@@ -81,10 +81,15 @@
           <span class="nav-item-icon">🏢</span>
           <span class="nav-item-label">Suppliers</span>
         </a>
-        <a class="nav-item" data-nav="/permits" href="#/permits">
+        <div class="nav-item nav-expander" id="nav-registrations-expander">
           <span class="nav-item-icon">📄</span>
           <span class="nav-item-label">Contractor Registrations</span>
-        </a>
+          <span class="nav-expander-chevron">▶</span>
+        </div>
+        <div class="nav-sub nav-collapsed" id="nav-registrations-sub">
+          <a class="nav-sub-item" data-nav="/registrations/open" href="#/registrations/open" id="nav-reg-open" style="display:none;">Open Registrations</a>
+          <a class="nav-sub-item" data-nav="/registrations/closed" href="#/registrations/closed" id="nav-reg-closed" style="display:none;">Closed Registrations</a>
+        </div>
         <a class="nav-item" href="https://elitecrest.github.io/2026_Pricing/PricingApp.html" target="_blank" rel="noopener">
           <span class="nav-item-icon">💲</span>
           <span class="nav-item-label">Pricing ↗</span>
@@ -1799,6 +1804,14 @@
         if ($('#menu-admin')) $('#menu-admin').style.display = '';
       }
     }
+
+    // Open/Closed Registrations sub-links: Emma, Sara, Angel only
+    if (['emma', 'sara', 'angel'].includes((me.username || '').toLowerCase())) {
+      const openLink   = $('#nav-reg-open');
+      const closedLink = $('#nav-reg-closed');
+      if (openLink)   openLink.style.display = '';
+      if (closedLink) closedLink.style.display = '';
+    }
   }
 
   function renderRegionsSubnav() {
@@ -1829,6 +1842,14 @@
   // Legal nav expander
   document.addEventListener('click', (e) => {
     const expander = e.target.closest('#nav-legal-expander');
+    if (expander) {
+      expander.classList.toggle('open');
+    }
+  });
+
+  // Contractor Registrations nav expander
+  document.addEventListener('click', (e) => {
+    const expander = e.target.closest('#nav-registrations-expander');
     if (expander) {
       expander.classList.toggle('open');
     }
@@ -10033,7 +10054,7 @@
   function _prCanDelete() { return isPrivileged(getLoggedInUser()); }
   function _prCanSeeAll() { return isComplianceTeam(getLoggedInUser()); }
 
-  route('/permits', () => {
+  route('/registrations', () => {
     const me = getLoggedInUser();
     const canSeeAll = _prCanSeeAll();
     const regionLabel = canSeeAll ? 'All regions' : (me.regions || 'your region');
@@ -10399,6 +10420,195 @@
       if (res && res.status === 'ok') {
         _prLoaded = false;
         prLoad();
+        if (typeof showToast === 'function') showToast('Deleted.', 'success');
+      } else {
+        alert('Delete failed: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  OPEN REGISTRATIONS  (Emma / Sara / Angel only — ALL submissions)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  function _orCanAccess() {
+    const me = getLoggedInUser();
+    return ['emma', 'sara', 'angel'].includes((me.username || '').toLowerCase());
+  }
+
+  let _orRecords = [];
+  let _orLoaded  = false;
+
+  route('/registrations/open', () => {
+    if (!_orCanAccess()) {
+      return `
+        <div class="view">
+          <div class="empty-state">
+            <div class="empty-state-icon">🔒</div>
+            <div class="empty-state-title">Access restricted</div>
+            <div class="empty-state-sub">Open Registrations is available to Emma, Sara, and Angel only.</div>
+            <a class="btn btn-primary" href="#/registrations">Back to Contractor Registrations</a>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="view" id="or-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Open Registrations</h1>
+            <p class="view-sub" id="or-sub">Loading…</p>
+          </div>
+        </div>
+
+        <!-- FILTER BAR -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
+              autocomplete="off"
+              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="orApplyFilters()">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+          </div>
+          <select id="or-f-region" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Regions</option>
+            ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
+          </select>
+          <select id="or-f-brand" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Brands</option>
+            ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
+          </select>
+          <select id="or-f-pure" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">PURE: All</option>
+            <option value="Yes">PURE: Yes</option>
+            <option value="No">PURE: No</option>
+          </select>
+        </div>
+
+        <!-- TABLE -->
+        <div id="or-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
+          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+        </div>
+      </div>`;
+  }, {
+    title: 'Open Registrations',
+    onAfterRender: () => { if (_orCanAccess()) orLoad(); }
+  });
+
+  async function orLoad() {
+    const list = document.getElementById('or-list');
+    if (!list) return;
+    if (_orLoaded) { orApplyFilters(); return; }
+    list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>';
+    try {
+      // No region param → fetch ALL submissions
+      const res = await api({ resource: 'permitRequests' });
+      _orRecords = res.records || [];
+      _orLoaded = true;
+      orApplyFilters();
+      const sub = document.getElementById('or-sub');
+      if (sub) sub.textContent = _orRecords.length + ' submission' + (_orRecords.length !== 1 ? 's' : '');
+    } catch (e) {
+      if (list) list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load: ${_prEsc(e.message)}</div>`;
+    }
+  }
+
+  function orApplyFilters() {
+    const q      = (document.getElementById('or-search')   || {}).value || '';
+    const region = (document.getElementById('or-f-region') || {}).value || '';
+    const brand  = (document.getElementById('or-f-brand')  || {}).value || '';
+    const pure   = (document.getElementById('or-f-pure')   || {}).value || '';
+    const ql = q.toLowerCase();
+
+    const rows = _orRecords.filter(r => {
+      if (region && r.region !== region) return false;
+      if (brand  && r.brand  !== brand)  return false;
+      if (pure   && r.pure   !== pure)   return false;
+      if (ql) {
+        const hay = [r.jurisdiction, r.brand, r.region, r.name, r.requirements, r.notes, r.email].join(' ').toLowerCase();
+        if (!hay.includes(ql)) return false;
+      }
+      return true;
+    });
+    // Reuse the same full-column table layout as Contractor Registrations
+    orRenderTable(rows);
+  }
+
+  function orRenderTable(rows) {
+    const list = document.getElementById('or-list');
+    if (!list) return;
+    const canDel = _prCanDelete();
+
+    if (!rows.length) {
+      list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">No submissions found.</div>';
+      return;
+    }
+
+    const cols = [
+      { label: '#',            w: '40px'  },
+      { label: 'Date',         w: '96px'  },
+      { label: 'Requestor',    w: '130px' },
+      { label: 'Brand',        w: '160px' },
+      { label: 'Region',       w: '120px' },
+      { label: 'Jurisdiction', w: '130px' },
+      { label: 'PURE',         w: '60px'  },
+      { label: 'Requirements', w: ''      },
+      { label: 'Website',      w: '70px'  },
+      { label: 'Phone',        w: '110px' },
+      { label: 'Email',        w: '140px' },
+      { label: 'Notes',        w: '130px' },
+    ];
+    if (canDel) cols.push({ label: '', w: '60px' });
+
+    const thStyle = 'padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;color:#fff;';
+    const thead = `<thead style="background:var(--navy);position:sticky;top:0;z-index:2;"><tr>${
+      cols.map(c => `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`).join('')
+    }</tr></thead>`;
+
+    const tdBase = 'padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px;';
+
+    const tbody = rows.map((r, i) => {
+      const pureCell = r.pure === 'Yes'
+        ? `<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:700;background:#E3F0FF;color:var(--blue);">Yes</span>`
+        : `<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:700;background:#F0F0F0;color:var(--muted);">No</span>`;
+      const websiteCell = r.website
+        ? `<a href="${_prEsc(r.website)}" target="_blank" style="color:var(--blue);font-size:11px;text-decoration:none;">Link ↗</a>`
+        : '';
+      const delCell = canDel
+        ? `<td style="${tdBase}"><button onclick="orDelete('${_prEsc(r.row_index)}')" style="background:none;border:1px solid #e0b0b0;color:var(--danger);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;">Del</button></td>`
+        : '';
+      return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
+        <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
+        <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
+        <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.region)}</td>
+        <td style="${tdBase}font-weight:600;">${_prEsc(r.jurisdiction)}</td>
+        <td style="${tdBase}">${pureCell}</td>
+        <td style="${tdBase}min-width:180px;">${_prEsc(r.requirements)}</td>
+        <td style="${tdBase}">${websiteCell}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.phone)}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.email)}</td>
+        <td style="${tdBase}min-width:100px;font-size:11px;">${_prEsc(r.notes)}</td>
+        ${delCell}
+      </tr>`;
+    }).join('');
+
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">${thead}<tbody>${tbody}</tbody></table>`;
+  }
+
+  async function orDelete(rowIndex) {
+    if (!_prCanDelete()) return;
+    if (!confirm('Delete this submission? This cannot be undone.')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'deletePermitRequest', row_index: rowIndex });
+      if (res && res.status === 'ok') {
+        _orLoaded = false;
+        orLoad();
         if (typeof showToast === 'function') showToast('Deleted.', 'success');
       } else {
         alert('Delete failed: ' + (res && res.error ? res.error : 'Unknown error'));
