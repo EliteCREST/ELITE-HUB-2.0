@@ -10458,7 +10458,7 @@
 
   // Status badge for the everyday Contractor Registrations view.
   // Same palette as Open Registrations, EXCEPT 'Researched' shows as 'Pending' here.
-  function _prStatusBadge(status) {
+  function _prStatusBadge(status, isRenewal) {
     let s = String(status || 'New');
     const key = s.toLowerCase();
     let label = s;
@@ -10471,7 +10471,11 @@
       'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
     };
     const css = styles[key] || styles['new'];
-    return `<span style="display:inline-block;padding:2px 9px;border-radius:9px;font-size:10px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;${css}">${_prEsc(label)}</span>`;
+    const badge = `<span style="display:inline-block;padding:2px 9px;border-radius:9px;font-size:10px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;${css}">${_prEsc(label)}</span>`;
+    const renewalTag = isRenewal
+      ? ` <span style="display:inline-block;padding:2px 7px;border-radius:9px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;background:#F3E8FF;color:#7C3AED;">↻ Renewal</span>`
+      : '';
+    return badge + renewalTag;
   }
 
   function prRenderTable(rows) {
@@ -10518,7 +10522,7 @@
         : '';
       return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
-        <td style="${tdBase}">${_prStatusBadge(r.status)}</td>
+        <td style="${tdBase}">${_prStatusBadge(r.status, r.is_renewal)}</td>
         <td style="${tdBase}white-space:nowrap;font-size:11px;color:var(--muted);">${_prEsc(_prFmtTimestamp(r.status_updated_at))}</td>
         <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
         <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
@@ -10736,7 +10740,7 @@
   }
 
   // Status badge — New=gold/bold, Researched=blue, Submitted=green, Closed=grey
-  function _orStatusBadge(status) {
+  function _orStatusBadge(status, isRenewal) {
     const s = String(status || 'New');
     const key = s.toLowerCase();
     const styles = {
@@ -10747,7 +10751,11 @@
       'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
     };
     const css = styles[key] || styles['new'];
-    return `<span style="display:inline-block;padding:2px 9px;border-radius:9px;font-size:10px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;${css}">${_prEsc(s)}</span>`;
+    const badge = `<span style="display:inline-block;padding:2px 9px;border-radius:9px;font-size:10px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;${css}">${_prEsc(s)}</span>`;
+    const renewalTag = isRenewal
+      ? ` <span style="display:inline-block;padding:2px 7px;border-radius:9px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;background:#F3E8FF;color:#7C3AED;">↻ Renewal</span>`
+      : '';
+    return badge + renewalTag;
   }
 
   function orRenderTable(rows) {
@@ -10801,10 +10809,13 @@
       const followBtn = st === 'submitted'
         ? `<button onclick="orOpenFollowup('${_prEsc(r.id)}')" style="background:var(--gold,#C9A961);border:none;color:var(--navy);font-size:10px;font-weight:800;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:5px;">Follow Up</button>`
         : '';
-      const actionCell = `<td style="${tdBase}white-space:nowrap;"><button onclick="orOpenResearch('${_prEsc(r.id)}')" style="background:${actBg};border:none;color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;">${actLabel}</button>${followBtn}</td>`;
+      const renewBtn = st === 'active'
+        ? `<button onclick="orRenewal('${_prEsc(r.id)}')" style="background:#7C3AED;border:none;color:#fff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:5px;">↻ Renewal</button>`
+        : '';
+      const actionCell = `<td style="${tdBase}white-space:nowrap;"><button onclick="orOpenResearch('${_prEsc(r.id)}')" style="background:${actBg};border:none;color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;">${actLabel}</button>${followBtn}${renewBtn}</td>`;
       return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
-        <td style="${tdBase}">${_orStatusBadge(r.status)}</td>
+        <td style="${tdBase}">${_orStatusBadge(r.status, r.is_renewal)}</td>
         ${actionCell}
         <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
         <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
@@ -11308,6 +11319,23 @@
     const modal = document.getElementById('or-followup-backdrop');
     if (modal) modal.style.display = 'none';
     _orFollowPermitId = null;
+  }
+
+  async function orRenewal(permitId) {
+    if (!permitId) return;
+    if (!confirm('Start a renewal? This moves the registration back to New (Open Registrations) for re-processing. Existing research is kept.')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'markPermitRenewal', permit_id: permitId });
+      if (res && res.status === 'ok') {
+        if (typeof showToast === 'function') showToast('Renewal started — moved back to Open Registrations.', 'success');
+        _orLoaded = false;
+        orLoad();
+      } else {
+        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -12067,7 +12095,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.3.2';
+  const APP_VERSION = '2.3.3';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
