@@ -96,7 +96,7 @@
           <a class="nav-sub-item" data-nav="/registrations/request" href="#/registrations/request">Registration/License Request</a>
           <a class="nav-sub-item" data-nav="/registrations" href="#/registrations">Contractor Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/open" href="#/registrations/open" id="nav-reg-open" style="display:none;">Open Registrations</a>
-          <a class="nav-sub-item" data-nav="/registrations/closed" href="#/registrations/closed" id="nav-reg-closed" style="display:none;">Closed Registrations</a>
+          <a class="nav-sub-item" data-nav="/registrations/closed" href="#/registrations/closed" id="nav-reg-closed" style="display:none;">Active Registrations</a>
         </div>
         <a class="nav-item" href="https://elitecrest.github.io/2026_Pricing/PricingApp.html" target="_blank" rel="noopener">
           <span class="nav-item-icon">💲</span>
@@ -10171,6 +10171,7 @@
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Website</label>
           <input type="url" id="pr-f-website" placeholder="https://…" autocomplete="off"
+            onblur="prFormatWebsite(this)"
             style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-website" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
@@ -10178,6 +10179,7 @@
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Phone</label>
           <input type="tel" id="pr-f-phone" placeholder="(000) 000-0000" autocomplete="off"
+            oninput="prFormatPhone(this)"
             style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div style="min-height:12px;"></div>
         </div>
@@ -10291,6 +10293,26 @@
   function prSetDefaultDate() {
     const d = document.getElementById('pr-f-date');
     if (d) d.value = new Date().toISOString().split('T')[0];
+  }
+
+  // Auto-format a phone field to (XXX) XXX-XXXX as the user types
+  function prFormatPhone(el) {
+    if (!el) return;
+    let d = String(el.value).replace(/\D/g, '').slice(0, 10);
+    let out = d;
+    if (d.length > 6)      out = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+    else if (d.length > 3) out = '(' + d.slice(0,3) + ') ' + d.slice(3);
+    else if (d.length > 0) out = '(' + d;
+    el.value = out;
+  }
+
+  // Normalize a website field on blur — prepend https:// if no scheme given
+  function prFormatWebsite(el) {
+    if (!el) return;
+    let v = String(el.value).trim();
+    if (!v) { el.value = ''; return; }
+    if (!/^https?:\/\//i.test(v)) v = 'https://' + v.replace(/^\/+/, '');
+    el.value = v;
   }
 
   function prOpenForm() {
@@ -10420,6 +10442,25 @@
       return true;
     });
     prRenderTable(rows);
+    const sub = document.getElementById('pr-sub');
+    if (sub) sub.textContent = rows.length + ' record' + (rows.length !== 1 ? 's' : '');
+  }
+
+  // Status badge for the everyday Contractor Registrations view.
+  // Same palette as Open Registrations, EXCEPT 'Researched' shows as 'Pending' here.
+  function _prStatusBadge(status) {
+    let s = String(status || 'New');
+    const key = s.toLowerCase();
+    let label = s;
+    if (key === 'researched') label = 'Pending';   // display-only relabel on this view
+    const styles = {
+      'new':        'background:#FBF1D9;color:#8A6D1F;font-weight:800;',
+      'researched': 'background:#E3F0FF;color:var(--blue);font-weight:700;',  // shown as "Pending"
+      'submitted':  'background:#E6F6EC;color:#1F8A4C;font-weight:700;',
+      'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
+    };
+    const css = styles[key] || styles['new'];
+    return `<span style="display:inline-block;padding:2px 9px;border-radius:9px;font-size:10px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;${css}">${_prEsc(label)}</span>`;
   }
 
   function prRenderTable(rows) {
@@ -10435,6 +10476,8 @@
 
     const cols = [
       { label: '#',            w: '40px'  },
+      { label: 'Status',       w: '92px'  },
+      { label: 'Status Date',  w: '96px'  },
       { label: 'Date',         w: '96px'  },
       { label: 'Requestor',    w: '130px' },
       { label: 'Brand',        w: '160px' },
@@ -10447,7 +10490,6 @@
       { label: 'Email',        w: '140px' },
       { label: 'Notes',        w: '130px' },
     ];
-    if (canDel) cols.push({ label: '', w: '60px' });
 
     const thStyle = 'padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;color:#fff;';
     const thead = `<thead style="background:var(--navy);position:sticky;top:0;z-index:2;"><tr>${
@@ -10463,11 +10505,10 @@
       const websiteCell = r.website
         ? `<a href="${_prEsc(r.website)}" target="_blank" style="color:var(--blue);font-size:11px;text-decoration:none;">Link ↗</a>`
         : '';
-      const delCell = canDel
-        ? `<td style="${tdBase}"><button onclick="prDelete('${_prEsc(r.row_index)}')" style="background:none;border:1px solid #e0b0b0;color:var(--danger);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;">Del</button></td>`
-        : '';
       return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
+        <td style="${tdBase}">${_prStatusBadge(r.status)}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;color:var(--muted);">${_prEsc(r.status_updated_at || '')}</td>
         <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
         <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
@@ -10479,7 +10520,6 @@
         <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.phone)}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.email)}</td>
         <td style="${tdBase}min-width:100px;font-size:11px;">${_prEsc(r.notes)}</td>
-        ${delCell}
       </tr>`;
     }).join('');
 
@@ -10616,6 +10656,8 @@
     });
     // Reuse the same full-column table layout as Contractor Registrations
     orRenderTable(rows);
+    const sub = document.getElementById('or-sub');
+    if (sub) sub.textContent = rows.length + ' submission' + (rows.length !== 1 ? 's' : '');
   }
 
   // Status badge — New=gold/bold, Researched=blue, Submitted=green, Closed=grey
@@ -11774,7 +11816,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.2.6';
+  const APP_VERSION = '2.2.9';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
