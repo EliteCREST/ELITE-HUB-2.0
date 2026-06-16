@@ -96,7 +96,7 @@
           <a class="nav-sub-item" data-nav="/registrations/request" href="#/registrations/request">Registration/License Request</a>
           <a class="nav-sub-item" data-nav="/registrations" href="#/registrations">Contractor Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/open" href="#/registrations/open" id="nav-reg-open" style="display:none;">Open Registrations</a>
-          <a class="nav-sub-item" data-nav="/registrations/closed" href="#/registrations/closed" id="nav-reg-closed" style="display:none;">Active Registrations</a>
+          <a class="nav-sub-item" data-nav="/registrations/active" href="#/registrations/active" id="nav-reg-active" style="display:none;">Active Registrations</a>
         </div>
         <a class="nav-item" href="https://elitecrest.github.io/2026_Pricing/PricingApp.html" target="_blank" rel="noopener">
           <span class="nav-item-icon">💲</span>
@@ -1837,13 +1837,13 @@
       }
     }
 
-    // Open/Closed Registrations sub-links — sheet permission reg:open / reg:closed
+    // Open/Active Registrations sub-links — sheet permission reg:open / reg:active
     // (fallback to Emma/Sara/Angel until backend sends `permissions`)
     {
       const openLink   = $('#nav-reg-open');
-      const closedLink = $('#nav-reg-closed');
+      const activeLink = $('#nav-reg-active');
       if (openLink   && hasPermission('reg:open',   ['emma', 'sara', 'angel'])) openLink.style.display = '';
-      if (closedLink && hasPermission('reg:closed', ['emma', 'sara', 'angel'])) closedLink.style.display = '';
+      if (activeLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) activeLink.style.display = '';
     }
 
     // Fleet Vehicles/Drivers sub-links — sheet permission fleet:vehicles / fleet:drivers
@@ -10446,6 +10446,16 @@
     if (sub) sub.textContent = rows.length + ' record' + (rows.length !== 1 ? 's' : '');
   }
 
+  // Trim an ISO timestamp to "YYYY-MM-DD HH:MM" for display
+  function _prFmtTimestamp(ts) {
+    const s = String(ts || '').trim();
+    if (!s) return '';
+    // Match ISO like 2026-06-16T20:04:40.602Z -> 2026-06-16 20:04
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+    if (m) return m[1] + ' ' + m[2];
+    return s;
+  }
+
   // Status badge for the everyday Contractor Registrations view.
   // Same palette as Open Registrations, EXCEPT 'Researched' shows as 'Pending' here.
   function _prStatusBadge(status) {
@@ -10509,7 +10519,7 @@
       return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
         <td style="${tdBase}">${_prStatusBadge(r.status)}</td>
-        <td style="${tdBase}white-space:nowrap;font-size:11px;color:var(--muted);">${_prEsc(r.status_updated_at || '')}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;color:var(--muted);">${_prEsc(_prFmtTimestamp(r.status_updated_at))}</td>
         <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
         <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
@@ -10554,6 +10564,7 @@
 
   let _orRecords = [];
   let _orLoaded  = false;
+  let _orScope   = 'open';   // 'open' (everything but Active) or 'active' (Active only)
 
   route('/registrations/open', () => {
     if (!_orCanAccess()) {
@@ -10610,7 +10621,66 @@
       </div>`;
   }, {
     title: 'Open Registrations',
-    onAfterRender: () => { if (_orCanAccess()) orLoad(); }
+    onAfterRender: () => { _orScope = 'open'; if (_orCanAccess()) orLoad(); }
+  });
+
+  // ── Active Registrations (status = Active) — same access + search/filters ──
+  route('/registrations/active', () => {
+    if (!_orCanAccess()) {
+      return `
+        <div class="view">
+          <div class="empty-state">
+            <div class="empty-state-icon">🔒</div>
+            <div class="empty-state-title">Access restricted</div>
+            <div class="empty-state-sub">Active Registrations is available to Emma, Sara, and Angel only.</div>
+            <a class="btn btn-primary" href="#/registrations">Back to Contractor Registrations</a>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="view" id="or-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Active Registrations</h1>
+            <p class="view-sub" id="or-sub">Loading…</p>
+          </div>
+        </div>
+
+        <!-- FILTER BAR -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
+              autocomplete="off"
+              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="orApplyFilters()">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+          </div>
+          <select id="or-f-region" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Regions</option>
+            ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
+          </select>
+          <select id="or-f-brand" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Brands</option>
+            ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
+          </select>
+          <select id="or-f-pure" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">PURE: All</option>
+            <option value="Yes">PURE: Yes</option>
+            <option value="No">PURE: No</option>
+          </select>
+        </div>
+
+        <!-- TABLE -->
+        <div id="or-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
+          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+        </div>
+      </div>`;
+  }, {
+    title: 'Active Registrations',
+    onAfterRender: () => { _orScope = 'active'; if (_orCanAccess()) orLoad(); }
   });
 
   async function orLoad() {
@@ -10639,6 +10709,10 @@
     const ql = q.toLowerCase();
 
     const rows = _orRecords.filter(r => {
+      const st = String(r.status || 'New').toLowerCase();
+      // Scope: 'active' page shows only Active; 'open' page shows everything except Active
+      if (_orScope === 'active') { if (st !== 'active') return false; }
+      else { if (st === 'active') return false; }
       if (region && r.region !== region) return false;
       if (brand  && r.brand  !== brand)  return false;
       if (pure   && r.pure   !== pure)   return false;
@@ -11993,7 +12067,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.3.0';
+  const APP_VERSION = '2.3.2';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
