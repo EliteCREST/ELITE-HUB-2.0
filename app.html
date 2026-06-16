@@ -10129,8 +10129,9 @@
 
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Date Submitted <span style="color:var(--danger)">*</span></label>
-          <input type="date" id="pr-f-date"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+          <input type="date" id="pr-f-date" readonly tabindex="-1"
+            title="Automatically set to today"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:#eef1f6;color:var(--muted,#64748b);outline:none;pointer-events:none;">
           <div id="pr-e-date" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
@@ -10283,6 +10284,7 @@
     title: 'Registration/License Request',
     onAfterRender: () => {
       prResetForm();
+      prSetDefaultDate();
     }
   });
 
@@ -10353,7 +10355,7 @@
       name:          document.getElementById('pr-f-name').value.trim(),
       brand:         document.getElementById('pr-f-brand').value,
       region:        document.getElementById('pr-f-region').value,
-      date:          document.getElementById('pr-f-date').value,
+      date:          new Date().toISOString().split('T')[0],
       jurisdiction:  document.getElementById('pr-f-jurisdiction').value.trim(),
       pure:          (document.querySelector('input[name="pr-pure"]:checked') || {}).value || '',
       requirements:  document.getElementById('pr-f-requirements').value.trim(),
@@ -10605,8 +10607,29 @@
       }
       return true;
     });
+    // New submissions float to the top so they're easy to spot at a glance
+    const _statusRank = { 'new': 0, 'researched': 1, 'submitted': 2, 'closed': 3 };
+    rows.sort((a, b) => {
+      const ra = _statusRank[String(a.status || 'New').toLowerCase()] ?? 9;
+      const rb = _statusRank[String(b.status || 'New').toLowerCase()] ?? 9;
+      return ra - rb;
+    });
     // Reuse the same full-column table layout as Contractor Registrations
     orRenderTable(rows);
+  }
+
+  // Status badge — New=gold/bold, Researched=blue, Submitted=green, Closed=grey
+  function _orStatusBadge(status) {
+    const s = String(status || 'New');
+    const key = s.toLowerCase();
+    const styles = {
+      'new':        'background:#FBF1D9;color:#8A6D1F;font-weight:800;',
+      'researched': 'background:#E3F0FF;color:var(--blue);font-weight:700;',
+      'submitted':  'background:#E6F6EC;color:#1F8A4C;font-weight:700;',
+      'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
+    };
+    const css = styles[key] || styles['new'];
+    return `<span style="display:inline-block;padding:2px 9px;border-radius:9px;font-size:10px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;${css}">${_prEsc(s)}</span>`;
   }
 
   function orRenderTable(rows) {
@@ -10621,6 +10644,7 @@
 
     const cols = [
       { label: '#',            w: '40px'  },
+      { label: 'Status',       w: '96px'  },
       { label: 'Date',         w: '96px'  },
       { label: 'Requestor',    w: '130px' },
       { label: 'Brand',        w: '160px' },
@@ -10654,6 +10678,7 @@
         : '';
       return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
+        <td style="${tdBase}">${_orStatusBadge(r.status)}</td>
         <td style="${tdBase}white-space:nowrap;">${_prEsc(r.date)}</td>
         <td style="${tdBase}font-weight:600;">${_prEsc(r.name)}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
