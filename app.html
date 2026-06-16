@@ -24,7 +24,7 @@
         <div class="app-sidebar-brand-logo">ECS</div>
         <div class="app-sidebar-brand-text">
           <div class="app-sidebar-brand-name">Elite Hub</div>
-          <div class="app-sidebar-brand-sub">2.0</div>
+          <div class="app-sidebar-brand-sub" id="app-brand-version">v—</div>
         </div>
       </div>
 
@@ -50,10 +50,16 @@
           <span class="nav-item-icon">👷</span>
           <span class="nav-item-label">Contractors</span>
         </a>
-        <a class="nav-item" data-nav="/fleet" href="#/fleet">
+        <div class="nav-item nav-expander" id="nav-fleet-expander">
           <span class="nav-item-icon">🚚</span>
           <span class="nav-item-label">Fleet</span>
-        </a>
+          <span class="nav-expander-chevron">▶</span>
+        </div>
+        <div class="nav-sub nav-collapsed" id="nav-fleet-sub">
+          <a class="nav-sub-item" data-nav="/fleet" href="#/fleet">Fleet Data</a>
+          <a class="nav-sub-item" data-nav="/vehicles" href="#/vehicles" id="nav-fleet-vehicles" style="display:none;">Vehicles</a>
+          <a class="nav-sub-item" data-nav="/drivers" href="#/drivers" id="nav-fleet-drivers" style="display:none;">Drivers</a>
+        </div>
         <a class="nav-item" data-nav="/reviews" href="#/reviews">
           <span class="nav-item-icon">⭐</span>
           <span class="nav-item-label">Reviews</span>
@@ -121,7 +127,7 @@
       </div>
 
       <div class="app-sidebar-footer">
-        <span class="app-sidebar-version" id="app-sidebar-version">v—</span>
+        <span class="app-sidebar-version" id="app-sidebar-version"></span>
       </div>
     </aside>
 
@@ -594,13 +600,14 @@
     if (sess && sess.user && sess.user.username) {
       const lower = String(sess.user.username).toLowerCase();
       const team = TEAM_USERS.find(u => u.username === lower);
-      if (team) return { ...team, can_view_users: sess.user.can_view_users || '' };
+      if (team) return { ...team, can_view_users: sess.user.can_view_users || '', permissions: sess.user.permissions || '' };
       return {
         username: lower,
         name: sess.user.display_name || sess.user.name || lower,
         initials: initialsFromName(sess.user.display_name || sess.user.name || lower),
         color: sess.user.avatar_color || 'var(--slate-600)',
         can_view_users: sess.user.can_view_users || '',
+        permissions: sess.user.permissions || '',
       };
     }
     return { ...TEAM_USERS[0], isStub: true };
@@ -616,6 +623,26 @@
     if (canViewList === '*') return true;
     const list = canViewList.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
     return list.indexOf(target) >= 0;
+  }
+
+  // Sheet-driven feature access.
+  // Reads the USERS sheet `permissions` column (comma-separated tokens, '*' = all).
+  // If the backend isn't yet sending `permissions`, `fallback` (a username list)
+  // is used so access keeps working during the transition.
+  function hasPermission(token, fallback) {
+    const me = getLoggedInUser();
+    const raw = String(me.permissions || '').trim();
+    if (raw) {
+      if (raw === '*') return true;
+      const tokens = raw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (tokens.indexOf('*') >= 0) return true;
+      return tokens.indexOf(String(token).toLowerCase()) >= 0;
+    }
+    // No permissions data from backend yet → fall back to hardcoded username list
+    if (Array.isArray(fallback)) {
+      return fallback.includes((me.username || '').toLowerCase());
+    }
+    return false;
   }
 
   /* ─── api() — all backend calls go through this ───────────── */
@@ -1642,9 +1669,12 @@
     $$('[data-nav]').forEach(el => {
       const navPath = el.dataset.nav;
       // Exact match OR current path starts with data-nav + '/' for nested routes
-      const isActive = path === navPath
+      let isActive = path === navPath
                     || (navPath !== '/home' && path.startsWith(navPath + '/'))
                     || (navPath === '/regions' && path.startsWith('/region/'));
+      // The /registrations list link is a section parent of /registrations/{request,open,closed};
+      // require an exact match so only the active sub-page highlights.
+      if (navPath === '/registrations') isActive = (path === '/registrations');
       el.classList.toggle('active', isActive);
     });
 
@@ -1807,12 +1837,22 @@
       }
     }
 
-    // Open/Closed Registrations sub-links: Emma, Sara, Angel only
-    if (['emma', 'sara', 'angel'].includes((me.username || '').toLowerCase())) {
+    // Open/Closed Registrations sub-links — sheet permission reg:open / reg:closed
+    // (fallback to Emma/Sara/Angel until backend sends `permissions`)
+    {
       const openLink   = $('#nav-reg-open');
       const closedLink = $('#nav-reg-closed');
-      if (openLink)   openLink.style.display = '';
-      if (closedLink) closedLink.style.display = '';
+      if (openLink   && hasPermission('reg:open',   ['emma', 'sara', 'angel'])) openLink.style.display = '';
+      if (closedLink && hasPermission('reg:closed', ['emma', 'sara', 'angel'])) closedLink.style.display = '';
+    }
+
+    // Fleet Vehicles/Drivers sub-links — sheet permission fleet:vehicles / fleet:drivers
+    // (fallback to Angel/Jaida/Sara until backend sends `permissions`)
+    {
+      const vehLink = $('#nav-fleet-vehicles');
+      const drvLink = $('#nav-fleet-drivers');
+      if (vehLink && hasPermission('fleet:vehicles', ['angel', 'jaida', 'sara'])) vehLink.style.display = '';
+      if (drvLink && hasPermission('fleet:drivers',  ['angel', 'jaida', 'sara'])) drvLink.style.display = '';
     }
   }
 
@@ -1852,6 +1892,14 @@
   // Contractor Registrations nav expander
   document.addEventListener('click', (e) => {
     const expander = e.target.closest('#nav-registrations-expander');
+    if (expander) {
+      expander.classList.toggle('open');
+    }
+  });
+
+  // Fleet nav expander
+  document.addEventListener('click', (e) => {
+    const expander = e.target.closest('#nav-fleet-expander');
     if (expander) {
       expander.classList.toggle('open');
     }
@@ -10065,14 +10113,14 @@
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requestor Name <span style="color:var(--danger)">*</span></label>
           <input type="text" id="pr-f-name" autocomplete="off"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-name" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Brand <span style="color:var(--danger)">*</span></label>
           <select id="pr-f-brand"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
             <option value="">— Select —</option>
             ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
           </select>
@@ -10082,14 +10130,14 @@
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Date Submitted <span style="color:var(--danger)">*</span></label>
           <input type="date" id="pr-f-date"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-date" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 2;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Region <span style="color:var(--danger)">*</span></label>
           <select id="pr-f-region"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
             <option value="">— Select region —</option>
             ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
           </select>
@@ -10108,42 +10156,42 @@
         <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Jurisdiction <span style="color:var(--danger)">*</span></label>
           <input type="text" id="pr-f-jurisdiction" placeholder="City, county, or municipality" autocomplete="off"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-jurisdiction" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Requirements <span style="color:var(--danger)">*</span></label>
           <textarea id="pr-f-requirements" rows="3" placeholder="Describe permit requirements for this jurisdiction…"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
           <div id="pr-e-requirements" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Website</label>
           <input type="url" id="pr-f-website" placeholder="https://…" autocomplete="off"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-website" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Phone</label>
           <input type="tel" id="pr-f-phone" placeholder="(000) 000-0000" autocomplete="off"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div style="min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Email</label>
           <input type="email" id="pr-f-email" placeholder="contact@example.com" autocomplete="off"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-email" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Notes</label>
           <textarea id="pr-f-notes" rows="2" placeholder="Any additional context…"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;resize:vertical;"></textarea>
         </div>
 
       </div>`;
@@ -10458,8 +10506,7 @@
   // ─────────────────────────────────────────────────────────────────────────
 
   function _orCanAccess() {
-    const me = getLoggedInUser();
-    return ['emma', 'sara', 'angel'].includes((me.username || '').toLowerCase());
+    return hasPermission('reg:open', ['emma', 'sara', 'angel']);
   }
 
   let _orRecords = [];
@@ -11399,7 +11446,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.1.86';
+  const APP_VERSION = '2.2.0';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
@@ -11673,7 +11720,7 @@
   (async function boot() {
     document.body.style.opacity = '1';
 
-    const versionEl = document.getElementById('app-sidebar-version');
+    const versionEl = document.getElementById('app-brand-version');
     if (versionEl) versionEl.textContent = 'v' + APP_VERSION;
 
     const STALE_AFTER_MS = 5 * 60 * 1000;  // 5 min — older than this, refetch
