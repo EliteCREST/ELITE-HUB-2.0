@@ -10735,15 +10735,15 @@
       { key: 'contractor_registration',  label: 'Contractor Registration',mode: 'multi',  opts: ['New', 'Renewal'] },
     ]},
     { section: 'Bonds & Insurance', groups: [
-      { key: 'bond', label: 'Bond', sub: '(none required)', mode: 'multi', gold: true, opts: ['Original', 'Electronic', 'Special Bond'] },
-      { key: 'coi',  label: 'COI',  sub: '(choose one)',    mode: 'single', opts: ['General', 'Spec Req', 'Additional Insured'] },
+      { key: 'bond', label: 'Bond', mode: 'multi', gold: true, opts: ['Original', 'Electronic', 'Special Bond'] },
+      { key: 'coi',  label: 'COI',  mode: 'single', opts: ['General', 'Spec Req', 'Additional Insured'] },
     ]},
     { section: 'Payment', groups: [
       { key: 'payment_status', label: 'Status', mode: 'single', opts: ['Pending', 'Paid'] },
       { key: 'payment_method', label: 'Method', mode: 'single', opts: ['Check', 'In Person', 'Phone CC', 'Online CC', 'Other'] },
     ]},
     { section: 'Documents Included', groups: [
-      { key: 'documents_included',     label: 'Items', sub: '(none required)', mode: 'multi', opts: ['Driver License','Check Request','Other Certifications','References','Application','State License','Wet Signatures','Test Results','Other'] },
+      { key: 'documents_included',     label: 'Items', mode: 'multi', opts: ['Driver License','Check Request','Other Certifications','References','Application','State License','Wet Signatures','Test Results','Other'] },
       { key: 'submission_form_method', label: 'Submission Form Method', mode: 'single', opts: ['Email', 'Mail', 'In Person'] },
     ]},
   ];
@@ -10817,11 +10817,11 @@
     _orResearchStatus = String(rec.status || 'New');
 
     const datePair = (label, reqId, recId) =>
-      `<div style="display:grid;grid-template-columns:130px 1fr 18px 1fr;align-items:center;gap:8px;margin-bottom:8px;">
-        <span style="font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${label}</span>
-        <input type="date" id="${reqId}" title="Requested Date" style="width:100%;padding:6px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
-        <span style="text-align:center;color:var(--muted);font-weight:700;">→</span>
-        <input type="date" id="${recId}" title="Received Date" style="width:100%;padding:6px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+      `<div style="display:grid;grid-template-columns:90px 1fr 18px 1fr;align-items:center;gap:10px;margin-bottom:9px;">
+        <span style="font-size:11px;font-weight:700;color:var(--navy);letter-spacing:.3px;">${label}</span>
+        <input type="date" id="${reqId}" title="Requested Date" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+        <span style="text-align:center;color:#9aa6bd;font-weight:700;">→</span>
+        <input type="date" id="${recId}" title="Received Date" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
       </div>`;
 
     const submittedAlready = _orResearchStatus.toLowerCase() === 'submitted' || _orResearchStatus.toLowerCase() === 'closed';
@@ -10836,19 +10836,19 @@
           <h3 style="margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);">Dates &amp; Notes</h3>
           <div style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
         </div>
-        <div style="padding:11px 14px;">
-          <div style="display:grid;grid-template-columns:1fr 18px 1fr;gap:0 8px;margin-bottom:6px;font-size:9px;font-weight:bold;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
-            <span style="grid-column:2 / 3;"></span>
-          </div>
-          <div style="display:grid;grid-template-columns:130px 1fr 18px 1fr;gap:8px;margin-bottom:5px;font-size:9px;font-weight:bold;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
-            <span></span><span style="text-align:left;">Requested</span><span></span><span style="text-align:left;">Received</span>
+        <div style="padding:13px 14px;">
+          <div style="display:grid;grid-template-columns:90px 1fr 18px 1fr;gap:10px;margin-bottom:7px;padding-bottom:6px;border-bottom:1px solid #eef1f6;">
+            <span></span>
+            <span style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">Requested</span>
+            <span></span>
+            <span style="font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;">Received</span>
           </div>
           ${datePair('COI',     'or-d-coi-req',     'or-d-coi-rec')}
           ${datePair('Bond',    'or-d-bond-req',    'or-d-bond-rec')}
           ${datePair('Payment', 'or-d-pay-req',     'or-d-pay-rec')}
           ${datePair('Other',   'or-d-other-req',   'or-d-other-rec')}
-          <div style="margin-top:10px;">
-            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Notes</label>
+          <div style="margin-top:12px;padding-top:11px;border-top:1px solid #eef1f6;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Notes</label>
             <textarea id="or-notes" placeholder="Add any relevant notes…" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;resize:vertical;min-height:54px;"></textarea>
           </div>
         </div>
@@ -11774,7 +11774,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.2.3';
+  const APP_VERSION = '2.2.5';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
