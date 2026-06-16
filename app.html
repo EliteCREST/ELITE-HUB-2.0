@@ -10816,9 +10816,13 @@
     const rec = (_orRecords || []).find(r => String(r.id) === String(permitId)) || {};
     _orResearchStatus = String(rec.status || 'New');
 
-    const dateField = (id, label) =>
-      `<div><label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">${label}</label>
-        <input type="date" id="${id}" style="width:100%;padding:6px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;"></div>`;
+    const datePair = (label, reqId, recId) =>
+      `<div style="display:grid;grid-template-columns:130px 1fr 18px 1fr;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${label}</span>
+        <input type="date" id="${reqId}" title="Requested Date" style="width:100%;padding:6px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+        <span style="text-align:center;color:var(--muted);font-weight:700;">→</span>
+        <input type="date" id="${recId}" title="Received Date" style="width:100%;padding:6px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+      </div>`;
 
     const submittedAlready = _orResearchStatus.toLowerCase() === 'submitted' || _orResearchStatus.toLowerCase() === 'closed';
     const canSubmitLicense = _orResearchStatus.toLowerCase() === 'researched' || submittedAlready;
@@ -10833,13 +10837,17 @@
           <div style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
         </div>
         <div style="padding:11px 14px;">
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:9px;">
-            ${dateField('or-d-requested','Requested Date')}
-            ${dateField('or-d-reqreceived','Request Received Date')}
-            ${dateField('or-d-submission','Submission Date')}
-            ${dateField('or-d-received','Received Date')}
+          <div style="display:grid;grid-template-columns:1fr 18px 1fr;gap:0 8px;margin-bottom:6px;font-size:9px;font-weight:bold;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
+            <span style="grid-column:2 / 3;"></span>
           </div>
-          <div style="margin-top:9px;">
+          <div style="display:grid;grid-template-columns:130px 1fr 18px 1fr;gap:8px;margin-bottom:5px;font-size:9px;font-weight:bold;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">
+            <span></span><span style="text-align:left;">Requested</span><span></span><span style="text-align:left;">Received</span>
+          </div>
+          ${datePair('COI',     'or-d-coi-req',     'or-d-coi-rec')}
+          ${datePair('Bond',    'or-d-bond-req',    'or-d-bond-rec')}
+          ${datePair('Payment', 'or-d-pay-req',     'or-d-pay-rec')}
+          ${datePair('Other',   'or-d-other-req',   'or-d-other-rec')}
+          <div style="margin-top:10px;">
             <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Notes</label>
             <textarea id="or-notes" placeholder="Add any relevant notes…" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;resize:vertical;min-height:54px;"></textarea>
           </div>
@@ -10901,10 +10909,14 @@
       ['contractor_license','business_license','contractor_registration','bond','coi','payment_status','payment_method','documents_included','submission_form_method']
         .forEach(k => _orSetGroupValue(k, r[k]));
       const setD = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
-      setD('or-d-requested', r.requested_date);
-      setD('or-d-reqreceived', r.request_received_date);
-      setD('or-d-submission', r.submission_date);
-      setD('or-d-received', r.received_date);
+      setD('or-d-coi-req',     r.coi_requested_date);
+      setD('or-d-coi-rec',     r.coi_received_date);
+      setD('or-d-bond-req',    r.bond_requested_date);
+      setD('or-d-bond-rec',    r.bond_received_date);
+      setD('or-d-pay-req',     r.payment_requested_date);
+      setD('or-d-pay-rec',     r.payment_received_date);
+      setD('or-d-other-req',   r.other_requested_date);
+      setD('or-d-other-rec',   r.other_received_date);
       const notes = document.getElementById('or-notes'); if (notes) notes.value = r.notes || '';
       // License submitted state
       const wasSubmitted = String(r.license_submitted || '').toUpperCase() === 'TRUE' || submittedAlready;
@@ -10945,11 +10957,15 @@
         const mode = document.querySelector(`.or-tog[data-key="${k}"]`)?.dataset.mode || 'multi';
         v[k] = _orGetGroupValue(k, mode);
       });
-    v.requested_date        = (document.getElementById('or-d-requested')   || {}).value || '';
-    v.request_received_date = (document.getElementById('or-d-reqreceived') || {}).value || '';
-    v.submission_date       = (document.getElementById('or-d-submission')  || {}).value || '';
-    v.received_date         = (document.getElementById('or-d-received')    || {}).value || '';
-    v.notes                 = (document.getElementById('or-notes')         || {}).value || '';
+    v.coi_requested_date     = (document.getElementById('or-d-coi-req')   || {}).value || '';
+    v.coi_received_date      = (document.getElementById('or-d-coi-rec')   || {}).value || '';
+    v.bond_requested_date    = (document.getElementById('or-d-bond-req')  || {}).value || '';
+    v.bond_received_date     = (document.getElementById('or-d-bond-rec')  || {}).value || '';
+    v.payment_requested_date = (document.getElementById('or-d-pay-req')   || {}).value || '';
+    v.payment_received_date  = (document.getElementById('or-d-pay-rec')   || {}).value || '';
+    v.other_requested_date   = (document.getElementById('or-d-other-req') || {}).value || '';
+    v.other_received_date    = (document.getElementById('or-d-other-rec') || {}).value || '';
+    v.notes                  = (document.getElementById('or-notes')       || {}).value || '';
     return v;
   }
 
@@ -11758,7 +11774,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.2.2';
+  const APP_VERSION = '2.2.3';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
