@@ -4,7 +4,7 @@
    Everything else: stale-while-revalidate.
    ═══════════════════════════════════════════════════════════════════ */
 
-const APP_VERSION = '2.2.5';
+const APP_VERSION = '2.2.6';
 const CACHE_NAME = 'elite-hub-2.0-' + APP_VERSION;
 
 // Never cache these — always fetch fresh from network
@@ -21,9 +21,14 @@ self.addEventListener('install', (event) => {
   // Skip waiting immediately — take over all tabs right away
   self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE.map(u => new Request(u, { mode: 'no-cors' }))))
-      .catch((err) => console.warn('[SW] Precache failed:', err))
+    caches.open(CACHE_NAME).then((cache) =>
+      // Cache each asset individually so one failure (e.g. a cross-origin
+      // font request) doesn't abort the whole precache like addAll does.
+      Promise.all(PRECACHE.map((u) =>
+        cache.add(new Request(u, { mode: 'no-cors' }))
+          .catch((err) => console.warn('[SW] Precache skipped (' + u + '):', err && err.message))
+      ))
+    )
   );
 });
 
