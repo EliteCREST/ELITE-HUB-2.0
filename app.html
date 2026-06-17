@@ -10153,6 +10153,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const modals = [
+      { id: 'or-addactive-backdrop', close: () => (typeof orCloseAddActive === 'function') && orCloseAddActive() },
       { id: 'or-report-backdrop',   close: () => (typeof orCloseReport === 'function') && orCloseReport() },
       { id: 'or-archive-backdrop',  close: () => (typeof orCloseArchive === 'function') && orCloseArchive() },
       { id: 'or-banner-backdrop',   close: () => (typeof orCloseBanners === 'function') && orCloseBanners() },
@@ -10228,11 +10229,28 @@
           <div id="pr-e-pure" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
+        <div style="display:flex;flex-direction:column;gap:4px;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Jurisdiction <span style="color:var(--danger)">*</span></label>
           <input type="text" id="pr-f-jurisdiction" placeholder="City, county, or municipality" autocomplete="off"
             style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-jurisdiction" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">State</label>
+          <input type="text" id="pr-f-state" placeholder="e.g. OH" autocomplete="off" maxlength="2"
+            oninput="this.value=this.value.replace(/[^a-zA-Z]/g,'').toUpperCase()"
+            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;text-transform:uppercase;">
+          <div style="min-height:12px;"></div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">State License / Registration?</label>
+          <div id="pr-f-statelic-group" style="display:inline-flex;gap:6px;">
+            <button type="button" class="pr-statelic-btn" data-val="Yes" onclick="prSetStateLic('Yes')" style="flex:1;padding:7px 0;border:1px solid #cbd3e0;border-radius:4px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Yes</button>
+            <button type="button" class="pr-statelic-btn" data-val="No" onclick="prSetStateLic('No')" style="flex:1;padding:7px 0;border:1px solid #cbd3e0;border-radius:4px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">No</button>
+          </div>
+          <div style="min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
@@ -10401,6 +10419,17 @@
     if (d) d.value = new Date().toISOString().split('T')[0];
   }
 
+  let _prStateLic = '';   // 'Yes' | 'No' for State License/Registration toggle
+  function prSetStateLic(v) {
+    _prStateLic = v;
+    document.querySelectorAll('.pr-statelic-btn').forEach(b => {
+      const on = b.getAttribute('data-val') === v;
+      b.style.background = on ? 'var(--blue)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--navy)';
+      b.style.borderColor = on ? 'var(--blue)' : '#cbd3e0';
+    });
+  }
+
   // Auto-format a phone field to (XXX) XXX-XXXX as the user types
   function prFormatPhone(el) {
     if (!el) return;
@@ -10422,11 +10451,13 @@
   }
 
   function prResetForm() {
-    ['pr-f-name','pr-f-brand','pr-f-region','pr-f-jurisdiction','pr-f-requirements','pr-f-website','pr-f-phone','pr-f-email','pr-f-notes'].forEach(id => {
+    ['pr-f-name','pr-f-brand','pr-f-region','pr-f-jurisdiction','pr-f-state','pr-f-requirements','pr-f-website','pr-f-phone','pr-f-email','pr-f-notes'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.value = ''; el.style.borderColor = ''; }
     });
     document.querySelectorAll('input[name="pr-pure"]').forEach(r => r.checked = false);
+    _prStateLic = '';
+    document.querySelectorAll('.pr-statelic-btn').forEach(b => { b.style.background = '#fff'; b.style.color = 'var(--navy)'; b.style.borderColor = '#cbd3e0'; });
     ['name','brand','region','date','jurisdiction','requirements','website','email','pure'].forEach(id => {
       const el = document.getElementById('pr-e-' + id);
       if (el) el.textContent = '';
@@ -10478,6 +10509,8 @@
       phone:         document.getElementById('pr-f-phone').value.trim(),
       email:         document.getElementById('pr-f-email').value.trim(),
       notes:         document.getElementById('pr-f-notes').value.trim(),
+      state:         (document.getElementById('pr-f-state') || {}).value || '',
+      is_state_license: _prStateLic,
     };
     try {
       const res = await api({}, 'POST', payload);
@@ -10796,6 +10829,7 @@
             <h1 class="view-title">Active Registrations</h1>
             <p class="view-sub" id="or-sub">Loading…</p>
           </div>
+          <button class="btn btn-primary" onclick="orOpenAddActive()">+ Add Active</button>
         </div>
 
         <!-- FILTER BAR -->
@@ -11981,6 +12015,108 @@
     if (typeof showToast === 'function') showToast('Report exported.', 'success');
   }
 
+  // ── Add Active Registration (log an already-existing active license) ──
+  let _orAddActiveType = '';
+
+  function orOpenAddActive() {
+    let modal = document.getElementById('or-addactive-backdrop');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'or-addactive-backdrop';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;';
+      document.body.appendChild(modal);
+    }
+    _orAddActiveType = '';
+    const fld = (label, inner) =>
+      `<div style="display:flex;flex-direction:column;gap:4px;">
+        <label style="font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${label}</label>
+        ${inner}
+      </div>`;
+    const inputCss = 'padding:8px 10px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;width:100%;';
+    modal.innerHTML = `
+      <div style="background:var(--surface,#fff);width:100%;max-width:620px;border-radius:10px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+        <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+          <span style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">+ Add Active Registration</span>
+          <button onclick="orCloseAddActive()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">Log an existing active license or registration directly. It will be added to Active Registrations.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            ${fld('State', `<input type="text" id="aa-state" maxlength="2" placeholder="e.g. OH" oninput="this.value=this.value.replace(/[^a-zA-Z]/g,'').toUpperCase()" style="${inputCss}">`)}
+            ${fld('Region', `<select id="aa-region" style="${inputCss}"><option value="">— Select region —</option>${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}</select>`)}
+            ${fld('Brand', `<select id="aa-brand" style="${inputCss}"><option value="">— Select —</option>${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}</select>`)}
+            ${fld('Jurisdiction', `<input type="text" id="aa-jurisdiction" placeholder="City, county, or municipality" style="${inputCss}">`)}
+          </div>
+          <div style="margin-top:12px;">
+            ${fld('License / Registration Name', `<input type="text" id="aa-name" placeholder="e.g. General Contractor License" style="${inputCss}">`)}
+          </div>
+          <div style="margin-top:12px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Type</label>
+            <div style="display:inline-flex;gap:6px;">
+              ${['Residential','Commercial','Both'].map(t => `<button type="button" class="aa-type-btn" data-type="${t}" onclick="orAaSetType('${t}')" style="padding:8px 18px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">${t}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
+          <button class="btn btn-ghost btn-sm" onclick="orCloseAddActive()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="aa-save-btn" onclick="orSaveAddActive()">Add to Active</button>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+  }
+
+  function orAaSetType(t) {
+    _orAddActiveType = t;
+    document.querySelectorAll('.aa-type-btn').forEach(b => {
+      const on = b.getAttribute('data-type') === t;
+      b.style.background = on ? 'var(--blue)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--navy)';
+      b.style.borderColor = on ? 'var(--blue)' : '#b9c2d4';
+    });
+  }
+
+  function orCloseAddActive() {
+    const modal = document.getElementById('or-addactive-backdrop');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function orSaveAddActive() {
+    const region = (document.getElementById('aa-region') || {}).value || '';
+    const brand  = (document.getElementById('aa-brand')  || {}).value || '';
+    const juris  = (document.getElementById('aa-jurisdiction') || {}).value || '';
+    const name   = (document.getElementById('aa-name')   || {}).value || '';
+    const state  = (document.getElementById('aa-state')  || {}).value || '';
+    if (!region || !brand || !juris.trim()) {
+      _regErr('Region, Brand, and Jurisdiction are required.');
+      return;
+    }
+    const btn = document.getElementById('aa-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+    try {
+      const res = await api({}, 'POST', {
+        action: 'saveActiveRegistration',
+        region: region,
+        brand: brand,
+        jurisdiction: juris.trim(),
+        license_name: name.trim(),
+        license_type: _orAddActiveType,
+        state: state,
+      });
+      if (res && res.status === 'ok') {
+        if (typeof showToast === 'function') showToast('Active registration added.', 'success');
+        orCloseAddActive();
+        _orLoaded = false;
+        orLoad();
+      } else {
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Active'; }
+      }
+    } catch (e) {
+      _regErr('Network error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Active'; }
+    }
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   //  END PERMIT REQUESTS
   // ─────────────────────────────────────────────────────────────────────────
@@ -12738,7 +12874,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.5.4';
+  const APP_VERSION = '2.5.6';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
