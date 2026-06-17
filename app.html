@@ -10115,6 +10115,13 @@
   let _prRecords = [];   // all permit records fetched this session
   let _prLoaded  = false;
 
+  const US_STATES = [
+    'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA',
+    'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM',
+    'NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA',
+    'WV','WI','WY'
+  ];
+
   const PR_BRANDS = [
     'Universal Roofing, LLC',
     'Wildwood Roofing & Construction, Inc',
@@ -12141,7 +12148,7 @@
         <div style="padding:16px 20px;">
           <p style="font-size:12px;color:var(--muted);margin:0 0 14px;">Log an existing active license or registration directly. It will be added to Active Registrations.</p>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            ${fld('State', `<input type="text" id="aa-state" maxlength="2" placeholder="e.g. OH" oninput="this.value=this.value.replace(/[^a-zA-Z]/g,'').toUpperCase()" style="${inputCss}">`)}
+            ${fld('State', `<select id="aa-state" style="${inputCss}"><option value="">— Select state —</option>${US_STATES.map(s => `<option value="${s}">${s}</option>`).join('')}</select>`)}
             ${fld('Region', `<select id="aa-region" style="${inputCss}"><option value="">— Select region —</option>${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}</select>`)}
             ${fld('Brand', `<select id="aa-brand" style="${inputCss}"><option value="">— Select —</option>${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}</select>`)}
             ${fld('Jurisdiction', `<input type="text" id="aa-jurisdiction" placeholder="City, county, or municipality" style="${inputCss}">`)}
@@ -12176,6 +12183,10 @@
               <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="aa-alertmode" value="date" onchange="orLrAlertMode('aa')" style="accent-color:var(--blue);"> On a specific date <input type="date" id="aa-alertdate" onchange="orLrRecalcAlert('aa')" disabled style="padding:5px 7px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;"></label>
             </div>
             <p id="aa-alertcalc" style="font-size:11px;color:var(--muted);margin:7px 0 0;"></p>
+          </div>
+          <div style="margin-top:12px;display:flex;flex-direction:column;gap:4px;">
+            <label style="font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">Notes</label>
+            <textarea id="aa-notes" rows="2" placeholder="Any additional context…" style="width:100%;padding:8px 10px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;resize:vertical;min-height:48px;"></textarea>
           </div>
         </div>
         <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
@@ -12225,6 +12236,7 @@
     const exp    = (document.getElementById('aa-exp')    || {}).value || '';
     const ceHrs  = (document.getElementById('aa-cehrs')  || {}).value || '';
     const ceDue  = (document.getElementById('aa-cedue')  || {}).value || '';
+    const notes  = (document.getElementById('aa-notes')  || {}).value || '';
     const ceAlert = orLrRecalcAlert('aa');
     if (!region || !brand || !juris.trim()) {
       _regErr('Region, Brand, and Jurisdiction are required.');
@@ -12248,6 +12260,7 @@
         ce_due_date: ceDue,
         elite_owned: _orAaOwned,
         ce_alert_date: ceAlert,
+        notes: notes,
       });
       if (res && res.status === 'ok') {
         if (typeof showToast === 'function') showToast('Active registration added.', 'success');
@@ -13021,7 +13034,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.5.7';
+  const APP_VERSION = '2.5.8';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
