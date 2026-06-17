@@ -11408,6 +11408,52 @@
     });
   }
 
+  // Elite Owned toggle (Follow-Up License Received). prefix 'or-lr' / 'aa'
+  let _orLrOwned = '';
+  function orLrSetOwned(v) {
+    _orLrOwned = v;
+    document.querySelectorAll('.or-lr-owned-btn').forEach(b => {
+      const on = b.getAttribute('data-val') === v;
+      b.style.background = on ? 'var(--blue)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--navy)';
+      b.style.borderColor = on ? 'var(--blue)' : '#b9c2d4';
+    });
+  }
+
+  // Shared CE alert logic. `p` is the id-prefix: 'or-lr' (follow-up) or 'aa' (add active).
+  function orLrAlertMode(p) {
+    const mode = (document.querySelector('input[name="' + p + '-alertmode"]:checked') || {}).value || 'days';
+    const daysEl = document.getElementById(p + '-alertdays');
+    const dateEl = document.getElementById(p + '-alertdate');
+    if (daysEl) daysEl.disabled = (mode !== 'days');
+    if (dateEl) dateEl.disabled = (mode !== 'date');
+    orLrRecalcAlert(p);
+  }
+  // Returns the resolved alert date (YYYY-MM-DD) and updates the caption.
+  function orLrRecalcAlert(p) {
+    const mode = (document.querySelector('input[name="' + p + '-alertmode"]:checked') || {}).value || 'days';
+    const cap = document.getElementById(p + '-alertcalc');
+    let resolved = '';
+    if (mode === 'date') {
+      resolved = (document.getElementById(p + '-alertdate') || {}).value || '';
+      if (cap) cap.textContent = resolved ? ('Alert will trigger on ' + resolved + '.') : 'Pick the date the reminder should trigger.';
+    } else {
+      const due = (document.getElementById(p + '-cedue') || {}).value || '';
+      const days = parseInt((document.getElementById(p + '-alertdays') || {}).value, 10);
+      if (!due) {
+        if (cap) cap.textContent = 'Set a CE Due Date first to use “days before”.';
+      } else if (isNaN(days) || days < 0) {
+        if (cap) cap.textContent = 'Enter a valid number of days.';
+      } else {
+        const d = new Date(due + 'T00:00:00');
+        d.setDate(d.getDate() - days);
+        resolved = d.toISOString().split('T')[0];
+        if (cap) cap.textContent = 'Alert will trigger on ' + resolved + ' (' + days + ' days before ' + due + ').';
+      }
+    }
+    return resolved;
+  }
+
   function orOpenFollowup(permitId) {
     _orFollowPermitId = permitId;
     const rec = (_orRecords || []).find(r => String(r.id) === String(permitId)) || {};
@@ -11463,6 +11509,41 @@
             </div>
             <button type="button" id="or-lr-btn" onclick="orMarkReceived()" style="background:var(--navy);border:none;color:#fff;font-size:13px;font-weight:bold;padding:8px 16px;border-radius:7px;cursor:pointer;font-family:inherit;">Received</button>
           </div>
+
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:11px;">
+            <div style="flex:1;min-width:160px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Qualifier</label>
+              <input type="text" id="or-lr-qual" autocomplete="off" placeholder="Name of qualifier" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+            </div>
+            <div style="min-width:130px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Elite Owned</label>
+              <div style="display:inline-flex;gap:6px;">
+                <button type="button" class="or-lr-owned-btn" data-val="Yes" onclick="orLrSetOwned('Yes')" style="padding:7px 14px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">Yes</button>
+                <button type="button" class="or-lr-owned-btn" data-val="No" onclick="orLrSetOwned('No')" style="padding:7px 14px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">No</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:11px;">
+            <div style="flex:1;min-width:130px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">CE Hours</label>
+              <input type="text" id="or-lr-cehrs" autocomplete="off" placeholder="e.g. 8" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+            </div>
+            <div style="flex:1;min-width:150px;">
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">CE Due Date</label>
+              <input type="date" id="or-lr-cedue" onchange="orLrRecalcAlert('lr')" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+            </div>
+          </div>
+
+          <div style="margin-top:11px;background:#fafbfe;border:1px solid #cbd3e0;border-radius:7px;padding:10px 12px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">CE Reminder Alert</label>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+              <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="or-lr-alertmode" value="days" checked onchange="orLrAlertMode('lr')" style="accent-color:var(--blue);"> Remind <input type="number" id="or-lr-alertdays" min="0" value="30" oninput="orLrRecalcAlert('lr')" style="width:58px;padding:5px 7px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;"> days before due</label>
+              <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="or-lr-alertmode" value="date" onchange="orLrAlertMode('lr')" style="accent-color:var(--blue);"> On a specific date <input type="date" id="or-lr-alertdate" onchange="orLrRecalcAlert('lr')" disabled style="padding:5px 7px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;"></label>
+            </div>
+            <p id="or-lr-alertcalc" style="font-size:11px;color:var(--muted);margin:7px 0 0;"></p>
+          </div>
+
           <p id="or-lr-note" style="font-size:10px;color:var(--muted);margin:8px 0 0;">Enter the license details, then click “Received” to move this to Active Registrations.</p>
         </div>
       </div>
@@ -11506,6 +11587,15 @@
       const exp  = document.getElementById('or-lr-exp');  if (exp && r.license_expiration_date) exp.value = r.license_expiration_date;
       const lname = document.getElementById('or-lr-name'); if (lname) lname.value = r.license_name || '';
       if (r.license_type) orLrSetType(r.license_type); else _orLrType = '';
+      const qual = document.getElementById('or-lr-qual'); if (qual) qual.value = r.qualifier || '';
+      const cehrs = document.getElementById('or-lr-cehrs'); if (cehrs) cehrs.value = r.ce_hours || '';
+      const cedue = document.getElementById('or-lr-cedue'); if (cedue && r.ce_due_date) cedue.value = r.ce_due_date;
+      if (r.elite_owned) orLrSetOwned(r.elite_owned); else _orLrOwned = '';
+      if (r.ce_alert_date) {
+        const dmode = document.querySelector('input[name="or-lr-alertmode"][value="date"]'); if (dmode) dmode.checked = true;
+        const adate = document.getElementById('or-lr-alertdate'); if (adate) adate.value = r.ce_alert_date;
+        orLrAlertMode('or-lr');
+      } else { orLrRecalcAlert('or-lr'); }
       if (String(r.license_received || '').toUpperCase() === 'TRUE') _orGreenLrCard(r.license_received_date);
     } catch (e) { /* none yet */ }
   }
@@ -11564,6 +11654,10 @@
     const cnum = (document.getElementById('or-lr-cnum') || {}).value || '';
     const exp  = (document.getElementById('or-lr-exp')  || {}).value || '';
     const lname = (document.getElementById('or-lr-name') || {}).value || '';
+    const qualifier = (document.getElementById('or-lr-qual') || {}).value || '';
+    const ceHours = (document.getElementById('or-lr-cehrs') || {}).value || '';
+    const ceDue = (document.getElementById('or-lr-cedue') || {}).value || '';
+    const ceAlert = orLrRecalcAlert('or-lr');
     if (!cnum.trim() || !exp) {
       if (!confirm('Contractor number and/or expiration date is blank. Mark as Received anyway? This moves it to Active Registrations.')) return;
     } else if (!confirm('Mark license as Received? This moves the registration to Active Registrations.')) {
@@ -11578,6 +11672,11 @@
         expiration_date: exp,
         license_name: lname,
         license_type: _orLrType,
+        qualifier: qualifier,
+        ce_hours: ceHours,
+        ce_due_date: ceDue,
+        elite_owned: _orLrOwned,
+        ce_alert_date: ceAlert,
       });
       if (res && res.status === 'ok') {
         _orGreenLrCard(res.license_received_date);
@@ -12056,6 +12155,28 @@
               ${['Residential','Commercial','Both'].map(t => `<button type="button" class="aa-type-btn" data-type="${t}" onclick="orAaSetType('${t}')" style="padding:8px 18px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">${t}</button>`).join('')}
             </div>
           </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            ${fld('Qualifier', `<input type="text" id="aa-qual" placeholder="Name of qualifier" style="${inputCss}">`)}
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <label style="font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">Elite Owned</label>
+              <div style="display:inline-flex;gap:6px;">
+                <button type="button" class="aa-owned-btn" data-val="Yes" onclick="orAaSetOwned('Yes')" style="padding:8px 16px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Yes</button>
+                <button type="button" class="aa-owned-btn" data-val="No" onclick="orAaSetOwned('No')" style="padding:8px 16px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">No</button>
+              </div>
+            </div>
+            ${fld('Contractor / License Number', `<input type="text" id="aa-cnum" placeholder="e.g. ROC-123456" onblur="this.value=this.value.trim().toUpperCase()" style="${inputCss}">`)}
+            ${fld('Expiration Date', `<input type="date" id="aa-exp" style="${inputCss}">`)}
+            ${fld('CE Hours', `<input type="text" id="aa-cehrs" placeholder="e.g. 8" style="${inputCss}">`)}
+            ${fld('CE Due Date', `<input type="date" id="aa-cedue" onchange="orLrRecalcAlert('aa')" style="${inputCss}">`)}
+          </div>
+          <div style="margin-top:12px;background:#fafbfe;border:1px solid #cbd3e0;border-radius:7px;padding:10px 12px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;">CE Reminder Alert</label>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;">
+              <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="aa-alertmode" value="days" checked onchange="orLrAlertMode('aa')" style="accent-color:var(--blue);"> Remind <input type="number" id="aa-alertdays" min="0" value="30" oninput="orLrRecalcAlert('aa')" style="width:58px;padding:5px 7px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;"> days before due</label>
+              <label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;"><input type="radio" name="aa-alertmode" value="date" onchange="orLrAlertMode('aa')" style="accent-color:var(--blue);"> On a specific date <input type="date" id="aa-alertdate" onchange="orLrRecalcAlert('aa')" disabled style="padding:5px 7px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;"></label>
+            </div>
+            <p id="aa-alertcalc" style="font-size:11px;color:var(--muted);margin:7px 0 0;"></p>
+          </div>
         </div>
         <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
           <button class="btn btn-ghost btn-sm" onclick="orCloseAddActive()">Cancel</button>
@@ -12063,12 +12184,25 @@
         </div>
       </div>`;
     modal.style.display = 'flex';
+    _orAaOwned = '';
+    orLrAlertMode('aa');
   }
 
   function orAaSetType(t) {
     _orAddActiveType = t;
     document.querySelectorAll('.aa-type-btn').forEach(b => {
       const on = b.getAttribute('data-type') === t;
+      b.style.background = on ? 'var(--blue)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--navy)';
+      b.style.borderColor = on ? 'var(--blue)' : '#b9c2d4';
+    });
+  }
+
+  let _orAaOwned = '';
+  function orAaSetOwned(v) {
+    _orAaOwned = v;
+    document.querySelectorAll('.aa-owned-btn').forEach(b => {
+      const on = b.getAttribute('data-val') === v;
       b.style.background = on ? 'var(--blue)' : '#fff';
       b.style.color = on ? '#fff' : 'var(--navy)';
       b.style.borderColor = on ? 'var(--blue)' : '#b9c2d4';
@@ -12086,6 +12220,12 @@
     const juris  = (document.getElementById('aa-jurisdiction') || {}).value || '';
     const name   = (document.getElementById('aa-name')   || {}).value || '';
     const state  = (document.getElementById('aa-state')  || {}).value || '';
+    const qual   = (document.getElementById('aa-qual')   || {}).value || '';
+    const cnum   = (document.getElementById('aa-cnum')   || {}).value || '';
+    const exp    = (document.getElementById('aa-exp')    || {}).value || '';
+    const ceHrs  = (document.getElementById('aa-cehrs')  || {}).value || '';
+    const ceDue  = (document.getElementById('aa-cedue')  || {}).value || '';
+    const ceAlert = orLrRecalcAlert('aa');
     if (!region || !brand || !juris.trim()) {
       _regErr('Region, Brand, and Jurisdiction are required.');
       return;
@@ -12101,6 +12241,13 @@
         license_name: name.trim(),
         license_type: _orAddActiveType,
         state: state,
+        qualifier: qual,
+        contractor_number: cnum,
+        expiration_date: exp,
+        ce_hours: ceHrs,
+        ce_due_date: ceDue,
+        elite_owned: _orAaOwned,
+        ce_alert_date: ceAlert,
       });
       if (res && res.status === 'ok') {
         if (typeof showToast === 'function') showToast('Active registration added.', 'success');
@@ -12874,7 +13021,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.5.6';
+  const APP_VERSION = '2.5.7';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
