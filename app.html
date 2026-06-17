@@ -10090,22 +10090,57 @@
   ];
 
   const PR_REGIONS = [
-    'RE01 — New Mexico',
-    'RE02 — Arizona',
-    'RE03 — Minnesota',
-    'RE04 — Wisconsin',
-    'RE05 — Illinois',
-    'RE06 — Missouri',
-    'RE07 — Indiana',
-    'RE08 — Ohio',
-    'RE09 — Pennsylvania',
-    'RE10 — Other',
+    'MIL — Milwaukee',
+    'CHI — Chicago',
+    'CLE — Cleveland',
+    'AQE — Albuquerque',
+    'PIT — Pittsburgh',
+    'MIN — Minneapolis',
+    'PHX — Phoenix',
+    'IND — Indianapolis',
+    'STL — St. Louis',
+    'OTH — Other',
   ];
 
   function _prEsc(s) { return escapeHtml ? escapeHtml(String(s ?? '')) : String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function _prCanDelete() { return isPrivileged(getLoggedInUser()); }
   function _prCanSeeAll() { return isComplianceTeam(getLoggedInUser()); }
+
+  // Show an error to the user via toast (falls back to alert if toast unavailable)
+  function _regErr(msg) {
+    if (typeof showToast === 'function') showToast(String(msg || 'Something went wrong'), 'error');
+    else alert(String(msg || 'Something went wrong'));
+  }
+
+  // Escape closes whichever registration modal is open (topmost first)
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modals = [
+      { id: 'or-report-backdrop',   close: () => (typeof orCloseReport === 'function') && orCloseReport() },
+      { id: 'or-archive-backdrop',  close: () => (typeof orCloseArchive === 'function') && orCloseArchive() },
+      { id: 'or-banner-backdrop',   close: () => (typeof orCloseBanners === 'function') && orCloseBanners() },
+      { id: 'or-followup-backdrop', close: () => (typeof orCloseFollowup === 'function') && orCloseFollowup() },
+      { id: 'or-research-backdrop', close: () => (typeof orCloseResearch === 'function') && orCloseResearch() },
+    ];
+    for (const m of modals) {
+      const el = document.getElementById(m.id);
+      if (el && el.style.display === 'flex') { m.close(); return; }
+    }
+  });
+
+  // Shimmer skeleton placeholder for tables while data loads
+  function _regSkeleton(rowCount) {
+    const n = rowCount || 6;
+    const bar = (w) => `<div style="height:11px;border-radius:4px;width:${w};background:linear-gradient(90deg,#eef1f6 25%,#e2e7f0 37%,#eef1f6 63%);background-size:400% 100%;animation:regShimmer 1.2s ease-in-out infinite;"></div>`;
+    let rows = '';
+    for (let i = 0; i < n; i++) {
+      rows += `<div style="display:flex;gap:16px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--border);">
+        ${bar('60px')}${bar('90px')}${bar('120px')}${bar('100px')}${bar('70px')}<div style="flex:1;">${bar('100%')}</div>
+      </div>`;
+    }
+    return `<style>@keyframes regShimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}</style>${rows}`;
+  }
 
   // Shared form fields markup (used by the inline Registration/License Request page)
   function prFormFieldsHTML() {
@@ -10131,7 +10166,7 @@
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Date Submitted <span style="color:var(--danger)">*</span></label>
+          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Date Submitted <span style="color:var(--danger)">*</span> <span style="font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;">(auto — today)</span></label>
           <input type="date" id="pr-f-date" readonly tabindex="-1"
             title="Automatically set to today"
             style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:#eef1f6;color:var(--muted,#64748b);outline:none;pointer-events:none;">
@@ -10251,7 +10286,7 @@
 
         <!-- TABLE -->
         <div id="pr-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
-          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+          ${_regSkeleton()}
         </div>
 
       </div>
@@ -10343,23 +10378,10 @@
     el.value = v;
   }
 
-  function prOpenForm() {
-    const bd = document.getElementById('pr-modal-backdrop');
-    if (!bd) return;
-    bd.style.display = 'flex';
-    prSetDefaultDate();
-  }
-
-  function prCloseForm() {
-    const bd = document.getElementById('pr-modal-backdrop');
-    if (bd) bd.style.display = 'none';
-    prResetForm();
-  }
-
   function prResetForm() {
     ['pr-f-name','pr-f-brand','pr-f-region','pr-f-jurisdiction','pr-f-requirements','pr-f-website','pr-f-phone','pr-f-email','pr-f-notes'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) { el.value = el.tagName === 'SELECT' ? '' : (id === 'pr-f-date' ? new Date().toISOString().split('T')[0] : ''); el.style.borderColor = ''; }
+      if (el) { el.value = ''; el.style.borderColor = ''; }
     });
     document.querySelectorAll('input[name="pr-pure"]').forEach(r => r.checked = false);
     ['name','brand','region','date','jurisdiction','requirements','website','email','pure'].forEach(id => {
@@ -10423,10 +10445,10 @@
         _prLoaded = false;            // force the list to re-fetch
         location.hash = '#/registrations';
       } else {
-        alert('Save failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Save failed: ' + (res && res.error ? res.error : 'Unknown error'));
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Submit Request'; }
     }
@@ -10436,7 +10458,7 @@
     const list = document.getElementById('pr-list');
     if (!list) return;
     if (_prLoaded) { prApplyFilters(); return; }
-    list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>';
+    list.innerHTML = _regSkeleton();
     try {
       const me = getLoggedInUser();
       const params = { resource: 'permitRequests' };
@@ -10507,14 +10529,18 @@
   }
 
   function prSortBy(key) {
-    if (_prSort.key === key) _prSort.dir = (_prSort.dir === 'asc' ? 'desc' : 'asc');
-    else { _prSort.key = key; _prSort.dir = 'asc'; }
+    if (_prSort.key === key) {
+      if (_prSort.dir === 'asc') _prSort.dir = 'desc';
+      else { _prSort.key = null; _prSort.dir = 'asc'; }   // third click clears sort
+    } else { _prSort.key = key; _prSort.dir = 'asc'; }
     prApplyFilters();
   }
 
   function orSortBy(key) {
-    if (_orSort.key === key) _orSort.dir = (_orSort.dir === 'asc' ? 'desc' : 'asc');
-    else { _orSort.key = key; _orSort.dir = 'asc'; }
+    if (_orSort.key === key) {
+      if (_orSort.dir === 'asc') _orSort.dir = 'desc';
+      else { _orSort.key = null; _orSort.dir = 'asc'; }   // third click clears sort (back to default)
+    } else { _orSort.key = key; _orSort.dir = 'asc'; }
     orApplyFilters();
   }
 
@@ -10546,15 +10572,15 @@
     const canSeeAll = _prCanSeeAll();
 
     if (!rows.length) {
-      list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">No permit requests found.</div>';
+      list.innerHTML = '<div style="padding:48px 24px;text-align:center;color:var(--muted);"><div style="font-size:34px;margin-bottom:8px;">📋</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px;">No registrations yet</div><div style="font-size:12px;margin-bottom:16px;">Submit a registration or license request to get started.</div><a class="btn btn-primary btn-sm" href="#/registrations/request">+ New Request</a></div>';
       return;
     }
 
     const cols = [
       { label: '#',            w: '40px'  },
       { label: 'Status',       w: '92px',  key: 'status' },
-      { label: 'Status Date',  w: '96px',  key: 'status_updated_at' },
-      { label: 'Date',         w: '96px',  key: 'date' },
+      { label: 'Last Updated',  w: '96px',  key: 'status_updated_at' },
+      { label: 'Requested Date', w: '96px', key: 'date' },
       { label: 'Requestor',    w: '130px', key: 'name' },
       { label: 'Brand',        w: '160px', key: 'brand' },
       { label: 'Region',       w: '120px', key: 'region' },
@@ -10575,7 +10601,7 @@
       cols.map(c => {
         if (!c.key) return `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`;
         const arrow = _prSort.key === c.key ? (_prSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
-        return `<th onclick="prSortBy('${c.key}')" style="${thStyle}cursor:pointer;${c.w ? 'width:'+c.w+';' : ''}" title="Sort by ${c.label}">${c.label}${arrow}</th>`;
+        return `<th onclick="prSortBy('${c.key}')" style="${thStyle}cursor:pointer;${c.w ? 'width:'+c.w+';' : ''}" title="Sort by ${c.label} (click again to reverse, third click clears)">${c.label}${arrow}</th>`;
       }).join('')
     }</tr></thead>`;
 
@@ -10609,23 +10635,6 @@
     list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">${thead}<tbody>${tbody}</tbody></table>`;
   }
 
-  async function prDelete(rowIndex) {
-    if (!_prCanDelete()) return;
-    if (!confirm('Delete this permit request? This cannot be undone.')) return;
-    try {
-      const res = await api({}, 'POST', { action: 'deletePermitRequest', row_index: rowIndex });
-      if (res && res.status === 'ok') {
-        _prLoaded = false;
-        prLoad();
-        if (typeof showToast === 'function') showToast('Deleted.', 'success');
-      } else {
-        alert('Delete failed: ' + (res && res.error ? res.error : 'Unknown error'));
-      }
-    } catch (e) {
-      alert('Network error: ' + e.message);
-    }
-  }
-
   // ─────────────────────────────────────────────────────────────────────────
   //  OPEN REGISTRATIONS  (Emma / Sara / Angel only — ALL submissions)
   // ─────────────────────────────────────────────────────────────────────────
@@ -10657,7 +10666,10 @@
             <h1 class="view-title">Open Registrations</h1>
             <p class="view-sub" id="or-sub">Loading…</p>
           </div>
-          <button class="btn btn-primary" onclick="orOpenBanners()">📢 Banners</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" onclick="orOpenReport()">📊 Report</button>
+            <button class="btn btn-primary" onclick="orOpenBanners()">📢 Banners</button>
+          </div>
         </div>
 
         <!-- FILTER BAR -->
@@ -10689,7 +10701,7 @@
 
         <!-- TABLE -->
         <div id="or-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
-          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+          ${_regSkeleton()}
         </div>
       </div>`;
   }, {
@@ -10748,7 +10760,7 @@
 
         <!-- TABLE -->
         <div id="or-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
-          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+          ${_regSkeleton()}
         </div>
       </div>`;
   }, {
@@ -10807,7 +10819,7 @@
 
         <!-- TABLE -->
         <div id="or-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
-          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+          ${_regSkeleton()}
         </div>
       </div>`;
   }, {
@@ -10819,7 +10831,7 @@
     const list = document.getElementById('or-list');
     if (!list) return;
     if (_orLoaded) { orApplyFilters(); return; }
-    list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>';
+    list.innerHTML = _regSkeleton();
     try {
       // No region param → fetch ALL submissions
       const res = await api({ resource: 'permitRequests' });
@@ -10894,7 +10906,10 @@
     const canDel = _prCanDelete();
 
     if (!rows.length) {
-      list.innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);font-size:13px;">No submissions found.</div>';
+      const empt = _orScope === 'active'   ? { icon: '✅', title: 'No active registrations', sub: 'Registrations appear here once their license is received.' }
+                 : _orScope === 'archived' ? { icon: '🗄️', title: 'No archived registrations', sub: 'Archived registrations will appear here.' }
+                 : { icon: '📭', title: 'No registrations found', sub: 'New submissions and in-progress registrations will appear here.' };
+      list.innerHTML = `<div style="padding:48px 24px;text-align:center;color:var(--muted);"><div style="font-size:34px;margin-bottom:8px;">${empt.icon}</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px;">${empt.title}</div><div style="font-size:12px;">${empt.sub}</div></div>`;
       return;
     }
 
@@ -10902,7 +10917,7 @@
       { label: '#',            w: '40px'  },
       { label: 'Status',       w: '96px',  key: 'status' },
       { label: 'Action',       w: '180px' },
-      { label: 'Date',         w: '96px',  key: 'date' },
+      { label: 'Requested Date', w: '96px', key: 'date' },
       { label: 'Requestor',    w: '130px', key: 'name' },
       { label: 'Brand',        w: '160px', key: 'brand' },
       { label: 'Region',       w: '120px', key: 'region' },
@@ -10924,7 +10939,7 @@
       cols.map(c => {
         if (!c.key) return `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`;
         const arrow = _orSort.key === c.key ? (_orSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
-        return `<th onclick="orSortBy('${c.key}')" style="${thStyle}cursor:pointer;${c.w ? 'width:'+c.w+';' : ''}" title="Sort by ${c.label}">${c.label}${arrow}</th>`;
+        return `<th onclick="orSortBy('${c.key}')" style="${thStyle}cursor:pointer;${c.w ? 'width:'+c.w+';' : ''}" title="Sort by ${c.label} (click again to reverse, third click clears)">${c.label}${arrow}</th>`;
       }).join('')
     }</tr></thead>`;
 
@@ -10972,23 +10987,6 @@
     }).join('');
 
     list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">${thead}<tbody>${tbody}</tbody></table>`;
-  }
-
-  async function orDelete(rowIndex) {
-    if (!_prCanDelete()) return;
-    if (!confirm('Delete this submission? This cannot be undone.')) return;
-    try {
-      const res = await api({}, 'POST', { action: 'deletePermitRequest', row_index: rowIndex });
-      if (res && res.status === 'ok') {
-        _orLoaded = false;
-        orLoad();
-        if (typeof showToast === 'function') showToast('Deleted.', 'success');
-      } else {
-        alert('Delete failed: ' + (res && res.error ? res.error : 'Unknown error'));
-      }
-    } catch (e) {
-      alert('Network error: ' + e.message);
-    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -11256,10 +11254,10 @@
         _orLoaded = false;
         orLoad();
       } else {
-        alert('Save failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Save failed: ' + (res && res.error ? res.error : 'Unknown error'));
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Submit Research'; }
     }
@@ -11267,6 +11265,7 @@
 
   async function orMarkSubmitted() {
     if (!_orResearchPermitId) return;
+    if (!confirm('Mark this registration as Submitted? This moves it forward in the pipeline.')) return;
     const btn = document.getElementById('or-license-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
     try {
@@ -11279,11 +11278,11 @@
         _orLoaded = false;   // refresh list status in background
         orLoad();
       } else {
-        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
         if (btn) { btn.disabled = false; btn.textContent = 'Submitted'; }
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
       if (btn) { btn.disabled = false; btn.textContent = 'Submitted'; }
     }
   }
@@ -11331,7 +11330,7 @@
           <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
             <div style="flex:1;min-width:180px;">
               <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Contractor Number</label>
-              <input type="text" id="or-lr-cnum" autocomplete="off" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+              <input type="text" id="or-lr-cnum" autocomplete="off" onblur="this.value=this.value.trim().toUpperCase()" placeholder="e.g. ROC-123456" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
             </div>
             <div style="flex:1;min-width:160px;">
               <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Expiration Date</label>
@@ -11385,7 +11384,9 @@
   }
 
   // Show today's date immediately as the user types (optimistic), real stamp on save
+  let _orNoteDirty = {};
   function orNoteDirty(n) {
+    _orNoteDirty[n] = true;   // mark this note as having unsaved edits
     const dt = document.getElementById('or-note' + n + '-date');
     const ta = document.getElementById('or-note' + n);
     if (dt && ta) dt.textContent = ta.value.trim() ? new Date().toISOString().split('T')[0] : '';
@@ -11394,6 +11395,7 @@
   let _orNoteSaving = {};
   async function orSaveNote(n) {
     if (!_orFollowPermitId) return;
+    const permitId = _orFollowPermitId;   // capture in case modal closes mid-save
     const ta = document.getElementById('or-note' + n);
     if (!ta) return;
     if (_orNoteSaving[n]) return;
@@ -11401,13 +11403,16 @@
     try {
       const res = await api({}, 'POST', {
         action: 'savePermitFollowupNote',
-        permit_id: _orFollowPermitId,
+        permit_id: permitId,
         which: n,
         text: ta.value,
       });
       const dt = document.getElementById('or-note' + n + '-date');
-      if (res && res.status === 'ok' && dt) dt.textContent = ta.value.trim() ? (res.note_date || '') : '';
-    } catch (e) { /* keep optimistic date; will retry on next blur */ }
+      if (res && res.status === 'ok') {
+        _orNoteDirty[n] = false;   // successfully persisted
+        if (dt) dt.textContent = ta.value.trim() ? (res.note_date || '') : '';
+      }
+    } catch (e) { /* keep optimistic date + dirty flag; will retry on next blur/close */ }
     finally { _orNoteSaving[n] = false; }
   }
 
@@ -11431,6 +11436,11 @@
     const btn = document.getElementById('or-lr-btn');
     const cnum = (document.getElementById('or-lr-cnum') || {}).value || '';
     const exp  = (document.getElementById('or-lr-exp')  || {}).value || '';
+    if (!cnum.trim() || !exp) {
+      if (!confirm('Contractor number and/or expiration date is blank. Mark as Received anyway? This moves it to Active Registrations.')) return;
+    } else if (!confirm('Mark license as Received? This moves the registration to Active Registrations.')) {
+      return;
+    }
     if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
       const res = await api({}, 'POST', {
@@ -11445,19 +11455,24 @@
         _orLoaded = false;
         orLoad();
       } else {
-        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
         if (btn) { btn.disabled = false; btn.textContent = 'Received'; }
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
       if (btn) { btn.disabled = false; btn.textContent = 'Received'; }
     }
   }
 
   function orCloseFollowup() {
+    // Flush any note that has unsaved edits (covers closing before blur fired)
+    for (let n = 1; n <= 5; n++) {
+      if (_orNoteDirty[n] && !_orNoteSaving[n]) orSaveNote(n);
+    }
     const modal = document.getElementById('or-followup-backdrop');
     if (modal) modal.style.display = 'none';
     _orFollowPermitId = null;
+    _orNoteDirty = {};
   }
 
   async function orRenewal(permitId) {
@@ -11470,10 +11485,10 @@
         _orLoaded = false;
         orLoad();
       } else {
-        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
     }
   }
 
@@ -11582,14 +11597,14 @@
   async function orPostBanner() {
     const msgEl = document.getElementById('or-ban-msg');
     const msg = msgEl ? msgEl.value.trim() : '';
-    if (!msg) { alert('Please enter a banner message.'); return; }
+    if (!msg) { _regErr('Please enter a banner message.'); return; }
     const all = document.getElementById('or-ban-all');
     let regions;
     if (all && all.checked) {
       regions = 'ALL';
     } else {
       const picked = Array.from(document.querySelectorAll('.or-ban-region')).filter(cb => cb.checked).map(cb => cb.value);
-      if (!picked.length) { alert('Select All Regions or at least one region.'); return; }
+      if (!picked.length) { _regErr('Select All Regions or at least one region.'); return; }
       regions = picked.join(',');
     }
     const btn = document.getElementById('or-ban-post');
@@ -11603,10 +11618,10 @@
         if (typeof showToast === 'function') showToast('Banner posted.', 'success');
         orLoadBannerList();
       } else {
-        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Post Banner'; }
     }
@@ -11620,10 +11635,10 @@
         orLoadBannerList();
         if (typeof showToast === 'function') showToast('Banner deleted.', 'success');
       } else {
-        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
     }
   }
 
@@ -11683,13 +11698,191 @@
         _orLoaded = false;
         orLoad();
       } else {
-        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
         if (btn) { btn.disabled = false; btn.textContent = 'Archive'; }
       }
     } catch (e) {
-      alert('Network error: ' + e.message);
+      _regErr('Network error: ' + e.message);
       if (btn) { btn.disabled = false; btn.textContent = 'Archive'; }
     }
+  }
+
+  // ── Registration Report (date-range summary + CSV export) ──
+  let _orReportRows = [];
+
+  function orOpenReport() {
+    let modal = document.getElementById('or-report-backdrop');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'or-report-backdrop';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;';
+      document.body.appendChild(modal);
+    }
+    const today = new Date().toISOString().split('T')[0];
+    const firstOfYear = new Date().getFullYear() + '-01-01';
+    modal.innerHTML = `
+      <div style="background:var(--surface,#fff);width:100%;max-width:760px;border-radius:10px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+        <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+          <span style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">📊 Registration Report</span>
+          <button onclick="orCloseReport()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;background:#fafbfe;border:1px solid #cbd3e0;border-radius:8px;padding:12px 14px;">
+            <div>
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">From (Requested)</label>
+              <input type="date" id="or-rep-from" value="${firstOfYear}" style="padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;">
+            </div>
+            <div>
+              <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">To (Requested)</label>
+              <input type="date" id="or-rep-to" value="${today}" style="padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;">
+            </div>
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--navy);cursor:pointer;padding-bottom:6px;">
+              <input type="checkbox" id="or-rep-arch" style="accent-color:var(--blue);"> Include Archived
+            </label>
+            <button class="btn btn-primary btn-sm" id="or-rep-run" onclick="orRunReport()" style="margin-left:auto;">Run Report</button>
+          </div>
+          <div id="or-rep-results" style="margin-top:14px;"><div style="padding:30px;text-align:center;color:var(--muted);font-size:12px;">Choose a date range and click Run Report.</div></div>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
+          <button class="btn btn-ghost btn-sm" id="or-rep-export" onclick="orExportReportCsv()" disabled style="opacity:.5;">⬇ Export to Excel (CSV)</button>
+          <button class="btn btn-ghost btn-sm" onclick="orCloseReport()">Done</button>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+  }
+
+  function orCloseReport() {
+    const modal = document.getElementById('or-report-backdrop');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function orRunReport() {
+    const from = (document.getElementById('or-rep-from') || {}).value || '';
+    const to   = (document.getElementById('or-rep-to')   || {}).value || '';
+    const arch = !!(document.getElementById('or-rep-arch') || {}).checked;
+    const results = document.getElementById('or-rep-results');
+    const runBtn = document.getElementById('or-rep-run');
+    if (from && to && from > to) { _regErr('“From” date must be before “To” date.'); return; }
+    if (runBtn) { runBtn.disabled = true; runBtn.textContent = 'Running…'; }
+    if (results) results.innerHTML = _regSkeleton(4);
+    try {
+      const res = await api({ resource: 'registrationReport', from: from, to: to, include_archived: arch ? 'true' : 'false' });
+      _orReportRows = (res && res.rows) || [];
+      _orRenderReport(_orReportRows, from, to);
+      const exp = document.getElementById('or-rep-export');
+      if (exp) { exp.disabled = _orReportRows.length === 0; exp.style.opacity = _orReportRows.length ? '1' : '.5'; }
+    } catch (e) {
+      if (results) results.innerHTML = `<div style="padding:24px;text-align:center;color:var(--danger);font-size:12px;">Failed to run report: ${_prEsc(e.message)}</div>`;
+    } finally {
+      if (runBtn) { runBtn.disabled = false; runBtn.textContent = 'Run Report'; }
+    }
+  }
+
+  function _orRenderReport(rows, from, to) {
+    const results = document.getElementById('or-rep-results');
+    if (!results) return;
+    if (!rows.length) {
+      results.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:12px;">No registrations in this date range.</div>';
+      return;
+    }
+    const newCount = rows.filter(r => r.type === 'New').length;
+    const renCount = rows.filter(r => r.type === 'Renewal').length;
+    const pureYes  = rows.filter(r => r.pure === 'Yes').length;
+    const pureNo   = rows.filter(r => r.pure === 'No').length;
+
+    const byStatus = {};
+    rows.forEach(r => { byStatus[r.status] = (byStatus[r.status] || 0) + 1; });
+
+    const byMonth = {};
+    rows.forEach(r => {
+      const m = (r.requested_date || '').slice(0, 7) || '(no date)';
+      byMonth[m] = byMonth[m] || { New: 0, Renewal: 0 };
+      byMonth[m][r.type] = (byMonth[m][r.type] || 0) + 1;
+    });
+    const byRegion = {};
+    rows.forEach(r => {
+      const rg = r.region || '(none)';
+      byRegion[rg] = byRegion[rg] || { New: 0, Renewal: 0 };
+      byRegion[rg][r.type] = (byRegion[rg][r.type] || 0) + 1;
+    });
+
+    const stat = (label, val, color) =>
+      `<div style="flex:1;min-width:90px;background:#fff;border:1px solid #cbd3e0;border-radius:8px;padding:10px 12px;text-align:center;">
+        <div style="font-size:22px;font-weight:800;color:${color || 'var(--navy)'};">${val}</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-top:2px;">${label}</div>
+      </div>`;
+
+    const miniTable = (title, obj, firstColLabel) => {
+      const keys = Object.keys(obj).sort();
+      const body = keys.map(k => {
+        const n = obj[k].New || 0, rn = obj[k].Renewal || 0;
+        return `<tr>
+          <td style="padding:5px 10px;border-bottom:1px solid #eef1f6;font-size:12px;">${_prEsc(k)}</td>
+          <td style="padding:5px 10px;border-bottom:1px solid #eef1f6;font-size:12px;text-align:right;">${n}</td>
+          <td style="padding:5px 10px;border-bottom:1px solid #eef1f6;font-size:12px;text-align:right;">${rn}</td>
+          <td style="padding:5px 10px;border-bottom:1px solid #eef1f6;font-size:12px;text-align:right;font-weight:700;">${n + rn}</td>
+        </tr>`;
+      }).join('');
+      return `<div style="flex:1;min-width:260px;">
+        <h4 style="margin:0 0 6px;font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--navy);">${title}</h4>
+        <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #cbd3e0;border-radius:8px;overflow:hidden;">
+          <thead><tr style="background:#fafbfe;">
+            <th style="padding:6px 10px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);">${firstColLabel}</th>
+            <th style="padding:6px 10px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);">New</th>
+            <th style="padding:6px 10px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);">Renewal</th>
+            <th style="padding:6px 10px;text-align:right;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);">Total</th>
+          </tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+    };
+
+    const statusChips = Object.keys(byStatus).sort().map(s =>
+      `<span style="display:inline-block;padding:3px 10px;border-radius:9px;font-size:11px;font-weight:700;background:#eef1f6;color:var(--navy);margin:0 4px 4px 0;">${_prEsc(s)}: ${byStatus[s]}</span>`).join('');
+
+    results.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">Requested ${_prEsc(from || 'beginning')} → ${_prEsc(to || 'today')} · ${rows.length} registration${rows.length !== 1 ? 's' : ''}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+        ${stat('Total', rows.length)}
+        ${stat('New', newCount, 'var(--blue)')}
+        ${stat('Renewal', renCount, '#7C3AED')}
+        ${stat('PURE Yes', pureYes, '#1F8A4C')}
+        ${stat('PURE No', pureNo, 'var(--muted)')}
+      </div>
+      <div style="margin-bottom:14px;">${statusChips}</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        ${miniTable('By Month', byMonth, 'Month')}
+        ${miniTable('By Region', byRegion, 'Region')}
+      </div>`;
+  }
+
+  function orExportReportCsv() {
+    if (!_orReportRows.length) { _regErr('Run a report first.'); return; }
+    const cols = [
+      ['id','ID'], ['requestor','Requestor'], ['region','Region'], ['brand','Brand'],
+      ['jurisdiction','Jurisdiction'], ['type','Type'], ['status','Status'], ['pure','PURE'],
+      ['requested_date','Requested Date'], ['submitted_date','Submitted Date'],
+      ['received_date','Received Date'], ['expiration_date','Expiration Date'],
+      ['contractor_number','Contractor Number'],
+    ];
+    const esc = (v) => {
+      const s = String(v == null ? '' : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const header = cols.map(c => esc(c[1])).join(',');
+    const lines = _orReportRows.map(r => cols.map(c => esc(r[c[0]])).join(','));
+    const csv = [header].concat(lines).join('\r\n');
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = 'registration_report_' + stamp + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (typeof showToast === 'function') showToast('Report exported.', 'success');
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -12449,7 +12642,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.3.7';
+  const APP_VERSION = '2.4.5';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
