@@ -10294,7 +10294,7 @@
 
         <!-- FILTER BAR -->
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px;border:1.5px solid #c2cbdb;border-radius:10px;background:var(--surface-alt,#f9fbfe);box-shadow:0 1px 4px rgba(27,42,74,.08);">
-          <div style="position:relative;flex:1;min-width:200px;">
+          <div style="position:relative;flex:0 1 340px;min-width:200px;">
             <input type="text" id="pr-search" placeholder="Search jurisdiction, brand, notes…"
               autocomplete="off"
               style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);"
@@ -10318,6 +10318,9 @@
             <option value="Yes">PURE: Yes</option>
             <option value="No">PURE: No</option>
           </select>
+          <label style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" id="pr-show-archived" onchange="prApplyFilters()" style="accent-color:var(--blue);width:15px;height:15px;cursor:pointer;"> Show Archived
+          </label>
         </div>
 
         <!-- TABLE -->
@@ -10515,9 +10518,11 @@
     const region = (document.getElementById('pr-f-region') || {}).value || '';
     const brand  = (document.getElementById('pr-f-brand')  || {}).value || '';
     const pure   = (document.getElementById('pr-f-pure')   || {}).value || '';
+    const showArchived = !!(document.getElementById('pr-show-archived') || {}).checked;
     const ql = q.toLowerCase();
 
     let rows = _prRecords.filter(r => {
+      if (!showArchived && String(r.status || '').toLowerCase() === 'archived') return false;
       if (region && r.region !== region) return false;
       if (brand  && r.brand  !== brand)  return false;
       if (pure   && r.pure   !== pure)   return false;
@@ -12703,7 +12708,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.5.0';
+  const APP_VERSION = '2.5.1';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
