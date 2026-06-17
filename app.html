@@ -3611,6 +3611,7 @@
 
     // Today bar
     renderTodayBar(dashboardRes || {});
+    injectOverdueRegCard();   // appends "X over 15 days" for Emma/Sara/Angel
 
     // Tasks
     _workspaceTasks = (tasksRes.tasks || []).filter(t => t.status !== 'deleted');
@@ -3717,6 +3718,41 @@
         </div>
       </div>
     `;
+  }
+
+  /* ─── Overdue registrations card (Emma/Sara/Angel only) ──────── */
+  async function injectOverdueRegCard() {
+    const me = getLoggedInUser();
+    if (!me || ['emma', 'sara', 'angel'].indexOf(me.username) < 0) return;
+    const el = $('#ws-today-bar');
+    if (!el) return;
+    try {
+      const res = await api({ resource: 'permitRequests' });
+      const rows = (res && res.records) || [];
+      const overdue = rows.filter(r => (typeof _regIsOverdue === 'function') && _regIsOverdue(r)).length;
+      if (!overdue) return;
+      if (!$('#ws-today-bar')) return;   // navigated away during fetch
+
+      const chip = `<a class="ws-today-chip ws-today-red" href="#/registrations/open" id="ws-overdue-reg-chip">
+        <span class="ws-today-chip-label">${overdue} over 15 days</span>
+        <span class="ws-today-chip-sub">Awaiting submission</span>
+      </a>`;
+
+      let itemsWrap = el.querySelector('.ws-today-bar-items');
+      if (itemsWrap) {
+        // Bar already has chips — append (avoid duplicate if re-run)
+        const existing = document.getElementById('ws-overdue-reg-chip');
+        if (existing) existing.remove();
+        itemsWrap.insertAdjacentHTML('beforeend', chip);
+      } else {
+        // Bar was in the empty state — replace with a proper bar containing this chip
+        el.innerHTML = `
+          <div class="ws-today-bar-inner">
+            <div class="ws-today-bar-label">Today</div>
+            <div class="ws-today-bar-items">${chip}</div>
+          </div>`;
+      }
+    } catch (e) { /* non-critical; skip the card on error */ }
   }
 
   /* ─── Task tab counts ─────────────────────────────────────── */
@@ -10261,9 +10297,9 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="pr-search" placeholder="Search jurisdiction, brand, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:10px 14px 10px 38px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="prApplyFilters()">
-            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
           </div>
           ${canSeeAll ? `
           <select id="pr-f-region" onchange="prApplyFilters()"
@@ -10506,6 +10542,25 @@
     return s;
   }
 
+  // A registration is "overdue" if it's been stuck in Researched > 15 days.
+  // Clock runs from status_updated_at (the Researched stamp) and stops once
+  // the status moves on (Submitted/Active/etc.).
+  const REG_OVERDUE_DAYS = 15;
+  function _regDaysInResearched(r) {
+    if (String(r.status || '').toLowerCase() !== 'researched') return null;
+    const s = String(r.status_updated_at || '').trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const stamped = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const today = new Date();
+    const days = Math.floor((today - stamped) / 86400000);
+    return days;
+  }
+  function _regIsOverdue(r) {
+    const d = _regDaysInResearched(r);
+    return d != null && d > REG_OVERDUE_DAYS;
+  }
+
   // Status badge for the everyday Contractor Registrations view.
   // Same palette as Open Registrations, EXCEPT 'Researched' shows as 'Pending' here.
   // ── Shared column sorting for registration tables ──
@@ -10614,7 +10669,10 @@
       const websiteCell = r.website
         ? `<a href="${_prEsc(r.website)}" target="_blank" style="color:var(--blue);font-size:11px;text-decoration:none;">Link ↗</a>`
         : '';
-      return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
+      const overdue = _regIsOverdue(r);
+      const baseBg = overdue ? '#FDECEC' : '';
+      const hoverBg = overdue ? '#FBDDDD' : 'var(--surface-alt,#f9fbfe)';
+      return `<tr style="transition:background .1s;${overdue ? 'background:' + baseBg + ';' : ''}" onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${baseBg}'">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
         <td style="${tdBase}">${_prStatusBadge(r.status, r.is_renewal)}</td>
         <td style="${tdBase}white-space:nowrap;font-size:11px;color:var(--muted);">${_prEsc(_prFmtTimestamp(r.status_updated_at))}</td>
@@ -10677,9 +10735,9 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:10px 14px 10px 38px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="orApplyFilters()">
-            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
           </div>
           <select id="or-f-region" onchange="orApplyFilters()"
             style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
@@ -10736,9 +10794,9 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:10px 14px 10px 38px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="orApplyFilters()">
-            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
           </div>
           <select id="or-f-region" onchange="orApplyFilters()"
             style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
@@ -10795,9 +10853,9 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:10px 14px 10px 38px;border:1px solid var(--border);border-radius:10px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="orApplyFilters()">
-            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
           </div>
           <select id="or-f-region" onchange="orApplyFilters()"
             style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
@@ -10967,7 +11025,10 @@
         ? `<button onclick="orRenewal('${_prEsc(r.id)}')" style="background:#7C3AED;border:none;color:#fff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:5px;">↻ Renewal</button>`
         : '';
       const actionCell = `<td style="${tdBase}white-space:nowrap;"><button onclick="orOpenResearch('${_prEsc(r.id)}')" style="background:${actBg};border:none;color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;white-space:nowrap;">${actLabel}</button>${followBtn}${renewBtn}</td>`;
-      return `<tr style="transition:background .1s;" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
+      const overdue = _regIsOverdue(r);
+      const baseBg = overdue ? '#FDECEC' : '';
+      const hoverBg = overdue ? '#FBDDDD' : 'var(--surface-alt,#f9fbfe)';
+      return `<tr style="transition:background .1s;${overdue ? 'background:' + baseBg + ';' : ''}" onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${baseBg}'">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
         <td style="${tdBase}">${_orStatusBadge(r.status, r.is_renewal)}</td>
         ${actionCell}
@@ -12642,7 +12703,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.4.5';
+  const APP_VERSION = '2.4.8';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
