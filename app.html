@@ -10226,7 +10226,7 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="pr-search" placeholder="Search jurisdiction, brand, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="prApplyFilters()">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
           </div>
@@ -10486,6 +10486,38 @@
 
   // Status badge for the everyday Contractor Registrations view.
   // Same palette as Open Registrations, EXCEPT 'Researched' shows as 'Pending' here.
+  // ── Shared column sorting for registration tables ──
+  let _prSort = { key: null, dir: 'asc' };   // Contractor Registrations table
+  let _orSort = { key: null, dir: 'asc' };   // Open/Active/Archived table
+
+  function _regSortRows(rows, sort) {
+    if (!sort || !sort.key) return rows;
+    const k = sort.key;
+    const sign = sort.dir === 'desc' ? -1 : 1;
+    // copy so we don't mutate caller's array order expectations
+    return rows.slice().sort((a, b) => {
+      let av = a[k], bv = b[k];
+      // numeric-ish compare for PURE (Yes/No) and dates handled as strings (ISO sorts fine)
+      av = (av == null ? '' : String(av)).toLowerCase();
+      bv = (bv == null ? '' : String(bv)).toLowerCase();
+      if (av < bv) return -1 * sign;
+      if (av > bv) return  1 * sign;
+      return 0;
+    });
+  }
+
+  function prSortBy(key) {
+    if (_prSort.key === key) _prSort.dir = (_prSort.dir === 'asc' ? 'desc' : 'asc');
+    else { _prSort.key = key; _prSort.dir = 'asc'; }
+    prApplyFilters();
+  }
+
+  function orSortBy(key) {
+    if (_orSort.key === key) _orSort.dir = (_orSort.dir === 'asc' ? 'desc' : 'asc');
+    else { _orSort.key = key; _orSort.dir = 'asc'; }
+    orApplyFilters();
+  }
+
   function _prStatusBadge(status, isRenewal) {
     let s = String(status || 'New');
     const key = s.toLowerCase();
@@ -10520,24 +10552,31 @@
 
     const cols = [
       { label: '#',            w: '40px'  },
-      { label: 'Status',       w: '92px'  },
-      { label: 'Status Date',  w: '96px'  },
-      { label: 'Date',         w: '96px'  },
-      { label: 'Requestor',    w: '130px' },
-      { label: 'Brand',        w: '160px' },
-      { label: 'Region',       w: '120px' },
-      { label: 'Jurisdiction', w: '130px' },
-      { label: 'PURE',         w: '60px'  },
-      { label: 'Requirements', w: ''      },
-      { label: 'Website',      w: '70px'  },
-      { label: 'Phone',        w: '110px' },
-      { label: 'Email',        w: '140px' },
-      { label: 'Notes',        w: '130px' },
+      { label: 'Status',       w: '92px',  key: 'status' },
+      { label: 'Status Date',  w: '96px',  key: 'status_updated_at' },
+      { label: 'Date',         w: '96px',  key: 'date' },
+      { label: 'Requestor',    w: '130px', key: 'name' },
+      { label: 'Brand',        w: '160px', key: 'brand' },
+      { label: 'Region',       w: '120px', key: 'region' },
+      { label: 'Jurisdiction', w: '130px', key: 'jurisdiction' },
+      { label: 'PURE',         w: '60px',  key: 'pure' },
+      { label: 'Requirements', w: '',      key: 'requirements' },
+      { label: 'Website',      w: '70px',  key: 'website' },
+      { label: 'Phone',        w: '110px', key: 'phone' },
+      { label: 'Email',        w: '140px', key: 'email' },
+      { label: 'Notes',        w: '130px', key: 'notes' },
     ];
+
+    // Apply active sort (if any)
+    rows = _regSortRows(rows, _prSort);
 
     const thStyle = 'padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;color:#fff;';
     const thead = `<thead style="background:var(--navy);position:sticky;top:0;z-index:2;"><tr>${
-      cols.map(c => `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`).join('')
+      cols.map(c => {
+        if (!c.key) return `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`;
+        const arrow = _prSort.key === c.key ? (_prSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+        return `<th onclick="prSortBy('${c.key}')" style="${thStyle}cursor:pointer;${c.w ? 'width:'+c.w+';' : ''}" title="Sort by ${c.label}">${c.label}${arrow}</th>`;
+      }).join('')
     }</tr></thead>`;
 
     const tdBase = 'padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px;';
@@ -10626,7 +10665,7 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="orApplyFilters()">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
           </div>
@@ -10685,7 +10724,7 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="orApplyFilters()">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
           </div>
@@ -10744,7 +10783,7 @@
           <div style="position:relative;flex:1;min-width:200px;">
             <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
               autocomplete="off"
-              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid #b9c2d4;border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
               oninput="orApplyFilters()">
             <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
           </div>
@@ -10861,25 +10900,32 @@
 
     const cols = [
       { label: '#',            w: '40px'  },
-      { label: 'Status',       w: '96px'  },
+      { label: 'Status',       w: '96px',  key: 'status' },
       { label: 'Action',       w: '180px' },
-      { label: 'Date',         w: '96px'  },
-      { label: 'Requestor',    w: '130px' },
-      { label: 'Brand',        w: '160px' },
-      { label: 'Region',       w: '120px' },
-      { label: 'Jurisdiction', w: '130px' },
-      { label: 'PURE',         w: '60px'  },
-      { label: 'Requirements', w: ''      },
-      { label: 'Website',      w: '70px'  },
-      { label: 'Phone',        w: '110px' },
-      { label: 'Email',        w: '140px' },
-      { label: 'Notes',        w: '130px' },
+      { label: 'Date',         w: '96px',  key: 'date' },
+      { label: 'Requestor',    w: '130px', key: 'name' },
+      { label: 'Brand',        w: '160px', key: 'brand' },
+      { label: 'Region',       w: '120px', key: 'region' },
+      { label: 'Jurisdiction', w: '130px', key: 'jurisdiction' },
+      { label: 'PURE',         w: '60px',  key: 'pure' },
+      { label: 'Requirements', w: '',      key: 'requirements' },
+      { label: 'Website',      w: '70px',  key: 'website' },
+      { label: 'Phone',        w: '110px', key: 'phone' },
+      { label: 'Email',        w: '140px', key: 'email' },
+      { label: 'Notes',        w: '130px', key: 'notes' },
     ];
     if (canDel) cols.push({ label: '', w: '60px' });
 
+    // If the user picked a column sort, it overrides the default New-first order
+    if (_orSort && _orSort.key) rows = _regSortRows(rows, _orSort);
+
     const thStyle = 'padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;color:#fff;';
     const thead = `<thead style="background:var(--navy);position:sticky;top:0;z-index:2;"><tr>${
-      cols.map(c => `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`).join('')
+      cols.map(c => {
+        if (!c.key) return `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`;
+        const arrow = _orSort.key === c.key ? (_orSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+        return `<th onclick="orSortBy('${c.key}')" style="${thStyle}cursor:pointer;${c.w ? 'width:'+c.w+';' : ''}" title="Sort by ${c.label}">${c.label}${arrow}</th>`;
+      }).join('')
     }</tr></thead>`;
 
     const tdBase = 'padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px;';
@@ -12403,7 +12449,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.3.6';
+  const APP_VERSION = '2.3.7';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
