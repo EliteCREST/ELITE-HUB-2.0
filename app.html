@@ -10307,22 +10307,22 @@
           </div>
           ${canSeeAll ? `
           <select id="pr-f-region" onchange="prApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Regions</option>
             ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
           </select>
           <select id="pr-f-brand" onchange="prApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Brands</option>
             ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
           </select>` : ''}
           <select id="pr-f-pure" onchange="prApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">PURE: All</option>
             <option value="Yes">PURE: Yes</option>
             <option value="No">PURE: No</option>
           </select>
-          <label style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;white-space:nowrap;">
+          <label style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;white-space:nowrap;padding:8px 12px;border:1.5px solid #c2cbdb;border-radius:8px;background:var(--surface);">
             <input type="checkbox" id="pr-show-archived" onchange="prApplyFilters()" style="accent-color:var(--blue);width:15px;height:15px;cursor:pointer;"> Show Archived
           </label>
         </div>
@@ -10749,17 +10749,17 @@
             <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
           </div>
           <select id="or-f-region" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Regions</option>
             ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
           </select>
           <select id="or-f-brand" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Brands</option>
             ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
           </select>
           <select id="or-f-pure" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">PURE: All</option>
             <option value="Yes">PURE: Yes</option>
             <option value="No">PURE: No</option>
@@ -10808,17 +10808,17 @@
             <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
           </div>
           <select id="or-f-region" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Regions</option>
             ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
           </select>
           <select id="or-f-brand" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Brands</option>
             ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
           </select>
           <select id="or-f-pure" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">PURE: All</option>
             <option value="Yes">PURE: Yes</option>
             <option value="No">PURE: No</option>
@@ -10867,17 +10867,17 @@
             <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
           </div>
           <select id="or-f-region" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Regions</option>
             ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
           </select>
           <select id="or-f-brand" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">All Brands</option>
             ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
           </select>
           <select id="or-f-pure" onchange="orApplyFilters()"
-            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
             <option value="">PURE: All</option>
             <option value="Yes">PURE: Yes</option>
             <option value="No">PURE: No</option>
@@ -11362,6 +11362,17 @@
   // ─────────────────────────────────────────────────────────────────────────
 
   let _orFollowPermitId = null;
+  let _orLrType = '';   // 'Residential' | 'Commercial' | 'Both'
+
+  function orLrSetType(t) {
+    _orLrType = t;
+    document.querySelectorAll('.or-lr-type-btn').forEach(b => {
+      const on = b.getAttribute('data-type') === t;
+      b.style.background = on ? 'var(--blue)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--navy)';
+      b.style.borderColor = on ? 'var(--blue)' : '#b9c2d4';
+    });
+  }
 
   function orOpenFollowup(permitId) {
     _orFollowPermitId = permitId;
@@ -11397,6 +11408,16 @@
           <div id="or-lr-rule" style="height:2px;background:var(--blue);margin-top:4px;width:42px;"></div>
         </div>
         <div style="padding:13px 14px;">
+          <div style="margin-bottom:11px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">License / Registration Name</label>
+            <input type="text" id="or-lr-name" autocomplete="off" placeholder="e.g. General Contractor License" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
+          </div>
+          <div style="margin-bottom:11px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Type</label>
+            <div id="or-lr-type-group" style="display:inline-flex;gap:6px;">
+              ${['Residential','Commercial','Both'].map(t => `<button type="button" class="or-lr-type-btn" data-type="${t}" onclick="orLrSetType('${t}')" style="padding:7px 16px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;">${t}</button>`).join('')}
+            </div>
+          </div>
           <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
             <div style="flex:1;min-width:180px;">
               <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">Contractor Number</label>
@@ -11408,7 +11429,7 @@
             </div>
             <button type="button" id="or-lr-btn" onclick="orMarkReceived()" style="background:var(--navy);border:none;color:#fff;font-size:13px;font-weight:bold;padding:8px 16px;border-radius:7px;cursor:pointer;font-family:inherit;">Received</button>
           </div>
-          <p id="or-lr-note" style="font-size:10px;color:var(--muted);margin:8px 0 0;">Enter the contractor number &amp; expiration, then click “Received” to move this to Active Registrations.</p>
+          <p id="or-lr-note" style="font-size:10px;color:var(--muted);margin:8px 0 0;">Enter the license details, then click “Received” to move this to Active Registrations.</p>
         </div>
       </div>
     `;
@@ -11449,6 +11470,8 @@
       }
       const cnum = document.getElementById('or-lr-cnum'); if (cnum) cnum.value = r.contractor_number || '';
       const exp  = document.getElementById('or-lr-exp');  if (exp && r.license_expiration_date) exp.value = r.license_expiration_date;
+      const lname = document.getElementById('or-lr-name'); if (lname) lname.value = r.license_name || '';
+      if (r.license_type) orLrSetType(r.license_type); else _orLrType = '';
       if (String(r.license_received || '').toUpperCase() === 'TRUE') _orGreenLrCard(r.license_received_date);
     } catch (e) { /* none yet */ }
   }
@@ -11506,6 +11529,7 @@
     const btn = document.getElementById('or-lr-btn');
     const cnum = (document.getElementById('or-lr-cnum') || {}).value || '';
     const exp  = (document.getElementById('or-lr-exp')  || {}).value || '';
+    const lname = (document.getElementById('or-lr-name') || {}).value || '';
     if (!cnum.trim() || !exp) {
       if (!confirm('Contractor number and/or expiration date is blank. Mark as Received anyway? This moves it to Active Registrations.')) return;
     } else if (!confirm('Mark license as Received? This moves the registration to Active Registrations.')) {
@@ -11518,6 +11542,8 @@
         permit_id: _orFollowPermitId,
         contractor_number: cnum,
         expiration_date: exp,
+        license_name: lname,
+        license_type: _orLrType,
       });
       if (res && res.status === 'ok') {
         _orGreenLrCard(res.license_received_date);
@@ -12712,7 +12738,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.5.2';
+  const APP_VERSION = '2.5.4';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
