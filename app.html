@@ -97,6 +97,7 @@
           <a class="nav-sub-item" data-nav="/registrations" href="#/registrations">Contractor Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/open" href="#/registrations/open" id="nav-reg-open" style="display:none;">Open Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/active" href="#/registrations/active" id="nav-reg-active" style="display:none;">Active Registrations</a>
+          <a class="nav-sub-item" data-nav="/registrations/archived" href="#/registrations/archived" id="nav-reg-archived" style="display:none;">Archived Registrations</a>
         </div>
         <a class="nav-item" href="https://elitecrest.github.io/2026_Pricing/PricingApp.html" target="_blank" rel="noopener">
           <span class="nav-item-icon">💲</span>
@@ -1842,8 +1843,10 @@
     {
       const openLink   = $('#nav-reg-open');
       const activeLink = $('#nav-reg-active');
+      const archivedLink = $('#nav-reg-archived');
       if (openLink   && hasPermission('reg:open',   ['emma', 'sara', 'angel'])) openLink.style.display = '';
       if (activeLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) activeLink.style.display = '';
+      if (archivedLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) archivedLink.style.display = '';
     }
 
     // Fleet Vehicles/Drivers sub-links — sheet permission fleet:vehicles / fleet:drivers
@@ -10493,6 +10496,7 @@
       'researched': 'background:#E3F0FF;color:var(--blue);font-weight:700;',  // shown as "Pending"
       'submitted':  'background:#E6F6EC;color:#1F8A4C;font-weight:700;',
       'active':     'background:#E6F6EC;color:#1F8A4C;font-weight:800;',
+      'archived':   'background:#ECEEF2;color:#64748b;font-weight:700;',
       'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
     };
     const css = styles[key] || styles['new'];
@@ -10713,6 +10717,65 @@
     onAfterRender: () => { _orScope = 'active'; if (_orCanAccess()) orLoad(); }
   });
 
+  // ── Archived Registrations (status = Archived) — view-only, same access ──
+  route('/registrations/archived', () => {
+    if (!_orCanAccess()) {
+      return `
+        <div class="view">
+          <div class="empty-state">
+            <div class="empty-state-icon">🔒</div>
+            <div class="empty-state-title">Access restricted</div>
+            <div class="empty-state-sub">Archived Registrations is available to Emma, Sara, and Angel only.</div>
+            <a class="btn btn-primary" href="#/registrations">Back to Contractor Registrations</a>
+          </div>
+        </div>`;
+    }
+    return `
+      <div class="view" id="or-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">Archived Registrations</h1>
+            <p class="view-sub" id="or-sub">Loading…</p>
+          </div>
+        </div>
+
+        <!-- FILTER BAR -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;">
+          <div style="position:relative;flex:1;min-width:200px;">
+            <input type="text" id="or-search" placeholder="Search jurisdiction, brand, requestor, notes…"
+              autocomplete="off"
+              style="width:100%;padding:9px 12px 9px 36px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="orApplyFilters()">
+            <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);">🔍</span>
+          </div>
+          <select id="or-f-region" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Regions</option>
+            ${PR_REGIONS.map(r => `<option value="${_prEsc(r)}">${_prEsc(r)}</option>`).join('')}
+          </select>
+          <select id="or-f-brand" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Brands</option>
+            ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
+          </select>
+          <select id="or-f-pure" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">PURE: All</option>
+            <option value="Yes">PURE: Yes</option>
+            <option value="No">PURE: No</option>
+          </select>
+        </div>
+
+        <!-- TABLE -->
+        <div id="or-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
+          <div style="padding:40px;text-align:center;color:var(--muted);">Loading…</div>
+        </div>
+      </div>`;
+  }, {
+    title: 'Archived Registrations',
+    onAfterRender: () => { _orScope = 'archived'; if (_orCanAccess()) orLoad(); }
+  });
+
   async function orLoad() {
     const list = document.getElementById('or-list');
     if (!list) return;
@@ -10740,9 +10803,10 @@
 
     const rows = _orRecords.filter(r => {
       const st = String(r.status || 'New').toLowerCase();
-      // Scope: 'active' page shows only Active; 'open' page shows everything except Active
-      if (_orScope === 'active') { if (st !== 'active') return false; }
-      else { if (st === 'active') return false; }
+      // Scope: 'active'→only Active; 'archived'→only Archived; 'open'→everything else
+      if (_orScope === 'active')        { if (st !== 'active')   return false; }
+      else if (_orScope === 'archived') { if (st !== 'archived') return false; }
+      else { if (st === 'active' || st === 'archived') return false; }
       if (region && r.region !== region) return false;
       if (brand  && r.brand  !== brand)  return false;
       if (pure   && r.pure   !== pure)   return false;
@@ -10753,7 +10817,7 @@
       return true;
     });
     // New submissions float to the top so they're easy to spot at a glance
-    const _statusRank = { 'new': 0, 'researched': 1, 'submitted': 2, 'active': 3, 'closed': 4 };
+    const _statusRank = { 'new': 0, 'researched': 1, 'submitted': 2, 'active': 3, 'archived': 4, 'closed': 5 };
     rows.sort((a, b) => {
       const ra = _statusRank[String(a.status || 'New').toLowerCase()] ?? 9;
       const rb = _statusRank[String(b.status || 'New').toLowerCase()] ?? 9;
@@ -10774,6 +10838,7 @@
       'researched': 'background:#E3F0FF;color:var(--blue);font-weight:700;',
       'submitted':  'background:#E6F6EC;color:#1F8A4C;font-weight:700;',
       'active':     'background:#E6F6EC;color:#1F8A4C;font-weight:800;',
+      'archived':   'background:#ECEEF2;color:#64748b;font-weight:700;',
       'closed':     'background:#ECEEF2;color:#64748b;font-weight:700;',
     };
     const css = styles[key] || styles['new'];
@@ -10826,9 +10891,11 @@
       const websiteCell = r.website
         ? `<a href="${_prEsc(r.website)}" target="_blank" style="color:var(--blue);font-size:11px;text-decoration:none;">Link ↗</a>`
         : '';
-      const delCell = canDel
-        ? `<td style="${tdBase}"><button onclick="orDelete('${_prEsc(r.row_index)}')" style="background:none;border:1px solid #e0b0b0;color:var(--danger);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;">Del</button></td>`
-        : '';
+      // Archive button (replaces Delete) — not shown on already-archived rows or the Archived page
+      const stForArchive = String(r.status || 'New').toLowerCase();
+      const delCell = (canDel && _orScope !== 'archived' && stForArchive !== 'archived')
+        ? `<td style="${tdBase}"><button onclick="orOpenArchive('${_prEsc(r.id)}')" style="background:none;border:1px solid #cbd3e0;color:var(--muted);font-size:10px;padding:2px 9px;border-radius:3px;cursor:pointer;font-family:inherit;">Archive</button></td>`
+        : (canDel ? `<td style="${tdBase}"></td>` : '');
       const st = String(r.status || 'New').toLowerCase();
       const actLabel = st === 'new' ? 'Research' : (st === 'researched' ? 'View / Edit' : 'View');
       const actBg = st === 'new' ? 'var(--navy)' : 'var(--blue)';
@@ -10853,7 +10920,7 @@
         <td style="${tdBase}">${websiteCell}</td>
         <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.phone)}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.email)}</td>
-        <td style="${tdBase}min-width:100px;font-size:11px;">${_prEsc(r.notes)}</td>
+        <td style="${tdBase}min-width:120px;font-size:11px;">${_orScope === 'archived' ? '<span style="color:#8A6D1F;font-weight:700;">Archived:</span> ' + _prEsc(_prFmtTimestamp(r.status_updated_at)) + (r.archive_reason ? '<br><span style="color:#8A6D1F;font-weight:700;">Reason:</span> ' + _prEsc(r.archive_reason) : '') + (r.notes ? '<br><span style="color:var(--muted);">' + _prEsc(r.notes) + '</span>' : '') : _prEsc(r.notes)}</td>
         ${delCell}
       </tr>`;
     }).join('');
@@ -11517,6 +11584,66 @@
   function orCloseBanners() {
     const modal = document.getElementById('or-banner-backdrop');
     if (modal) modal.style.display = 'none';
+  }
+
+  // ── Archive with reason ──
+  let _orArchivePermitId = null;
+  function orOpenArchive(permitId) {
+    _orArchivePermitId = permitId;
+    const rec = (_orRecords || []).find(r => String(r.id) === String(permitId)) || {};
+    let modal = document.getElementById('or-archive-backdrop');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'or-archive-backdrop';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:65;display:flex;align-items:flex-start;justify-content:center;padding:60px 16px;overflow-y:auto;';
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div style="background:var(--surface,#fff);width:100%;max-width:460px;border-radius:10px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+        <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">Archive Registration</span>
+          <button onclick="orCloseArchive()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <p style="font-size:12px;color:var(--muted);margin:0 0 12px;">Archiving <strong style="color:var(--navy);">${_prEsc(rec.jurisdiction || '')}${rec.brand ? ' · ' + _prEsc(rec.brand) : ''}</strong>. It will move to Archived Registrations.</p>
+          <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Reason for archiving</label>
+          <textarea id="or-archive-reason" rows="3" placeholder="Why is this being archived?" style="width:100%;padding:8px 10px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;resize:vertical;min-height:64px;"></textarea>
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;background:var(--surface-alt,#f9fbfe);">
+          <button class="btn btn-ghost btn-sm" onclick="orCloseArchive()">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="or-archive-btn" onclick="orConfirmArchive()">Archive</button>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+    setTimeout(() => { const t = document.getElementById('or-archive-reason'); if (t) t.focus(); }, 50);
+  }
+
+  function orCloseArchive() {
+    const modal = document.getElementById('or-archive-backdrop');
+    if (modal) modal.style.display = 'none';
+    _orArchivePermitId = null;
+  }
+
+  async function orConfirmArchive() {
+    if (!_orArchivePermitId) return;
+    const reason = (document.getElementById('or-archive-reason') || {}).value || '';
+    const btn = document.getElementById('or-archive-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Archiving…'; }
+    try {
+      const res = await api({}, 'POST', { action: 'archivePermitRequest', permit_id: _orArchivePermitId, reason: reason });
+      if (res && res.status === 'ok') {
+        if (typeof showToast === 'function') showToast('Registration archived.', 'success');
+        orCloseArchive();
+        _orLoaded = false;
+        orLoad();
+      } else {
+        alert('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.textContent = 'Archive'; }
+      }
+    } catch (e) {
+      alert('Network error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Archive'; }
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -12276,7 +12403,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.3.4';
+  const APP_VERSION = '2.3.6';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
