@@ -10930,6 +10930,7 @@
             <option value="Expired">Expired</option>
             <option value="Archived">Archived</option>
           </select>
+          <button type="button" onclick="licResetFilters()" style="padding:9px 14px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;font-weight:600;background:var(--surface);color:var(--navy);cursor:pointer;font-family:inherit;white-space:nowrap;">↺ Reset</button>
         </div>
 
         <div id="lic-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
@@ -11016,6 +11017,17 @@
     licRenderTable(rows);
     const sub = document.getElementById('lic-sub');
     if (sub) sub.textContent = rows.length + ' license' + (rows.length !== 1 ? 's' : '') + (_licCardFilter ? ' (filtered)' : '');
+  }
+
+  function licResetFilters() {
+    const s = document.getElementById('lic-search'); if (s) s.value = '';
+    const b = document.getElementById('lic-f-brand'); if (b) b.value = '';
+    const st = document.getElementById('lic-f-state'); if (st) st.value = '';
+    const stat = document.getElementById('lic-f-status'); if (stat) stat.value = 'Active';
+    _licCardFilter = '';
+    _licSort = {};
+    licRenderCards();
+    licApplyFilters();
   }
 
   function licSortBy(key) {
@@ -13465,7 +13477,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.7.0';
+  const APP_VERSION = '2.7.1';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
