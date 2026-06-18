@@ -97,7 +97,7 @@
           <a class="nav-sub-item" data-nav="/registrations" href="#/registrations">Contractor Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/open" href="#/registrations/open" id="nav-reg-open" style="display:none;">Open Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/active" href="#/registrations/active" id="nav-reg-active" style="display:none;">Active Registrations</a>
-          <a class="nav-sub-item" data-nav="/registrations/licenses" href="#/registrations/licenses" id="nav-reg-licenses" style="display:none;">License Registry</a>
+          <a class="nav-sub-item" data-nav="/registrations/licenses" href="#/registrations/licenses" id="nav-reg-licenses" style="display:none;">Active Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/archived" href="#/registrations/archived" id="nav-reg-archived" style="display:none;">Archived Registrations</a>
         </div>
         <a class="nav-item" href="https://elitecrest.github.io/2026_Pricing/PricingApp.html" target="_blank" rel="noopener">
@@ -1846,7 +1846,7 @@
       const activeLink = $('#nav-reg-active');
       const archivedLink = $('#nav-reg-archived');
       if (openLink   && hasPermission('reg:open',   ['emma', 'sara', 'angel'])) openLink.style.display = '';
-      if (activeLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) activeLink.style.display = '';
+      if (activeLink) activeLink.style.display = 'none';   // retired: old pipeline Active view (superseded by License Registry)
       const licLink = document.getElementById('nav-reg-licenses');
       if (licLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) licLink.style.display = '';
       if (archivedLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) archivedLink.style.display = '';
@@ -10891,7 +10891,7 @@
       return `<div class="view"><div class="empty-state">
         <div class="empty-state-icon">🔒</div>
         <div class="empty-state-title">Access restricted</div>
-        <div class="empty-state-sub">The License Registry is available to Emma, Sara, and Angel only.</div>
+        <div class="empty-state-sub">Active Registrations is available to Emma, Sara, and Angel only.</div>
         <a class="btn btn-primary" href="#/registrations">Back to Contractor Registrations</a>
       </div></div>`;
     }
@@ -10899,7 +10899,7 @@
       <div class="view" id="lic-view">
         <div class="contractors-header">
           <div>
-            <h1 class="view-title">License Registry</h1>
+            <h1 class="view-title">Active Registrations</h1>
             <p class="view-sub" id="lic-sub">Loading…</p>
           </div>
           <button class="btn btn-primary" onclick="licOpenAdd()">+ Add License</button>
@@ -10938,7 +10938,7 @@
         </div>
       </div>`;
   }, {
-    title: 'License Registry',
+    title: 'Active Registrations',
     onAfterRender: () => { if (_orCanAccess()) licLoad(); }
   });
 
@@ -13477,7 +13477,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.7.1';
+  const APP_VERSION = '2.7.2';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
