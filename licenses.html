@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Licenses &amp; Registrations · Elite Hub</title>
+<style>
+  :root{
+    --navy:#1B2A4A; --blue:#1F5FAD; --gold:#C9A961;
+    --ink:#1f2733; --muted:#64748b; --line:#e2e7f0; --line2:#c2cbdb;
+    --surface:#ffffff; --surface-alt:#f9fbfe; --bg:#eef2f8;
+    --danger:#C0392B; --amber:#B7791F; --green:#1F8A4C;
+    --radius:10px;
+    --shadow:0 1px 3px rgba(27,42,74,.07);
+    --shadow-lg:0 16px 48px rgba(27,42,74,.28);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45;}
+  a{color:var(--blue);text-decoration:none;}
+  button{font-family:inherit;}
+
+  /* Header */
+  .topbar{background:var(--navy);color:#fff;padding:0 22px;height:58px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow);position:sticky;top:0;z-index:30;}
+  .brand{display:flex;align-items:center;gap:11px;}
+  .brand-logo{width:32px;height:32px;border-radius:7px;background:linear-gradient(135deg,var(--blue),var(--navy));display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:#fff;border:1.5px solid rgba(255,255,255,.25);}
+  .brand-title{font-size:15px;font-weight:800;letter-spacing:.3px;line-height:1;}
+  .brand-sub{font-size:10px;color:#9fb2d4;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px;}
+  .topbar-right{display:flex;align-items:center;gap:14px;font-size:12px;}
+  .who{display:flex;align-items:center;gap:8px;color:#cdd9ec;}
+  .who .dot{width:8px;height:8px;border-radius:50%;background:var(--gold);}
+  .hublink{color:#cdd9ec;font-size:12px;border:1px solid rgba(255,255,255,.2);padding:5px 11px;border-radius:7px;}
+  .hublink:hover{background:rgba(255,255,255,.08);color:#fff;}
+
+  .wrap{max-width:1280px;margin:0 auto;padding:22px;}
+
+  /* Breadcrumb */
+  .crumbs{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);margin-bottom:16px;}
+  .crumbs a{color:var(--muted);font-weight:600;}
+  .crumbs a:hover{color:var(--blue);}
+  .crumbs .sep{color:var(--line2);}
+  .crumbs .here{color:var(--navy);font-weight:700;}
+
+  /* Page title */
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px;flex-wrap:wrap;}
+  .page-title{font-size:24px;font-weight:800;color:var(--navy);letter-spacing:-.2px;margin:0;}
+  .page-sub{font-size:13px;color:var(--muted);margin:4px 0 0;}
+
+  /* Alert strip */
+  .alert-strip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
+  .alert-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;font-size:12.5px;font-weight:700;cursor:pointer;border:1.5px solid transparent;transition:transform .08s;}
+  .alert-pill:hover{transform:translateY(-1px);}
+  .alert-pill .n{font-size:14px;font-weight:800;}
+  .ap-red{background:#FDECEC;color:var(--danger);border-color:#F1B0B0;}
+  .ap-amber{background:#FEF6E7;color:var(--amber);border-color:#EAD3A0;}
+  .ap-blue{background:#EAF1FB;color:var(--blue);border-color:#B6CDED;}
+  .ap-green{background:#E9F7EF;color:var(--green);border-color:#AEE0C2;}
+
+  /* Lens cards (landing) */
+  .lens-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-bottom:8px;}
+  .lens{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);padding:18px;cursor:pointer;transition:border-color .12s,transform .08s,box-shadow .12s;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+  .lens:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:0 6px 20px rgba(27,42,74,.12);}
+  .lens-icon{font-size:24px;line-height:1;margin-bottom:11px;}
+  .lens-name{font-size:15px;font-weight:800;color:var(--navy);margin-bottom:3px;}
+  .lens-desc{font-size:12px;color:var(--muted);line-height:1.4;}
+  .lens-go{position:absolute;top:16px;right:16px;color:var(--line2);font-size:16px;transition:color .12s,transform .12s;}
+  .lens:hover .lens-go{color:var(--blue);transform:translateX(2px);}
+  .lens-accent{position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--blue);}
+
+  /* Explorer */
+  .toolbar{background:var(--surface);border:1.5px solid var(--line2);border-radius:var(--radius);padding:13px 15px;margin-bottom:14px;box-shadow:var(--shadow);}
+  .toolbar-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+  .search-wrap{position:relative;flex:0 1 320px;min-width:190px;}
+  .search-wrap input{width:100%;padding:9px 12px 9px 34px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;color:var(--ink);background:var(--surface);}
+  .search-wrap .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;}
+  select.f,.btn-reset{padding:8px 11px;border:1.5px solid var(--line2);border-radius:8px;font-size:13px;background:var(--surface);color:var(--ink);cursor:pointer;}
+  .btn-reset{font-weight:700;color:var(--navy);white-space:nowrap;}
+  .btn-reset:hover{background:var(--surface-alt);}
+  .lbl{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-right:-4px;}
+  .grpby{margin-left:auto;display:flex;align-items:center;gap:7px;}
+
+  .btn{padding:8px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:1.5px solid transparent;font-family:inherit;}
+  .btn-primary{background:var(--navy);color:#fff;border-color:var(--navy);}
+  .btn-primary:hover{background:#152139;}
+  .btn-ghost{background:var(--surface);color:var(--navy);border-color:var(--line2);}
+  .btn-ghost:hover{background:var(--surface-alt);}
+  .btn-sm{padding:5px 11px;font-size:12px;}
+
+  /* Table */
+  .tablecard{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);overflow:auto;box-shadow:var(--shadow);}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{background:var(--navy);color:#fff;text-align:left;padding:9px 12px;font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;position:sticky;top:0;cursor:pointer;}
+  thead th:hover{background:#243a63;}
+  tbody td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top;}
+  tbody tr{transition:background .1s;cursor:pointer;}
+  tbody tr:hover{background:var(--surface-alt);}
+  .grp-row td{background:#eef3fb;font-weight:800;color:var(--navy);font-size:11px;letter-spacing:.4px;text-transform:uppercase;border-bottom:1.5px solid var(--line2);padding:7px 12px;}
+  .grp-row .gcount{color:var(--blue);font-weight:800;margin-left:8px;}
+  .pill{display:inline-block;padding:1px 8px;border-radius:9px;font-size:10px;font-weight:700;}
+  .pill-yes{background:#E3F0FF;color:var(--blue);}
+  .pill-no{background:#F0F0F0;color:var(--muted);}
+  .badge-ce{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:800;background:#E3F0FF;color:var(--blue);margin-left:5px;white-space:nowrap;}
+  .row-expired{background:#FDECEC;}
+  .row-expiring{background:#FEF6E7;}
+  .row-ce{background:#EAF1FB;}
+  .exp-red{color:var(--danger);font-weight:700;}
+  .exp-amber{color:var(--amber);font-weight:700;}
+
+  .empty{padding:50px 24px;text-align:center;color:var(--muted);}
+  .empty-ic{font-size:36px;margin-bottom:8px;}
+  .empty-t{font-size:15px;font-weight:800;color:var(--navy);margin-bottom:4px;}
+
+  .skel{height:14px;background:linear-gradient(90deg,#eef2f8 25%,#e3e9f3 37%,#eef2f8 63%);background-size:400% 100%;animation:sk 1.3s ease infinite;border-radius:4px;}
+  @keyframes sk{0%{background-position:100% 50%}100%{background-position:0 50%}}
+
+  /* Slide-over / modal */
+  .backdrop{position:fixed;inset:0;background:rgba(27,42,74,.55);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px;overflow-y:auto;}
+  .sheet{background:var(--surface);width:100%;max-width:680px;border-radius:12px;box-shadow:var(--shadow-lg);overflow:hidden;}
+  .sheet-head{background:var(--navy);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;}
+  .sheet-head .t{font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;}
+  .sheet-x{background:none;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;}
+  .sheet-body{padding:18px 20px;}
+  .sheet-foot{padding:13px 20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:8px;background:var(--surface-alt);}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--navy);}
+  .field input,.field select,.field textarea{padding:8px 10px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:13px;color:var(--ink);background:#fff;width:100%;}
+  .field textarea{resize:vertical;min-height:48px;}
+  .seg{display:inline-flex;gap:6px;}
+  .seg button{padding:8px 16px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-size:13px;font-weight:700;cursor:pointer;}
+  .seg button.on{background:var(--blue);border-color:var(--blue);color:#fff;}
+
+  /* Detail read view rows */
+  .dl{display:grid;grid-template-columns:130px 1fr;gap:6px 14px;font-size:13px;}
+  .dl dt{color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.3px;padding-top:2px;}
+  .dl dd{margin:0;color:var(--ink);}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 20px;border-radius:9px;font-size:13px;font-weight:600;box-shadow:var(--shadow-lg);z-index:90;opacity:0;transition:opacity .2s,transform .2s;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+  .toast.err{background:var(--danger);}
+
+  .viewonly-note{font-size:11px;color:var(--muted);background:var(--surface-alt);border:1px solid var(--line);border-radius:7px;padding:7px 12px;display:inline-flex;align-items:center;gap:6px;}
+
+  @media(max-width:640px){
+    .wrap{padding:14px;}
+    .fgrid{grid-template-columns:1fr;}
+    .grpby{margin-left:0;}
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-logo">ECS</div>
+      <div>
+        <div class="brand-title">Licenses &amp; Registrations</div>
+        <div class="brand-sub">Elite Hub · Command Center</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span class="who" id="who"></span>
+      <a class="hublink" href="./app.html">← Elite Hub</a>
+    </div>
+  </div>
+
+  <div class="wrap" id="app">
+    <div class="skel" style="width:200px;height:24px;margin-bottom:18px;"></div>
+    <div class="lens-grid">
+      <div class="skel" style="height:110px;"></div>
+      <div class="skel" style="height:110px;"></div>
+      <div class="skel" style="height:110px;"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ── Config (shared with Elite Hub) ──
+  const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw4ithOR-VTRkMMcV2LGKb_QozPPro6c83TdwESDbfirP388IVyPuzQ7nDUroRQ2jEx/exec';
+  const SESSION_KEY = 'elite2_session';
+  const EDITORS = ['emma','sara','angel'];
+
+  // ── Session (shared; read-only viewing needs no login) ──
+  function getSession(){ try{ return JSON.parse(localStorage.getItem(SESSION_KEY) || 'null'); }catch(e){ return null; } }
+  function getToken(){ const s=getSession(); return (s && s.token) ? s.token : null; }
+  function me(){ const s=getSession(); return (s && s.user) ? s.user : null; }
+  function canEdit(){ const u=me(); return !!(u && EDITORS.indexOf(String(u.username||'').toLowerCase())>=0); }
+
+  // ── API ──
+  async function api(params, method='GET', body=null){
+    const token=getToken();
+    const qs=new URLSearchParams({ ...(token?{token}:{}), ...(params||{}) }).toString();
+    const url=BACKEND_URL+'?'+qs;
+    const opts={ method, redirect:'follow' };
+    if(method==='POST' && body){
+      opts.headers={ 'Content-Type':'text/plain;charset=utf-8' };
+      opts.body=JSON.stringify({ ...(token?{token}:{}), ...body });
+    }
+    const res=await fetch(url,opts);
+    return res.json();
+  }
+
+  // ── Utils ──
+  const $=sel=>document.querySelector(sel);
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function fmtDate(v){ const s=String(v||'').match(/^(\d{4}-\d{2}-\d{2})/); if(s) return s[1]; const d=new Date(v); return isNaN(d)?String(v||''):d.toISOString().slice(0,10); }
+  function daysTo(v){ const m=String(v||'').match(/^(\d{4}-\d{2}-\d{2})/); return m?Math.floor((new Date(m[1]+'T00:00:00')-new Date())/86400000):null; }
+  function toast(msg,err){ const t=$('#toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2600); }
+
+  const US_STATES=['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+  const BRANDS=['Universal Roofing, LLC','Wildwood Roofing & Construction, Inc','Reimagine Roofing & Construction, LLC','Aspen Exteriors, Inc','Grove Exteriors, LLC dba 123 Exteriors','Elite','Accuserve'];
+
+  // ── State ──
+  let LICENSES=[];
+  let LOADED=false;
+  let view={ name:'home' };
+  let filters={ search:'', brand:'', state:'', status:'Active', type:'', qualifier:'', cardAlert:'' };
+  let groupBy='';
+  let sort={ key:'', dir:'asc' };
+
+  // ── Data load ──
+  async function loadLicenses(){
+    if(LOADED) return;
+    const res=await api({ resource:'licenses' });
+    LICENSES=(res && res.licenses) || [];
+    LOADED=true;
+  }
+
+  // ── Routing (hash) ──
+  function parseHash(){
+    const h=(location.hash||'').replace(/^#\/?/,'');
+    const parts=h.split('/').filter(Boolean);
+    if(!parts.length) return { name:'home' };
+    if(parts[0]==='explore') return { name:'explore', preset:parts[1]||'' };
+    return { name:'home' };
+  }
+  async function render(){
+    view=parseHash();
+    const app=$('#app');
+    renderWho();
+    try{
+      app.innerHTML='<div class="skel" style="width:220px;height:24px;margin-bottom:16px;"></div><div class="skel" style="height:300px;"></div>';
+      await loadLicenses();
+    }catch(e){
+      app.innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-t">Couldn’t load data</div><div>'+esc(e.message)+'</div></div>';
+      return;
+    }
+    if(view.name==='explore') renderExplore(view.preset);
+    else renderHome();
+  }
+
+  function renderWho(){
+    const u=me();
+    $('#who').innerHTML = u
+      ? '<span class="dot"></span>'+esc(u.name||u.username)+(canEdit()?' · Editor':' · View only')
+      : '<span class="dot" style="background:#7d8aa3;"></span>View only';
+  }
+
+  // ── Alert counts ──
+  function alertCounts(){
+    const a=LICENSES.filter(r=>String(r.status||'').toLowerCase()==='active');
+    let expiring=0,expired=0,cedue=0;
+    a.forEach(r=>{ const de=daysTo(r.expiration_date); if(de!==null&&de<0)expired++; else if(de!==null&&de<=30)expiring++; const da=daysTo(r.ce_alert_date); if(da!==null&&da<=0)cedue++; });
+    return { total:a.length, expiring, expired, cedue };
+  }
+
+  // ── HOME (Command Center landing) ──
+  function renderHome(){
+    const c=alertCounts();
+    const lenses=[
+      { key:'',          icon:'📋', name:'All Licenses',  desc:'Browse and filter every license and registration we hold.' },
+      { key:'expiring',  icon:'⏰', name:'Expiring Soon',  desc:'Licenses past due or expiring within 30 days.' },
+      { key:'bystate',   icon:'🗺️', name:'By State',       desc:'See coverage grouped by state, then drill in.' },
+      { key:'bybrand',   icon:'🏢', name:'By Brand',       desc:'Every license grouped by brand entity.' },
+      { key:'bytype',    icon:'🏷️', name:'By Type',        desc:'Group by license type — find commercial, roofing, and more.' },
+      { key:'qualifiers',icon:'👤', name:'Qualifiers',     desc:'Who qualifies which licenses, and where.' },
+    ];
+    $('#app').innerHTML=`
+      <div class="crumbs"><span class="here">Command Center</span></div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Licenses &amp; Registrations</h1>
+          <p class="page-sub">${c.total} active license${c.total!==1?'s':''} across all brands. Pick a view, or explore freely.</p>
+        </div>
+      </div>
+      <div class="alert-strip">
+        ${c.expired?`<span class="alert-pill ap-red" onclick="location.hash='#/explore/expiring'"><span class="n">${c.expired}</span> expired</span>`:''}
+        ${c.expiring?`<span class="alert-pill ap-amber" onclick="location.hash='#/explore/expiring'"><span class="n">${c.expiring}</span> expiring ≤30 days</span>`:''}
+        ${c.cedue?`<span class="alert-pill ap-blue" onclick="location.hash='#/explore/expiring'"><span class="n">${c.cedue}</span> CE due</span>`:''}
+        ${(!c.expired&&!c.expiring&&!c.cedue)?`<span class="alert-pill ap-green"><span class="n">✓</span> Nothing needs attention</span>`:''}
+      </div>
+      <div class="lens-grid">
+        ${lenses.map(l=>`
+          <div class="lens" onclick="location.hash='#/explore/${l.key}'">
+            <div class="lens-accent"></div>
+            <div class="lens-go">→</div>
+            <div class="lens-icon">${l.icon}</div>
+            <div class="lens-name">${l.name}</div>
+            <div class="lens-desc">${l.desc}</div>
+          </div>`).join('')}
+      </div>`;
+  }
+
+  // ── EXPLORE (the generic engine) ──
+  // Presets just set initial filters/grouping; the user can change anything after.
+  function applyPreset(preset){
+    filters={ search:'', brand:'', state:'', status:'Active', type:'', qualifier:'', cardAlert:'' };
+    groupBy=''; sort={ key:'', dir:'asc' };
+    if(preset==='expiring'){ filters.status=''; filters.cardAlert='expiring_or_expired'; sort={key:'expiration_date',dir:'asc'}; }
+    else if(preset==='bystate'){ groupBy='state'; }
+    else if(preset==='bybrand'){ groupBy='brand'; }
+    else if(preset==='bytype'){ groupBy='license_type'; }
+    else if(preset==='qualifiers'){ groupBy='qualifier'; }
+  }
+
+  let _presetApplied=null;
+  function renderExplore(preset){
+    if(_presetApplied!==preset){ applyPreset(preset); _presetApplied=preset; }
+    const titles={ '':'All Licenses', expiring:'Expiring Soon', bystate:'By State', bybrand:'By Brand', bytype:'By Type', qualifiers:'Qualifiers' };
+    const title=titles[preset]||'Explore';
+    $('#app').innerHTML=`
+      <div class="crumbs"><a href="#/">Command Center</a><span class="sep">›</span><span class="here">${esc(title)}</span></div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">${esc(title)}</h1>
+          <p class="page-sub" id="ex-sub"></p>
+        </div>
+        ${canEdit()?`<button class="btn btn-primary" onclick="LIC.openAdd()">+ Add License</button>`
+                   :`<span class="viewonly-note">🔒 View only · editing is limited to compliance leads</span>`}
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <div class="search-wrap"><span class="ic">🔍</span><input id="f-search" placeholder="Search name, number, jurisdiction, qualifier…" oninput="LIC.setFilter('search',this.value)"></div>
+          <select class="f" id="f-brand" onchange="LIC.setFilter('brand',this.value)"><option value="">All Brands</option>${BRANDS.map(b=>`<option ${filters.brand===b?'selected':''}>${esc(b)}</option>`).join('')}</select>
+          <select class="f" id="f-state" onchange="LIC.setFilter('state',this.value)"><option value="">All States</option>${US_STATES.map(s=>`<option ${filters.state===s?'selected':''}>${s}</option>`).join('')}</select>
+          <select class="f" id="f-type" onchange="LIC.setFilter('type',this.value)"><option value="">All Types</option>${['Residential','Commercial','Both'].map(t=>`<option ${filters.type===t?'selected':''}>${t}</option>`).join('')}</select>
+          <select class="f" id="f-status" onchange="LIC.setFilter('status',this.value)">
+            <option value="Active" ${filters.status==='Active'?'selected':''}>Active</option>
+            <option value="" ${filters.status===''?'selected':''}>All Statuses</option>
+            <option value="Expired" ${filters.status==='Expired'?'selected':''}>Expired</option>
+            <option value="Archived" ${filters.status==='Archived'?'selected':''}>Archived</option>
+          </select>
+          <button class="btn-reset" onclick="LIC.reset()">↺ Reset</button>
+          <div class="grpby">
+            <span class="lbl">Group</span>
+            <select class="f" id="f-group" onchange="LIC.setGroup(this.value)">
+              <option value="" ${groupBy===''?'selected':''}>None</option>
+              <option value="state" ${groupBy==='state'?'selected':''}>State</option>
+              <option value="brand" ${groupBy==='brand'?'selected':''}>Brand</option>
+              <option value="license_type" ${groupBy==='license_type'?'selected':''}>Type</option>
+              <option value="qualifier" ${groupBy==='qualifier'?'selected':''}>Qualifier</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="tablecard" id="ex-table"></div>`;
+    renderTable();
+  }
+
+  function filteredRows(){
+    let rows=LICENSES.filter(r=>{
+      const st=String(r.status||'').toLowerCase();
+      if(filters.status && st!==filters.status.toLowerCase()) return false;
+      if(filters.cardAlert==='expiring_or_expired'){ const d=daysTo(r.expiration_date); if(!(d!==null && d<=30)) return false; }
+      if(filters.brand && r.brand!==filters.brand) return false;
+      if(filters.state && r.state!==filters.state) return false;
+      if(filters.type && String(r.license_type||'')!==filters.type) return false;
+      if(filters.qualifier && String(r.qualifier||'')!==filters.qualifier) return false;
+      if(filters.search){
+        const q=filters.search.toLowerCase();
+        const hay=[r.license_name,r.number,r.jurisdiction,r.brand,r.qualifier,r.state,r.notes].join(' ').toLowerCase();
+        if(!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    if(sort.key){
+      rows=rows.slice().sort((a,b)=>{
+        const av=String(a[sort.key]||'').toLowerCase(), bv=String(b[sort.key]||'').toLowerCase();
+        if(av<bv) return sort.dir==='asc'?-1:1;
+        if(av>bv) return sort.dir==='asc'?1:-1;
+        return 0;
+      });
+    }
+    return rows;
+  }
+
+  const COLS=[
+    { key:'brand', label:'Brand' },
+    { key:'state', label:'State' },
+    { key:'jurisdiction', label:'Jurisdiction' },
+    { key:'license_name', label:'License Name' },
+    { key:'number', label:'Number' },
+    { key:'expiration_date', label:'Expiration' },
+    { key:'qualifier', label:'Qualifier' },
+    { key:'license_type', label:'Type' },
+    { key:'pure', label:'PURE' },
+  ];
+
+  function rowClass(r){
+    const d=daysTo(r.expiration_date);
+    if(d!==null && d<0) return 'row-expired';
+    if(d!==null && d<=30) return 'row-expiring';
+    const a=daysTo(r.ce_alert_date);
+    if(a!==null && a<=0) return 'row-ce';
+    return '';
+  }
+  function cell(r,key){
+    if(key==='expiration_date'){
+      const d=daysTo(r.expiration_date); let cls='';
+      if(d!==null){ if(d<0)cls='exp-red'; else if(d<=30)cls='exp-amber'; }
+      return `<span class="${cls}">${esc(fmtDate(r.expiration_date))}</span>`;
+    }
+    if(key==='pure'){ return r.pure==='Yes'?'<span class="pill pill-yes">Yes</span>':(r.pure==='No'?'<span class="pill pill-no">No</span>':''); }
+    if(key==='license_name'){ const a=daysTo(r.ce_alert_date); const ce=(a!==null&&a<=0)?'<span class="badge-ce">CE DUE</span>':''; return esc(r.license_name)+ce; }
+    return esc(r[key]||'');
+  }
+
+  function renderTable(){
+    const rows=filteredRows();
+    const sub=$('#ex-sub'); if(sub) sub.textContent=rows.length+' license'+(rows.length!==1?'s':'')+(groupBy?' · grouped by '+groupBy.replace('_',' '):'');
+    const wrap=$('#ex-table'); if(!wrap) return;
+    if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="empty-ic">📭</div><div class="empty-t">No licenses match</div><div>Try adjusting filters, or hit Reset.</div></div>'; return; }
+    const thead=`<thead><tr>${COLS.map(c=>{const ar=sort.key===c.key?(sort.dir==='asc'?' ▲':' ▼'):'';return `<th onclick="LIC.sortBy('${c.key}')">${c.label}${ar}</th>`;}).join('')}<th></th></tr></thead>`;
+    let body='';
+    if(groupBy){
+      const groups={};
+      rows.forEach(r=>{ const k=String(r[groupBy]||'—')||'—'; (groups[k]=groups[k]||[]).push(r); });
+      Object.keys(groups).sort().forEach(g=>{
+        body+=`<tr class="grp-row"><td colspan="${COLS.length+1}">${esc(g)}<span class="gcount">${groups[g].length}</span></td></tr>`;
+        body+=groups[g].map(r=>rowHtml(r)).join('');
+      });
+    }else{
+      body=rows.map(r=>rowHtml(r)).join('');
+    }
+    wrap.innerHTML=`<table>${thead}<tbody>${body}</tbody></table>`;
+  }
+  function rowHtml(r){
+    return `<tr class="${rowClass(r)}" onclick="LIC.openDetail('${esc(r.id)}')">${COLS.map(c=>`<td>${cell(r,c.key)}</td>`).join('')}<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();LIC.openDetail('${esc(r.id)}')">View</button></td></tr>`;
+  }
+
+  // ── Detail / Add / Edit ──
+  let formId=null, fType='', fOwned='', fPure='';
+  function closeSheet(){ const b=$('#sheet-backdrop'); if(b) b.remove(); }
+
+  function openDetail(id){
+    const r=LICENSES.find(x=>String(x.id)===String(id)); if(!r) return;
+    if(canEdit()){ openForm(r); return; }
+    // read-only detail
+    const rows=[
+      ['Brand',r.brand],['State',r.state],['Jurisdiction',r.jurisdiction],
+      ['License Name',r.license_name],['Type',r.license_type],['Number',r.number],
+      ['Expiration',fmtDate(r.expiration_date)],['Qualifier',r.qualifier],
+      ['CE Hours',r.ce_hours],['CE Due',fmtDate(r.ce_due_date)],
+      ['Elite Owned',r.elite_owned],['PURE',r.pure],['Phone',r.phone],['Notes',r.notes],
+    ];
+    showSheet('License Details',
+      `<dl class="dl">${rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v||'—')}</dd>`).join('')}</dl>`,
+      `<span></span><button class="btn btn-ghost btn-sm" onclick="LIC.close()">Close</button>`);
+  }
+
+  function showSheet(title,bodyHtml,footHtml){
+    closeSheet();
+    const b=document.createElement('div');
+    b.id='sheet-backdrop'; b.className='backdrop';
+    b.innerHTML=`<div class="sheet"><div class="sheet-head"><span class="t">${esc(title)}</span><button class="sheet-x" onclick="LIC.close()">×</button></div><div class="sheet-body">${bodyHtml}</div><div class="sheet-foot">${footHtml}</div></div>`;
+    b.addEventListener('click',e=>{ if(e.target===b) closeSheet(); });
+    document.body.appendChild(b);
+  }
+
+  function openAdd(){ openForm(null); }
+  function openForm(rec){
+    if(!canEdit()){ toast('Editing is limited to compliance leads.',true); return; }
+    formId=rec?rec.id:null; fType=rec?rec.license_type||'':''; fOwned=rec?rec.elite_owned||'':''; fPure=rec?rec.pure||'':'';
+    const v=k=>rec&&rec[k]!=null?esc(rec[k]):'';
+    const seg=(group,cur,opts)=>`<div class="seg" data-group="${group}">${opts.map(o=>`<button class="${cur===o?'on':''}" onclick="LIC.seg('${group}','${o}')">${o}</button>`).join('')}</div>`;
+    const body=`
+      <div class="fgrid">
+        <div class="field"><label>State</label><select id="lf-state"><option value="">—</option>${US_STATES.map(s=>`<option ${v('state')===s?'selected':''}>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Brand</label><select id="lf-brand"><option value="">—</option>${BRANDS.map(b=>`<option ${v('brand')===b?'selected':''}>${esc(b)}</option>`).join('')}</select></div>
+        <div class="field"><label>Jurisdiction</label><input id="lf-juris" value="${v('jurisdiction')}" placeholder="City, county, or municipality"></div>
+        <div class="field"><label>Region</label><input id="lf-region" value="${v('region')}" placeholder="Optional"></div>
+      </div>
+      <div class="field" style="margin-top:13px;"><label>License / Registration Name</label><input id="lf-name" value="${v('license_name')}" placeholder="e.g. General Contractor License"></div>
+      <div class="field" style="margin-top:13px;"><label>Type</label>${seg('type',fType,['Residential','Commercial','Both'])}</div>
+      <div class="fgrid" style="margin-top:13px;">
+        <div class="field"><label>Number</label><input id="lf-number" value="${v('number')}" placeholder="e.g. ROC-123456"></div>
+        <div class="field"><label>Expiration Date</label><input type="date" id="lf-exp" value="${v('expiration_date')}"></div>
+        <div class="field"><label>Qualifier</label><input id="lf-qual" value="${v('qualifier')}" placeholder="Name of qualifier"></div>
+        <div class="field"><label>Phone</label><input id="lf-phone" value="${v('phone')}" placeholder="(000) 000-0000"></div>
+        <div class="field"><label>CE Hours</label><input id="lf-cehrs" value="${v('ce_hours')}" placeholder="e.g. 8"></div>
+        <div class="field"><label>CE Due Date</label><input type="date" id="lf-cedue" value="${v('ce_due_date')}"></div>
+        <div class="field"><label>CE Alert Date</label><input type="date" id="lf-cealert" value="${v('ce_alert_date')}"></div>
+      </div>
+      <div style="display:flex;gap:26px;margin-top:13px;flex-wrap:wrap;">
+        <div class="field"><label>Elite Owned</label>${seg('owned',fOwned,['Yes','No'])}</div>
+        <div class="field"><label>PURE</label>${seg('pure',fPure,['Yes','No'])}</div>
+      </div>
+      <div class="field" style="margin-top:13px;"><label>Notes</label><textarea id="lf-notes" rows="2">${v('notes')}</textarea></div>
+      ${rec?`<div style="margin-top:12px;font-size:11px;color:var(--muted);">Source: ${esc(rec.source||'—')}${rec.source_request_id?' · from request '+esc(rec.source_request_id):''}</div>`:''}`;
+    const foot=`
+      ${rec&&String(rec.status||'').toLowerCase()!=='archived'?`<button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="LIC.archive('${esc(rec.id)}')">Archive</button>`:'<span></span>'}
+      <div style="display:flex;gap:8px;"><button class="btn btn-ghost btn-sm" onclick="LIC.close()">Cancel</button><button class="btn btn-primary btn-sm" id="lf-save" onclick="LIC.save()">${rec?'Save Changes':'Add License'}</button></div>`;
+    showSheet(rec?'Edit License':'+ Add License',body,foot);
+  }
+
+  function seg(group,val){
+    if(group==='type')fType=val; else if(group==='owned')fOwned=val; else if(group==='pure')fPure=val;
+    document.querySelectorAll(`.seg[data-group="${group}"] button`).forEach(b=>b.classList.toggle('on',b.textContent===val));
+  }
+
+  async function save(){
+    const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+    const state=g('lf-state'),brand=g('lf-brand'),juris=g('lf-juris');
+    if(!state||!brand||!juris.trim()){ toast('State, Brand, and Jurisdiction are required.',true); return; }
+    const btn=$('#lf-save'); if(btn){btn.disabled=true;btn.textContent='Saving…';}
+    const payload={ action:'saveLicense', id:formId||'', state, brand, jurisdiction:juris.trim(), region:g('lf-region'),
+      license_name:g('lf-name'), license_type:fType, number:g('lf-number'), expiration_date:g('lf-exp'),
+      qualifier:g('lf-qual'), phone:g('lf-phone'), ce_hours:g('lf-cehrs'), ce_due_date:g('lf-cedue'),
+      ce_alert_date:g('lf-cealert'), elite_owned:fOwned, pure:fPure, notes:g('lf-notes') };
+    try{
+      const res=await api({},'POST',payload);
+      if(res&&res.status==='ok'){ toast(formId?'License updated.':'License added.'); closeSheet(); LOADED=false; await loadLicenses(); renderTable(); renderWho(); }
+      else{ toast('Failed: '+((res&&res.error)||'Unknown error'),true); if(btn){btn.disabled=false;btn.textContent=formId?'Save Changes':'Add License';} }
+    }catch(e){ toast('Network error: '+e.message,true); if(btn){btn.disabled=false;btn.textContent=formId?'Save Changes':'Add License';} }
+  }
+
+  async function archive(id){
+    if(!confirm('Archive this license? It stays on record but leaves the active registry.')) return;
+    try{
+      const res=await api({},'POST',{ action:'archiveLicense', id });
+      if(res&&res.status==='ok'){ toast('License archived.'); closeSheet(); LOADED=false; await loadLicenses(); renderTable(); }
+      else toast('Failed: '+((res&&res.error)||'Unknown error'),true);
+    }catch(e){ toast('Network error: '+e.message,true); }
+  }
+
+  // ── Public handlers ──
+  window.LIC={
+    setFilter:(k,v)=>{ filters[k]=v; renderTable(); },
+    setGroup:(v)=>{ groupBy=v; renderTable(); },
+    sortBy:(k)=>{ if(sort.key===k){ if(sort.dir==='asc')sort.dir='desc'; else sort={key:'',dir:'asc'}; } else sort={key:k,dir:'asc'}; renderTable(); },
+    reset:()=>{ filters={search:'',brand:'',state:'',status:'Active',type:'',qualifier:'',cardAlert:''}; groupBy=''; sort={key:'',dir:'asc'}; _presetApplied='__reset__'; renderExplore(view.preset); },
+    openDetail, openAdd, openForm, seg, save, archive, close:closeSheet,
+  };
+
+  window.addEventListener('hashchange',render);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
+  render();
+})();
+</script>
+</body>
+</html>
