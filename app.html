@@ -10330,6 +10330,14 @@
             <option value="Yes">PURE: Yes</option>
             <option value="No">PURE: No</option>
           </select>
+          <select id="pr-f-status" onchange="prApplyFilters()"
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Statuses</option>
+            <option value="New">New</option>
+            <option value="Researched">Pending</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Active">Active</option>
+          </select>
           <label style="margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--navy);cursor:pointer;white-space:nowrap;padding:8px 12px;border:1.5px solid #c2cbdb;border-radius:8px;background:var(--surface);">
             <input type="checkbox" id="pr-show-archived" onchange="prApplyFilters()" style="accent-color:var(--blue);width:15px;height:15px;cursor:pointer;"> Show Archived
           </label>
@@ -10530,11 +10538,13 @@
     const region = (document.getElementById('pr-f-region') || {}).value || '';
     const brand  = (document.getElementById('pr-f-brand')  || {}).value || '';
     const pure   = (document.getElementById('pr-f-pure')   || {}).value || '';
+    const status = (document.getElementById('pr-f-status') || {}).value || '';
     const showArchived = !!(document.getElementById('pr-show-archived') || {}).checked;
     const ql = q.toLowerCase();
 
     let rows = _prRecords.filter(r => {
       if (!showArchived && String(r.status || '').toLowerCase() === 'archived') return false;
+      if (status && String(r.status || '').toLowerCase() !== status.toLowerCase()) return false;
       if (region && r.region !== region) return false;
       if (brand  && r.brand  !== brand)  return false;
       if (pure   && r.pure   !== pure)   return false;
@@ -10772,6 +10782,13 @@
             <option value="Yes">PURE: Yes</option>
             <option value="No">PURE: No</option>
           </select>
+          <select id="or-f-status" onchange="orApplyFilters()"
+            style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Statuses</option>
+            <option value="New">New</option>
+            <option value="Researched">Researched</option>
+            <option value="Submitted">Submitted</option>
+          </select>
         </div>
 
         <!-- TABLE -->
@@ -10926,6 +10943,7 @@
     const region = (document.getElementById('or-f-region') || {}).value || '';
     const brand  = (document.getElementById('or-f-brand')  || {}).value || '';
     const pure   = (document.getElementById('or-f-pure')   || {}).value || '';
+    const status = (document.getElementById('or-f-status') || {}).value || '';
     const ql = q.toLowerCase();
 
     const rows = _orRecords.filter(r => {
@@ -10934,6 +10952,7 @@
       if (_orScope === 'active')        { if (st !== 'active')   return false; }
       else if (_orScope === 'archived') { if (st !== 'archived') return false; }
       else { if (st === 'active' || st === 'archived') return false; }
+      if (status && st !== status.toLowerCase()) return false;
       if (region && r.region !== region) return false;
       if (brand  && r.brand  !== brand)  return false;
       if (pure   && r.pure   !== pure)   return false;
@@ -13002,7 +13021,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.5.9';
+  const APP_VERSION = '2.6.0';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
