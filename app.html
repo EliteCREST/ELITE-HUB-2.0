@@ -97,6 +97,7 @@
           <a class="nav-sub-item" data-nav="/registrations" href="#/registrations">Contractor Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/open" href="#/registrations/open" id="nav-reg-open" style="display:none;">Open Registrations</a>
           <a class="nav-sub-item" data-nav="/registrations/active" href="#/registrations/active" id="nav-reg-active" style="display:none;">Active Registrations</a>
+          <a class="nav-sub-item" data-nav="/registrations/licenses" href="#/registrations/licenses" id="nav-reg-licenses" style="display:none;">License Registry</a>
           <a class="nav-sub-item" data-nav="/registrations/archived" href="#/registrations/archived" id="nav-reg-archived" style="display:none;">Archived Registrations</a>
         </div>
         <a class="nav-item" href="https://elitecrest.github.io/2026_Pricing/PricingApp.html" target="_blank" rel="noopener">
@@ -1846,6 +1847,8 @@
       const archivedLink = $('#nav-reg-archived');
       if (openLink   && hasPermission('reg:open',   ['emma', 'sara', 'angel'])) openLink.style.display = '';
       if (activeLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) activeLink.style.display = '';
+      const licLink = document.getElementById('nav-reg-licenses');
+      if (licLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) licLink.style.display = '';
       if (archivedLink && hasPermission('reg:active', ['emma', 'sara', 'angel'])) archivedLink.style.display = '';
     }
 
@@ -10160,6 +10163,7 @@
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     const modals = [
+      { id: 'lic-form-backdrop',    close: () => (typeof licCloseForm === 'function') && licCloseForm() },
       { id: 'or-addactive-backdrop', close: () => (typeof orCloseAddActive === 'function') && orCloseAddActive() },
       { id: 'or-report-backdrop',   close: () => (typeof orCloseReport === 'function') && orCloseReport() },
       { id: 'or-archive-backdrop',  close: () => (typeof orCloseArchive === 'function') && orCloseArchive() },
@@ -10569,6 +10573,19 @@
     return s;
   }
 
+  // Normalize any date value to clean YYYY-MM-DD for display.
+  function _prFmtDateOnly(v) {
+    const s = String(v || '').trim();
+    if (!s) return '';
+    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);   // ISO or ISO-with-time
+    if (m) return m[1];
+    const d = new Date(s);                        // fallback: parse other formats
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+    return s;
+  }
+
   // A registration is "overdue" if it's been stuck in Researched > 15 days.
   // Clock runs from status_updated_at (the Researched stamp) and stops once
   // the status moves on (Submitted/Active/etc.).
@@ -10861,6 +10878,341 @@
     onAfterRender: () => { _orScope = 'active'; if (_orCanAccess()) orLoad(); }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════
+  //  LICENSE REGISTRY (Phase 1) — the new home for active licenses Elite holds
+  // ═══════════════════════════════════════════════════════════════════════
+  let _licRecords = [];
+  let _licLoaded  = false;
+  let _licSort    = {};
+  let _licCardFilter = '';   // '', 'expiring', 'cedue', 'expired'
+
+  route('/registrations/licenses', () => {
+    if (!_orCanAccess()) {
+      return `<div class="view"><div class="empty-state">
+        <div class="empty-state-icon">🔒</div>
+        <div class="empty-state-title">Access restricted</div>
+        <div class="empty-state-sub">The License Registry is available to Emma, Sara, and Angel only.</div>
+        <a class="btn btn-primary" href="#/registrations">Back to Contractor Registrations</a>
+      </div></div>`;
+    }
+    return `
+      <div class="view" id="lic-view">
+        <div class="contractors-header">
+          <div>
+            <h1 class="view-title">License Registry</h1>
+            <p class="view-sub" id="lic-sub">Loading…</p>
+          </div>
+          <button class="btn btn-primary" onclick="licOpenAdd()">+ Add License</button>
+        </div>
+
+        <!-- SUMMARY CARDS -->
+        <div id="lic-cards" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;"></div>
+
+        <!-- FILTER BAR -->
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;padding:12px 14px;border:1.5px solid #c2cbdb;border-radius:10px;background:var(--surface-alt,#f9fbfe);box-shadow:0 1px 4px rgba(27,42,74,.08);">
+          <div style="position:relative;flex:0 1 320px;min-width:200px;">
+            <input type="text" id="lic-search" placeholder="Search license, number, jurisdiction, qualifier…" autocomplete="off"
+              style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);"
+              oninput="licApplyFilters()">
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;">🔍</span>
+          </div>
+          <select id="lic-f-brand" onchange="licApplyFilters()" style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All Brands</option>
+            ${PR_BRANDS.map(b => `<option value="${_prEsc(b)}">${_prEsc(b)}</option>`).join('')}
+          </select>
+          <select id="lic-f-state" onchange="licApplyFilters()" style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="">All States</option>
+            ${US_STATES.map(s => `<option value="${s}">${s}</option>`).join('')}
+          </select>
+          <select id="lic-f-status" onchange="licApplyFilters()" style="padding:9px 12px;border:1.5px solid #c2cbdb;border-radius:8px;font-size:13px;background:var(--surface);color:var(--text);">
+            <option value="Active">Active</option>
+            <option value="">All Statuses</option>
+            <option value="Expired">Expired</option>
+            <option value="Archived">Archived</option>
+          </select>
+        </div>
+
+        <div id="lic-list" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:auto;box-shadow:0 1px 4px rgba(27,42,74,.06);">
+          ${_regSkeleton()}
+        </div>
+      </div>`;
+  }, {
+    title: 'License Registry',
+    onAfterRender: () => { if (_orCanAccess()) licLoad(); }
+  });
+
+  async function licLoad() {
+    const list = document.getElementById('lic-list');
+    if (!list) return;
+    if (_licLoaded) { licRenderCards(); licApplyFilters(); return; }
+    list.innerHTML = _regSkeleton();
+    try {
+      const res = await api({ resource: 'licenses' });
+      _licRecords = res.licenses || [];
+      _licLoaded = true;
+      licRenderCards();
+      licApplyFilters();
+    } catch (e) {
+      if (list) list.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);">Failed to load: ${_prEsc(e.message)}</div>`;
+    }
+  }
+
+  function _licDaysToExp(r) {
+    const s = String(r.expiration_date || '').match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!s) return null;
+    return Math.floor((new Date(s[1] + 'T00:00:00') - new Date()) / 86400000);
+  }
+  function _licDaysToCe(r) {
+    const s = String(r.ce_due_date || '').match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!s) return null;
+    return Math.floor((new Date(s[1] + 'T00:00:00') - new Date()) / 86400000);
+  }
+
+  function licRenderCards() {
+    const el = document.getElementById('lic-cards');
+    if (!el) return;
+    const active = _licRecords.filter(r => String(r.status || '').toLowerCase() === 'active');
+    const total = active.length;
+    const expiring = active.filter(r => { const d = _licDaysToExp(r); return d !== null && d >= 0 && d <= 30; }).length;
+    const expired = active.filter(r => { const d = _licDaysToExp(r); return d !== null && d < 0; }).length;
+    const cedue = active.filter(r => { const d = _licDaysToCe(r); return d !== null && d >= 0 && d <= 30; }).length;
+    const card = (key, label, val, color) =>
+      `<div onclick="licCardClick('${key}')" style="cursor:pointer;flex:1;min-width:150px;background:var(--surface);border:1.5px solid ${_licCardFilter===key?color:'#e2e7f0'};border-left:4px solid ${color};border-radius:10px;padding:12px 16px;box-shadow:0 1px 3px rgba(27,42,74,.06);transition:border-color .12s;">
+        <div style="font-size:24px;font-weight:800;color:${color};line-height:1;">${val}</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-top:5px;">${label}</div>
+      </div>`;
+    el.innerHTML =
+      card('', 'Active Licenses', total, 'var(--navy)') +
+      card('expiring', 'Expiring ≤30 Days', expiring, '#B7791F') +
+      card('cedue', 'CE Due ≤30 Days', cedue, '#1F5FAD') +
+      card('expired', 'Expired', expired, '#C0392B');
+  }
+
+  function licCardClick(key) {
+    _licCardFilter = (_licCardFilter === key) ? '' : key;
+    licRenderCards();
+    licApplyFilters();
+  }
+
+  function licApplyFilters() {
+    const q = ((document.getElementById('lic-search') || {}).value || '').toLowerCase();
+    const brand = (document.getElementById('lic-f-brand') || {}).value || '';
+    const state = (document.getElementById('lic-f-state') || {}).value || '';
+    const status = (document.getElementById('lic-f-status') || {}).value || '';
+    let rows = _licRecords.filter(r => {
+      if (status && String(r.status || '').toLowerCase() !== status.toLowerCase()) return false;
+      if (brand && r.brand !== brand) return false;
+      if (state && r.state !== state) return false;
+      if (_licCardFilter === 'expiring') { const d = _licDaysToExp(r); if (!(d !== null && d >= 0 && d <= 30)) return false; }
+      if (_licCardFilter === 'expired')  { const d = _licDaysToExp(r); if (!(d !== null && d < 0)) return false; }
+      if (_licCardFilter === 'cedue')    { const d = _licDaysToCe(r); if (!(d !== null && d >= 0 && d <= 30)) return false; }
+      if (q) {
+        const hay = [r.license_name, r.number, r.jurisdiction, r.brand, r.qualifier, r.state, r.notes].join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    if (_licSort && _licSort.key) rows = _regSortRows(rows, _licSort);
+    licRenderTable(rows);
+    const sub = document.getElementById('lic-sub');
+    if (sub) sub.textContent = rows.length + ' license' + (rows.length !== 1 ? 's' : '') + (_licCardFilter ? ' (filtered)' : '');
+  }
+
+  function licSortBy(key) {
+    if (_licSort.key === key) {
+      if (_licSort.dir === 'asc') _licSort.dir = 'desc';
+      else { _licSort = {}; }
+    } else { _licSort = { key, dir: 'asc' }; }
+    licApplyFilters();
+  }
+
+  function licRenderTable(rows) {
+    const list = document.getElementById('lic-list');
+    if (!list) return;
+    if (!rows.length) {
+      list.innerHTML = `<div style="padding:48px 24px;text-align:center;color:var(--muted);"><div style="font-size:34px;margin-bottom:8px;">📋</div><div style="font-size:14px;font-weight:700;color:var(--navy);margin-bottom:4px;">No licenses found</div><div style="font-size:12px;">Add a license or adjust your filters.</div></div>`;
+      return;
+    }
+    const cols = [
+      { label: '#', w: '40px' },
+      { label: 'Brand', w: '150px', key: 'brand' },
+      { label: 'State', w: '54px', key: 'state' },
+      { label: 'Jurisdiction', w: '120px', key: 'jurisdiction' },
+      { label: 'License Name', w: '160px', key: 'license_name' },
+      { label: 'Number', w: '110px', key: 'number' },
+      { label: 'Expiration', w: '96px', key: 'expiration_date' },
+      { label: 'Qualifier', w: '120px', key: 'qualifier' },
+      { label: 'PURE', w: '54px', key: 'pure' },
+      { label: 'Phone', w: '120px', key: 'phone' },
+      { label: '', w: '70px' },
+    ];
+    const thStyle = 'padding:8px 12px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;color:#fff;';
+    const thead = `<thead style="background:var(--navy);position:sticky;top:0;z-index:2;"><tr>${
+      cols.map(c => {
+        if (!c.key) return `<th style="${thStyle}${c.w ? 'width:'+c.w+';' : ''}">${c.label}</th>`;
+        const arrow = _licSort.key === c.key ? (_licSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+        return `<th onclick="licSortBy('${c.key}')" style="${thStyle}cursor:pointer;${c.w ? 'width:'+c.w+';' : ''}">${c.label}${arrow}</th>`;
+      }).join('')
+    }</tr></thead>`;
+    const tdBase = 'padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:12px;';
+    const tbody = rows.map((r, i) => {
+      const pureCell = r.pure === 'Yes'
+        ? `<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:700;background:#E3F0FF;color:var(--blue);">Yes</span>`
+        : (r.pure === 'No' ? `<span style="display:inline-block;padding:1px 7px;border-radius:9px;font-size:10px;font-weight:700;background:#F0F0F0;color:var(--muted);">No</span>` : '');
+      const expRaw = r.expiration_date || '';
+      const exp = _prFmtDateOnly(expRaw);
+      const d = _licDaysToExp(r);
+      let expStyle = '';
+      if (d !== null) { if (d < 0) expStyle = 'color:#C0392B;font-weight:700;'; else if (d <= 30) expStyle = 'color:#B7791F;font-weight:700;'; }
+      return `<tr style="transition:background .1s;cursor:pointer;" onclick="licOpenDetail('${_prEsc(r.id)}')" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
+        <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
+        <td style="${tdBase}white-space:nowrap;font-weight:600;">${_prEsc(r.state)}</td>
+        <td style="${tdBase}font-weight:600;">${_prEsc(r.jurisdiction)}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.license_name)}</td>
+        <td style="${tdBase}font-size:11px;white-space:nowrap;">${_prEsc(r.number)}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;${expStyle}">${_prEsc(exp)}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.qualifier)}</td>
+        <td style="${tdBase}">${pureCell}</td>
+        <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.phone)}</td>
+        <td style="${tdBase}"><button onclick="event.stopPropagation();licOpenDetail('${_prEsc(r.id)}')" style="background:var(--blue);border:none;color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:inherit;">View</button></td>
+      </tr>`;
+    }).join('');
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">${thead}<tbody>${tbody}</tbody></table>`;
+  }
+
+  // ── License detail slide-over (view + edit) ──
+  function licOpenDetail(id) {
+    const r = _licRecords.find(x => String(x.id) === String(id));
+    if (!r) return;
+    licOpenForm(r);
+  }
+
+  // ── Add / Edit License modal (shared form) ──
+  let _licFormId = null;
+  let _licType = '', _licOwned = '', _licPure = '';
+
+  function licOpenAdd() { licOpenForm(null); }
+
+  function licOpenForm(rec) {
+    _licFormId = rec ? rec.id : null;
+    _licType = rec ? (rec.license_type || '') : '';
+    _licOwned = rec ? (rec.elite_owned || '') : '';
+    _licPure = rec ? (rec.pure || '') : '';
+    let modal = document.getElementById('lic-form-backdrop');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'lic-form-backdrop';
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(27,42,74,0.6);z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;';
+      document.body.appendChild(modal);
+    }
+    const v = k => rec && rec[k] != null ? String(rec[k]) : '';
+    const ic = 'padding:8px 10px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;width:100%;';
+    const fld = (label, inner) => `<div style="display:flex;flex-direction:column;gap:4px;"><label style="font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;">${label}</label>${inner}</div>`;
+    const tog = (cls, _x, cur) => ['Yes','No'].map(o => `<button type="button" class="${cls}" data-val="${o}" onclick="licSet('${cls}','${o}')" style="padding:8px 16px;border:1.5px solid ${cur===o?'var(--blue)':'#b9c2d4'};border-radius:7px;background:${cur===o?'var(--blue)':'#fff'};color:${cur===o?'#fff':'var(--navy)'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">${o}</button>`).join('');
+    const typeTog = ['Residential','Commercial','Both'].map(t => `<button type="button" class="lic-type-btn" data-val="${t}" onclick="licSet('lic-type-btn','${t}')" style="padding:8px 16px;border:1.5px solid ${_licType===t?'var(--blue)':'#b9c2d4'};border-radius:7px;background:${_licType===t?'var(--blue)':'#fff'};color:${_licType===t?'#fff':'var(--navy)'};font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">${t}</button>`).join('');
+    modal.innerHTML = `
+      <div style="background:var(--surface,#fff);width:100%;max-width:680px;border-radius:10px;box-shadow:0 16px 48px rgba(27,42,74,0.3);overflow:hidden;">
+        <div style="background:var(--navy);color:#fff;padding:13px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1;">
+          <span style="font-size:13px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;">${rec ? 'License Details' : '+ Add License'}</span>
+          <button onclick="licCloseForm()" style="background:transparent;border:0;color:#fff;font-size:22px;cursor:pointer;line-height:1;">×</button>
+        </div>
+        <div style="padding:16px 20px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+            ${fld('State', `<select id="lic-state" style="${ic}"><option value="">— Select —</option>${US_STATES.map(s => `<option value="${s}" ${v('state')===s?'selected':''}>${s}</option>`).join('')}</select>`)}
+            ${fld('Region', `<select id="lic-region" style="${ic}"><option value="">— Select —</option>${PR_REGIONS.map(x => `<option value="${_prEsc(x)}" ${v('region')===x?'selected':''}>${_prEsc(x)}</option>`).join('')}</select>`)}
+            ${fld('Brand', `<select id="lic-brand" style="${ic}"><option value="">— Select —</option>${PR_BRANDS.map(b => `<option value="${_prEsc(b)}" ${v('brand')===b?'selected':''}>${_prEsc(b)}</option>`).join('')}</select>`)}
+            ${fld('Jurisdiction', `<input type="text" id="lic-juris" value="${_prEsc(v('jurisdiction'))}" placeholder="City, county, or municipality" style="${ic}">`)}
+          </div>
+          <div style="margin-top:12px;">${fld('License / Registration Name', `<input type="text" id="lic-name" value="${_prEsc(v('license_name'))}" placeholder="e.g. General Contractor License" style="${ic}">`)}</div>
+          <div style="margin-top:12px;"><label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Type</label><div style="display:inline-flex;gap:6px;">${typeTog}</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;">
+            ${fld('Number', `<input type="text" id="lic-number" value="${_prEsc(v('number'))}" onblur="this.value=this.value.trim().toUpperCase()" placeholder="e.g. ROC-123456" style="${ic}">`)}
+            ${fld('Expiration Date', `<input type="date" id="lic-exp" value="${_prEsc(v('expiration_date'))}" style="${ic}">`)}
+            ${fld('Qualifier', `<input type="text" id="lic-qual" value="${_prEsc(v('qualifier'))}" placeholder="Name of qualifier" style="${ic}">`)}
+            ${fld('CE Hours', `<input type="text" id="lic-cehrs" value="${_prEsc(v('ce_hours'))}" placeholder="e.g. 8" style="${ic}">`)}
+            ${fld('CE Due Date', `<input type="date" id="lic-cedue" value="${_prEsc(v('ce_due_date'))}" style="${ic}">`)}
+            ${fld('CE Alert Date', `<input type="date" id="lic-cealert" value="${_prEsc(v('ce_alert_date'))}" style="${ic}">`)}
+            ${fld('Phone', `<input type="text" id="lic-phone" value="${_prEsc(v('phone'))}" placeholder="(000) 000-0000" style="${ic}">`)}
+          </div>
+          <div style="display:flex;gap:24px;margin-top:12px;flex-wrap:wrap;">
+            <div><label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Elite Owned</label><div style="display:inline-flex;gap:6px;">${tog('lic-owned-btn', null, _licOwned)}</div></div>
+            <div><label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">PURE</label><div style="display:inline-flex;gap:6px;">${tog('lic-pure-btn', null, _licPure)}</div></div>
+          </div>
+          <div style="margin-top:12px;">${fld('Notes', `<textarea id="lic-notes" rows="2" style="${ic}resize:vertical;min-height:48px;">${_prEsc(v('notes'))}</textarea>`)}</div>
+          ${rec ? `<div style="margin-top:12px;font-size:11px;color:var(--muted);">Source: ${_prEsc(rec.source || '—')}${rec.source_request_id ? ' · from request ' + _prEsc(rec.source_request_id) : ''} · Status: ${_prEsc(rec.status || 'Active')}</div>` : ''}
+        </div>
+        <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:${rec ? 'space-between' : 'flex-end'};align-items:center;background:var(--surface-alt,#f9fbfe);">
+          ${rec && String(rec.status||'').toLowerCase() !== 'archived' ? `<button class="btn btn-ghost btn-sm" onclick="licArchive('${_prEsc(rec.id)}')" style="color:var(--danger);">Archive</button>` : '<span></span>'}
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="licCloseForm()">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="lic-save-btn" onclick="licSave()">${rec ? 'Save Changes' : 'Add License'}</button>
+          </div>
+        </div>
+      </div>`;
+    modal.style.display = 'flex';
+  }
+
+  function licSet(cls, val) {
+    if (cls === 'lic-type-btn') _licType = val;
+    else if (cls === 'lic-owned-btn') _licOwned = val;
+    else if (cls === 'lic-pure-btn') _licPure = val;
+    document.querySelectorAll('.' + cls).forEach(b => {
+      const on = b.getAttribute('data-val') === val;
+      b.style.background = on ? 'var(--blue)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--navy)';
+      b.style.borderColor = on ? 'var(--blue)' : '#b9c2d4';
+    });
+  }
+
+  function licCloseForm() {
+    const m = document.getElementById('lic-form-backdrop');
+    if (m) m.style.display = 'none';
+  }
+
+  async function licSave() {
+    const g = id => (document.getElementById(id) || {}).value || '';
+    const brand = g('lic-brand'), juris = g('lic-juris'), state = g('lic-state');
+    if (!brand || !juris.trim() || !state) { _regErr('State, Brand, and Jurisdiction are required.'); return; }
+    const btn = document.getElementById('lic-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    const payload = {
+      action: 'saveLicense',
+      id: _licFormId || '',
+      state: state, region: g('lic-region'), brand: brand, jurisdiction: juris.trim(),
+      license_name: g('lic-name'), license_type: _licType, number: g('lic-number'),
+      expiration_date: g('lic-exp'), qualifier: g('lic-qual'), ce_hours: g('lic-cehrs'),
+      ce_due_date: g('lic-cedue'), ce_alert_date: g('lic-cealert'), phone: g('lic-phone'),
+      elite_owned: _licOwned, pure: _licPure, notes: g('lic-notes'),
+    };
+    try {
+      const res = await api({}, 'POST', payload);
+      if (res && res.status === 'ok') {
+        if (typeof showToast === 'function') showToast(_licFormId ? 'License updated.' : 'License added.', 'success');
+        licCloseForm();
+        _licLoaded = false;
+        licLoad();
+      } else {
+        _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error'));
+        if (btn) { btn.disabled = false; btn.textContent = _licFormId ? 'Save Changes' : 'Add License'; }
+      }
+    } catch (e) {
+      _regErr('Network error: ' + e.message);
+      if (btn) { btn.disabled = false; btn.textContent = _licFormId ? 'Save Changes' : 'Add License'; }
+    }
+  }
+
+  async function licArchive(id) {
+    if (!confirm('Archive this license? It will be hidden from the active registry but kept on record.')) return;
+    try {
+      const res = await api({}, 'POST', { action: 'archiveLicense', id });
+      if (res && res.status === 'ok') {
+        if (typeof showToast === 'function') showToast('License archived.', 'success');
+        licCloseForm(); _licLoaded = false; licLoad();
+      } else { _regErr('Failed: ' + (res && res.error ? res.error : 'Unknown error')); }
+    } catch (e) { _regErr('Network error: ' + e.message); }
+  }
+
   // ── Archived Registrations (status = Archived) — view-only, same access ──
   route('/registrations/archived', () => {
     if (!_orCanAccess()) {
@@ -10929,6 +11281,28 @@
       // No region param → fetch ALL submissions
       const res = await api({ resource: 'permitRequests' });
       _orRecords = res.records || [];
+      // On the Active page, join in license details (one bulk call) so the
+      // table can show License Name / Number / Expiration / Qualifier.
+      if (_orScope === 'active') {
+        try {
+          const rr = await api({ resource: 'allPermitResearch' });
+          const byId = {};
+          (rr.research || []).forEach(x => { byId[x.permit_id] = x; });
+          _orRecords = _orRecords.map(r => {
+            const d = byId[r.id];
+            return d ? Object.assign({}, r, {
+              license_name: d.license_name,
+              license_type: d.license_type,
+              contractor_number: d.contractor_number,
+              license_expiration_date: d.license_expiration_date,
+              qualifier: d.qualifier,
+              ce_due_date: d.ce_due_date,
+              ce_alert_date: d.ce_alert_date,
+              elite_owned: d.elite_owned,
+            }) : r;
+          });
+        } catch (e) { /* details are best-effort; table still renders basics */ }
+      }
       _orLoaded = true;
       orApplyFilters();
       const sub = document.getElementById('or-sub');
@@ -11008,7 +11382,22 @@
       return;
     }
 
-    const cols = [
+    const isActive = (_orScope === 'active');
+    const cols = isActive ? [
+      { label: '#',            w: '40px'  },
+      { label: 'Status',       w: '90px',  key: 'status' },
+      { label: 'Action',       w: '150px' },
+      { label: 'Brand',        w: '150px', key: 'brand' },
+      { label: 'State',        w: '56px',  key: 'state' },
+      { label: 'Jurisdiction', w: '120px', key: 'jurisdiction' },
+      { label: 'License Name', w: '160px', key: 'license_name' },
+      { label: 'Number',       w: '110px', key: 'contractor_number' },
+      { label: 'Expiration',   w: '96px',  key: 'license_expiration_date' },
+      { label: 'Qualifier',    w: '120px', key: 'qualifier' },
+      { label: 'PURE',         w: '54px',  key: 'pure' },
+      { label: 'Phone',        w: '120px', key: 'phone' },
+      { label: 'Notes',        w: '200px', key: 'notes' },
+    ] : [
       { label: '#',            w: '40px'  },
       { label: 'Status',       w: '96px',  key: 'status' },
       { label: 'Action',       w: '180px' },
@@ -11065,6 +11454,33 @@
       const overdue = _regIsOverdue(r);
       const baseBg = overdue ? '#FDECEC' : '';
       const hoverBg = overdue ? '#FBDDDD' : 'var(--surface-alt,#f9fbfe)';
+      if (isActive) {
+        const expRaw = r.license_expiration_date || '';
+        const exp = _prFmtDateOnly(expRaw);
+        // Flag expirations within 30 days / past
+        let expStyle = '';
+        if (expRaw) {
+          const d = new Date(expRaw + 'T00:00:00');
+          const days = Math.floor((d - new Date()) / 86400000);
+          if (days < 0) expStyle = 'color:#C0392B;font-weight:700;';
+          else if (days <= 30) expStyle = 'color:#B7791F;font-weight:700;';
+        }
+        return `<tr style="transition:background .1s;" onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${baseBg}'">
+          <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
+          <td style="${tdBase}">${_orStatusBadge(r.status, r.is_renewal)}</td>
+          ${actionCell}
+          <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
+          <td style="${tdBase}white-space:nowrap;font-weight:600;">${_prEsc(r.state)}</td>
+          <td style="${tdBase}font-weight:600;">${_prEsc(r.jurisdiction)}</td>
+          <td style="${tdBase}font-size:11px;">${_prEsc(r.license_name)}</td>
+          <td style="${tdBase}font-size:11px;white-space:nowrap;">${_prEsc(r.contractor_number)}</td>
+          <td style="${tdBase}white-space:nowrap;font-size:11px;${expStyle}">${_prEsc(exp)}</td>
+          <td style="${tdBase}font-size:11px;">${_prEsc(r.qualifier)}</td>
+          <td style="${tdBase}">${pureCell}</td>
+          <td style="${tdBase}white-space:nowrap;font-size:11px;">${_prEsc(r.phone)}</td>
+          <td style="${tdBase}font-size:11px;">${_prEsc(r.notes)}</td>
+        </tr>`;
+      }
       return `<tr style="transition:background .1s;${overdue ? 'background:' + baseBg + ';' : ''}" onmouseover="this.style.background='${hoverBg}'" onmouseout="this.style.background='${baseBg}'">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
         <td style="${tdBase}">${_orStatusBadge(r.status, r.is_renewal)}</td>
@@ -13049,7 +13465,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.6.1';
+  const APP_VERSION = '2.7.0';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
