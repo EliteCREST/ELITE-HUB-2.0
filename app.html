@@ -3615,6 +3615,7 @@
     // Today bar
     renderTodayBar(dashboardRes || {});
     injectOverdueRegCard();   // appends "X over 15 days" for Emma/Sara/Angel
+    injectLicenseAlertCard(); // appends license expiry / CE alerts for Emma/Sara/Angel
 
     // Tasks
     _workspaceTasks = (tasksRes.tasks || []).filter(t => t.status !== 'deleted');
@@ -3758,6 +3759,44 @@
     } catch (e) { /* non-critical; skip the card on error */ }
   }
 
+  // License alerts on the Today bar (Emma/Sara/Angel): expiring ≤30 days,
+  // already expired, and CE alerts that have fired. Reads the License Registry.
+  async function injectLicenseAlertCard() {
+    const me = getLoggedInUser();
+    if (!me || ['emma', 'sara', 'angel'].indexOf(me.username) < 0) return;
+    const el = $('#ws-today-bar');
+    if (!el) return;
+    try {
+      const res = await api({ resource: 'licenses' });
+      const rows = ((res && res.licenses) || []).filter(r => String(r.status || '').toLowerCase() === 'active');
+      const daysTo = (val) => { const m = String(val || '').match(/^(\d{4}-\d{2}-\d{2})/); return m ? Math.floor((new Date(m[1] + 'T00:00:00') - new Date()) / 86400000) : null; };
+      let expiring = 0, expired = 0, cedue = 0;
+      rows.forEach(r => {
+        const de = daysTo(r.expiration_date);
+        if (de !== null && de < 0) expired++;
+        else if (de !== null && de <= 30) expiring++;
+        const da = daysTo(r.ce_alert_date);
+        if (da !== null && da <= 0) cedue++;
+      });
+      if (!expiring && !expired && !cedue) return;
+      if (!$('#ws-today-bar')) return;
+
+      const chips = [];
+      const chipBase = 'display:inline-flex;flex-direction:column;padding:7px 12px;border-radius:9px;text-decoration:none;min-width:0;';
+      if (expired)  chips.push(`<a class="ws-today-chip" href="#/registrations/licenses" id="ws-lic-expired-chip" style="${chipBase}background:#FDECEC;border:1px solid #F1B0B0;"><span class="ws-today-chip-label" style="font-weight:800;font-size:13px;color:#C0392B;">${expired} expired</span><span class="ws-today-chip-sub" style="font-size:10px;color:#9B3535;">License${expired!==1?'s':''} past due</span></a>`);
+      if (expiring) chips.push(`<a class="ws-today-chip" href="#/registrations/licenses" id="ws-lic-expiring-chip" style="${chipBase}background:#FEF6E7;border:1px solid #EAD3A0;"><span class="ws-today-chip-label" style="font-weight:800;font-size:13px;color:#B7791F;">${expiring} expiring soon</span><span class="ws-today-chip-sub" style="font-size:10px;color:#946115;">Within 30 days</span></a>`);
+      if (cedue)    chips.push(`<a class="ws-today-chip" href="#/registrations/licenses" id="ws-lic-cedue-chip" style="${chipBase}background:#EAF1FB;border:1px solid #B6CDED;"><span class="ws-today-chip-label" style="font-weight:800;font-size:13px;color:#1F5FAD;">${cedue} CE due</span><span class="ws-today-chip-sub" style="font-size:10px;color:#19497F;">Continuing education</span></a>`);
+      const chipHtml = chips.join('');
+
+      let itemsWrap = el.querySelector('.ws-today-bar-items');
+      if (itemsWrap) {
+        ['ws-lic-expired-chip','ws-lic-expiring-chip','ws-lic-cedue-chip'].forEach(id => { const ex = document.getElementById(id); if (ex) ex.remove(); });
+        itemsWrap.insertAdjacentHTML('beforeend', chipHtml);
+      } else {
+        el.innerHTML = `<div class="ws-today-bar-inner"><div class="ws-today-bar-label">Today</div><div class="ws-today-bar-items">${chipHtml}</div></div>`;
+      }
+    } catch (e) { /* non-critical */ }
+  }
   /* ─── Task tab counts ─────────────────────────────────────── */
   function renderTaskTabCounts() {
     const tasks = _workspaceTasks;
@@ -10968,6 +11007,13 @@
     if (!s) return null;
     return Math.floor((new Date(s[1] + 'T00:00:00') - new Date()) / 86400000);
   }
+  // CE alert has "fired" if its alert date is today or past (and a CE due date exists).
+  function _licCeAlertFired(r) {
+    const a = String(r.ce_alert_date || '').match(/^(\d{4}-\d{2}-\d{2})/);
+    if (!a) return false;
+    const days = Math.floor((new Date(a[1] + 'T00:00:00') - new Date()) / 86400000);
+    return days <= 0;
+  }
 
   function licRenderCards() {
     const el = document.getElementById('lic-cards');
@@ -11076,12 +11122,19 @@
       const d = _licDaysToExp(r);
       let expStyle = '';
       if (d !== null) { if (d < 0) expStyle = 'color:#C0392B;font-weight:700;'; else if (d <= 30) expStyle = 'color:#B7791F;font-weight:700;'; }
-      return `<tr style="transition:background .1s;cursor:pointer;" onclick="licOpenDetail('${_prEsc(r.id)}')" onmouseover="this.style.background='var(--surface-alt,#f9fbfe)'" onmouseout="this.style.background=''">
+      // Row-level alert tint: red for expired, amber for expiring ≤30d, blue for CE alert fired
+      const ceFired = _licCeAlertFired(r);
+      let rowBg = '', rowHover = 'var(--surface-alt,#f9fbfe)';
+      if (d !== null && d < 0) { rowBg = '#FDECEC'; rowHover = '#FBDDDD'; }
+      else if (d !== null && d <= 30) { rowBg = '#FEF6E7'; rowHover = '#FCEFD2'; }
+      else if (ceFired) { rowBg = '#EAF1FB'; rowHover = '#DCE8F8'; }
+      const ceBadge = ceFired ? ` <span style="display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:800;background:#E3F0FF;color:var(--blue);white-space:nowrap;">CE DUE</span>` : '';
+      return `<tr style="transition:background .1s;cursor:pointer;${rowBg ? 'background:' + rowBg + ';' : ''}" onclick="licOpenDetail('${_prEsc(r.id)}')" onmouseover="this.style.background='${rowHover}'" onmouseout="this.style.background='${rowBg}'">
         <td style="${tdBase}color:var(--muted);font-size:10px;">${i+1}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.brand)}</td>
         <td style="${tdBase}white-space:nowrap;font-weight:600;">${_prEsc(r.state)}</td>
         <td style="${tdBase}font-weight:600;">${_prEsc(r.jurisdiction)}</td>
-        <td style="${tdBase}font-size:11px;">${_prEsc(r.license_name)}</td>
+        <td style="${tdBase}font-size:11px;">${_prEsc(r.license_name)}${ceBadge}</td>
         <td style="${tdBase}font-size:11px;white-space:nowrap;">${_prEsc(r.number)}</td>
         <td style="${tdBase}white-space:nowrap;font-size:11px;${expStyle}">${_prEsc(exp)}</td>
         <td style="${tdBase}font-size:11px;">${_prEsc(r.qualifier)}</td>
@@ -13477,7 +13530,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.7.2';
+  const APP_VERSION = '2.7.3';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
