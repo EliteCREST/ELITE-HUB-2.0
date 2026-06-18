@@ -11486,6 +11486,10 @@
             <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">License / Registration Name</label>
             <input type="text" id="or-lr-name" autocomplete="off" placeholder="e.g. General Contractor License" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;">
           </div>
+          <div style="margin-bottom:11px;max-width:220px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">State</label>
+            <select id="or-lr-state" style="width:100%;padding:7px 9px;border:1.5px solid #b9c2d4;border-radius:6px;font-family:inherit;font-size:12px;color:var(--text);background:#fff;"><option value="">— Select state —</option>${US_STATES.map(s => `<option value="${s}">${s}</option>`).join('')}</select>
+          </div>
           <div style="margin-bottom:11px;">
             <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">Type</label>
             <div id="or-lr-type-group" style="display:inline-flex;gap:6px;">
@@ -11580,6 +11584,8 @@
       const cnum = document.getElementById('or-lr-cnum'); if (cnum) cnum.value = r.contractor_number || '';
       const exp  = document.getElementById('or-lr-exp');  if (exp && r.license_expiration_date) exp.value = r.license_expiration_date;
       const lname = document.getElementById('or-lr-name'); if (lname) lname.value = r.license_name || '';
+      const lstate = document.getElementById('or-lr-state');
+      if (lstate) { const rec = (_orRecords || []).find(x => String(x.id) === String(permitId)) || {}; lstate.value = rec.state || ''; }
       if (r.license_type) orLrSetType(r.license_type); else _orLrType = '';
       const qual = document.getElementById('or-lr-qual'); if (qual) qual.value = r.qualifier || '';
       const cehrs = document.getElementById('or-lr-cehrs'); if (cehrs) cehrs.value = r.ce_hours || '';
@@ -11648,6 +11654,7 @@
     const cnum = (document.getElementById('or-lr-cnum') || {}).value || '';
     const exp  = (document.getElementById('or-lr-exp')  || {}).value || '';
     const lname = (document.getElementById('or-lr-name') || {}).value || '';
+    const lstate = (document.getElementById('or-lr-state') || {}).value || '';
     const qualifier = (document.getElementById('or-lr-qual') || {}).value || '';
     const ceHours = (document.getElementById('or-lr-cehrs') || {}).value || '';
     const ceDue = (document.getElementById('or-lr-cedue') || {}).value || '';
@@ -11666,6 +11673,7 @@
         expiration_date: exp,
         license_name: lname,
         license_type: _orLrType,
+        state: lstate,
         qualifier: qualifier,
         ce_hours: ceHours,
         ce_due_date: ceDue,
@@ -12141,6 +12149,13 @@
             ${fld('Jurisdiction', `<input type="text" id="aa-jurisdiction" placeholder="City, county, or municipality" style="${inputCss}">`)}
           </div>
           <div style="margin-top:12px;">
+            <label style="display:block;font-size:10px;font-weight:bold;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px;">PURE</label>
+            <div style="display:inline-flex;gap:6px;">
+              <button type="button" class="aa-pure-btn" data-val="Yes" onclick="orAaSetPure('Yes')" style="padding:8px 18px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Yes</button>
+              <button type="button" class="aa-pure-btn" data-val="No" onclick="orAaSetPure('No')" style="padding:8px 18px;border:1.5px solid #b9c2d4;border-radius:7px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">No</button>
+            </div>
+          </div>
+          <div style="margin-top:12px;">
             ${fld('License / Registration Name', `<input type="text" id="aa-name" placeholder="e.g. General Contractor License" style="${inputCss}">`)}
           </div>
           <div style="margin-top:12px;">
@@ -12183,6 +12198,7 @@
       </div>`;
     modal.style.display = 'flex';
     _orAaOwned = '';
+    _orAaPure = '';
     orLrAlertMode('aa');
   }
 
@@ -12200,6 +12216,17 @@
   function orAaSetOwned(v) {
     _orAaOwned = v;
     document.querySelectorAll('.aa-owned-btn').forEach(b => {
+      const on = b.getAttribute('data-val') === v;
+      b.style.background = on ? 'var(--blue)' : '#fff';
+      b.style.color = on ? '#fff' : 'var(--navy)';
+      b.style.borderColor = on ? 'var(--blue)' : '#b9c2d4';
+    });
+  }
+
+  let _orAaPure = '';
+  function orAaSetPure(v) {
+    _orAaPure = v;
+    document.querySelectorAll('.aa-pure-btn').forEach(b => {
       const on = b.getAttribute('data-val') === v;
       b.style.background = on ? 'var(--blue)' : '#fff';
       b.style.color = on ? '#fff' : 'var(--navy)';
@@ -12248,6 +12275,7 @@
         elite_owned: _orAaOwned,
         ce_alert_date: ceAlert,
         notes: notes,
+        pure: _orAaPure,
       });
       if (res && res.status === 'ok') {
         if (typeof showToast === 'function') showToast('Active registration added.', 'success');
@@ -13021,7 +13049,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.6.0';
+  const APP_VERSION = '2.6.1';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
