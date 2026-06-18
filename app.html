@@ -10236,28 +10236,11 @@
           <div id="pr-e-pure" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
           <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">Jurisdiction <span style="color:var(--danger)">*</span></label>
           <input type="text" id="pr-f-jurisdiction" placeholder="City, county, or municipality" autocomplete="off"
             style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;">
           <div id="pr-e-jurisdiction" style="font-size:10px;color:var(--danger);min-height:12px;"></div>
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">State</label>
-          <input type="text" id="pr-f-state" placeholder="e.g. OH" autocomplete="off" maxlength="2"
-            oninput="this.value=this.value.replace(/[^a-zA-Z]/g,'').toUpperCase()"
-            style="font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid #cbd3e0;border-radius:4px;background:var(--surface-alt,#f9fbfe);color:var(--text);outline:none;text-transform:uppercase;">
-          <div style="min-height:12px;"></div>
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:4px;">
-          <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text);">State License / Registration?</label>
-          <div id="pr-f-statelic-group" style="display:inline-flex;gap:6px;">
-            <button type="button" class="pr-statelic-btn" data-val="Yes" onclick="prSetStateLic('Yes')" style="flex:1;padding:7px 0;border:1px solid #cbd3e0;border-radius:4px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">Yes</button>
-            <button type="button" class="pr-statelic-btn" data-val="No" onclick="prSetStateLic('No')" style="flex:1;padding:7px 0;border:1px solid #cbd3e0;border-radius:4px;background:#fff;color:var(--navy);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">No</button>
-          </div>
-          <div style="min-height:12px;"></div>
         </div>
 
         <div style="display:flex;flex-direction:column;gap:4px;grid-column:span 3;">
@@ -10426,17 +10409,6 @@
     if (d) d.value = new Date().toISOString().split('T')[0];
   }
 
-  let _prStateLic = '';   // 'Yes' | 'No' for State License/Registration toggle
-  function prSetStateLic(v) {
-    _prStateLic = v;
-    document.querySelectorAll('.pr-statelic-btn').forEach(b => {
-      const on = b.getAttribute('data-val') === v;
-      b.style.background = on ? 'var(--blue)' : '#fff';
-      b.style.color = on ? '#fff' : 'var(--navy)';
-      b.style.borderColor = on ? 'var(--blue)' : '#cbd3e0';
-    });
-  }
-
   // Auto-format a phone field to (XXX) XXX-XXXX as the user types
   function prFormatPhone(el) {
     if (!el) return;
@@ -10458,13 +10430,11 @@
   }
 
   function prResetForm() {
-    ['pr-f-name','pr-f-brand','pr-f-region','pr-f-jurisdiction','pr-f-state','pr-f-requirements','pr-f-website','pr-f-phone','pr-f-email','pr-f-notes'].forEach(id => {
+    ['pr-f-name','pr-f-brand','pr-f-region','pr-f-jurisdiction','pr-f-requirements','pr-f-website','pr-f-phone','pr-f-email','pr-f-notes'].forEach(id => {
       const el = document.getElementById(id);
       if (el) { el.value = ''; el.style.borderColor = ''; }
     });
     document.querySelectorAll('input[name="pr-pure"]').forEach(r => r.checked = false);
-    _prStateLic = '';
-    document.querySelectorAll('.pr-statelic-btn').forEach(b => { b.style.background = '#fff'; b.style.color = 'var(--navy)'; b.style.borderColor = '#cbd3e0'; });
     ['name','brand','region','date','jurisdiction','requirements','website','email','pure'].forEach(id => {
       const el = document.getElementById('pr-e-' + id);
       if (el) el.textContent = '';
@@ -10516,8 +10486,6 @@
       phone:         document.getElementById('pr-f-phone').value.trim(),
       email:         document.getElementById('pr-f-email').value.trim(),
       notes:         document.getElementById('pr-f-notes').value.trim(),
-      state:         (document.getElementById('pr-f-state') || {}).value || '',
-      is_state_license: _prStateLic,
     };
     try {
       const res = await api({}, 'POST', payload);
@@ -13034,7 +13002,7 @@
 
   // App version — shown in sidebar footer. Bump this every deploy.
   // Should match APP_VERSION in app-sw.js.
-  const APP_VERSION = '2.5.8';
+  const APP_VERSION = '2.5.9';
   // If this is true, any new version triggers a MANDATORY update modal
   // (user cannot dismiss). Set to true when a backend change requires a
   // matching frontend change (e.g. renamed field, new required API param).
