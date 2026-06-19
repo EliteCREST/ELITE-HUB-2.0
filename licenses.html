@@ -141,6 +141,34 @@
 
   .viewonly-note{font-size:11px;color:var(--muted);background:var(--surface-alt);border:1px solid var(--line);border-radius:7px;padding:7px 12px;display:inline-flex;align-items:center;gap:6px;}
 
+  /* Dashboard */
+  .stats-band{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:18px;}
+  .stat{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow);}
+  .stat .v{font-size:26px;font-weight:800;color:var(--navy);line-height:1;}
+  .stat .v.red{color:var(--danger);} .stat .v.amber{color:var(--amber);} .stat .v.blue{color:var(--blue);}
+  .stat .k{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-top:6px;}
+  .dash-cols{display:grid;grid-template-columns:1.15fr 1fr;gap:16px;margin-bottom:20px;}
+  @media(max-width:840px){ .dash-cols{grid-template-columns:1fr;} }
+  .panel{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;}
+  .panel-h{padding:12px 16px;border-bottom:1px solid var(--line);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--navy);display:flex;align-items:center;justify-content:space-between;}
+  .panel-h .more{font-size:11px;font-weight:700;color:var(--blue);cursor:pointer;text-transform:none;letter-spacing:0;}
+  .panel-b{padding:8px 16px 14px;}
+  .att-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer;}
+  .att-row:last-child{border-bottom:0;}
+  .att-row:hover{background:var(--surface-alt);}
+  .att-tag{font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;white-space:nowrap;text-transform:uppercase;letter-spacing:.3px;}
+  .att-tag.red{background:#FDECEC;color:var(--danger);} .att-tag.amber{background:#FEF6E7;color:var(--amber);} .att-tag.blue{background:#EAF1FB;color:var(--blue);}
+  .att-main{flex:1;min-width:0;font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .att-main b{color:var(--navy);}
+  .att-date{font-size:11px;color:var(--muted);white-space:nowrap;}
+  .bar-row{display:flex;align-items:center;gap:10px;padding:5px 0;cursor:pointer;}
+  .bar-row:hover .bar-label{color:var(--blue);}
+  .bar-label{font-size:11.5px;color:var(--ink);width:150px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bar-track{flex:1;height:16px;background:#eef2f8;border-radius:5px;overflow:hidden;}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--navy));border-radius:5px;}
+  .bar-num{font-size:11.5px;font-weight:800;color:var(--navy);width:38px;text-align:right;flex-shrink:0;}
+  .section-label{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:4px 0 12px;}
+
   @media(max-width:640px){
     .wrap{padding:14px;}
     .fgrid{grid-template-columns:1fr;}
@@ -215,6 +243,8 @@
 
   // ── State ──
   let LICENSES=[];
+  let PRODUCIBILITY=[];
+  let PROD_LOADED=false;
   let LOADED=false;
   let view={ name:'home' };
   let filters={ search:'', brand:'', state:'', status:'Active', type:'', qualifier:'', cardAlert:'' };
@@ -228,6 +258,12 @@
     LICENSES=(res && res.licenses) || [];
     LOADED=true;
   }
+  async function loadProducibility(){
+    if(PROD_LOADED) return;
+    const res=await api({ resource:'producibility' });
+    PRODUCIBILITY=(res && res.producibility) || [];
+    PROD_LOADED=true;
+  }
 
   // ── Routing (hash) ──
   function parseHash(){
@@ -235,6 +271,7 @@
     const parts=h.split('/').filter(Boolean);
     if(!parts.length) return { name:'home' };
     if(parts[0]==='explore') return { name:'explore', preset:parts[1]||'' };
+    if(parts[0]==='trades') return { name:'trades' };
     return { name:'home' };
   }
   async function render(){
@@ -249,6 +286,7 @@
       return;
     }
     if(view.name==='explore') renderExplore(view.preset);
+    else if(view.name==='trades') await renderTrades();
     else renderHome();
   }
 
@@ -268,40 +306,176 @@
   }
 
   // ── HOME (Command Center landing) ──
+  function _dashStats(){
+    const active=LICENSES.filter(r=>String(r.status||'').toLowerCase()==='active');
+    const states=new Set(active.map(r=>r.state).filter(Boolean));
+    const quals=new Set(active.map(r=>String(r.qualifier||'').trim()).filter(q=>q && q.toLowerCase()!=='n/a' && q!=='-'));
+    let expiring=0,expired=0,cedue=0;
+    active.forEach(r=>{ const de=daysTo(r.expiration_date); if(de!==null&&de<0)expired++; else if(de!==null&&de<=30)expiring++; const da=daysTo(r.ce_alert_date); if(da!==null&&da<=0)cedue++; });
+    return { total:LICENSES.length, active:active.length, expired, expiring, cedue, states:states.size, quals:quals.size, activeRows:active };
+  }
+  function _byCount(rows,key){
+    const m={}; rows.forEach(r=>{ const k=String(r[key]||'—')||'—'; m[k]=(m[k]||0)+1; });
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  }
+  function _attention(active){
+    const items=[];
+    active.forEach(r=>{
+      const de=daysTo(r.expiration_date);
+      if(de!==null && de<0) items.push({sev:0,tag:'EXPIRED',cls:'red',r,d:de,when:fmtDate(r.expiration_date)});
+      else if(de!==null && de<=30) items.push({sev:1,tag:de+'D LEFT',cls:'amber',r,d:de,when:fmtDate(r.expiration_date)});
+      const da=daysTo(r.ce_alert_date);
+      if(da!==null && da<=0) items.push({sev:2,tag:'CE DUE',cls:'blue',r,d:da,when:fmtDate(r.ce_due_date)});
+    });
+    items.sort((a,b)=> a.sev-b.sev || a.d-b.d);
+    return items;
+  }
+
   function renderHome(){
-    const c=alertCounts();
+    const s=_dashStats();
+    const brands=_byCount(s.activeRows,'brand');
+    const states=_byCount(s.activeRows,'state').slice(0,8);
+    const att=_attention(s.activeRows);
+    const maxBrand=Math.max(1,...brands.map(b=>b[1]));
+    const maxState=Math.max(1,...states.map(b=>b[1]));
+
     const lenses=[
-      { key:'',          icon:'📋', name:'All Licenses',  desc:'Browse and filter every license and registration we hold.' },
-      { key:'expiring',  icon:'⏰', name:'Expiring Soon',  desc:'Licenses past due or expiring within 30 days.' },
-      { key:'bystate',   icon:'🗺️', name:'By State',       desc:'See coverage grouped by state, then drill in.' },
-      { key:'bybrand',   icon:'🏢', name:'By Brand',       desc:'Every license grouped by brand entity.' },
-      { key:'bytype',    icon:'🏷️', name:'By Type',        desc:'Group by license type — find commercial, roofing, and more.' },
-      { key:'qualifiers',icon:'👤', name:'Qualifiers',     desc:'Who qualifies which licenses, and where.' },
+      { key:'',          icon:'📋', name:'All Licenses',  desc:'Browse and filter everything we hold.' },
+      { key:'expiring',  icon:'⏰', name:'Expiring Soon',  desc:'Past due or expiring within 30 days.' },
+      { key:'bystate',   icon:'🗺️', name:'By State',       desc:'Coverage grouped by state.' },
+      { key:'bybrand',   icon:'🏢', name:'By Brand',       desc:'Grouped by brand entity.' },
+      { key:'bytype',    icon:'🏷️', name:'By Type',        desc:'Find commercial, roofing, and more.' },
+      { key:'qualifiers',icon:'👤', name:'Qualifiers',     desc:'Who qualifies what, and where.' },
     ];
+
+    const stat=(v,k,cls)=>`<div class="stat"><div class="v ${cls||''}">${v}</div><div class="k">${k}</div></div>`;
+
+    const attHtml = att.length
+      ? att.slice(0,7).map(a=>`<div class="att-row" onclick="location.hash='#/explore/expiring'">
+          <span class="att-tag ${a.cls}">${a.tag}</span>
+          <span class="att-main"><b>${esc(a.r.brand.split(',')[0])}</b> · ${esc(a.r.state)} ${esc(a.r.jurisdiction||'')} — ${esc(a.r.license_name||'license')}</span>
+          <span class="att-date">${esc(a.when||'')}</span>
+        </div>`).join('')
+      : `<div style="padding:18px 0;text-align:center;color:var(--green);font-weight:700;">✓ Nothing needs attention right now</div>`;
+
     $('#app').innerHTML=`
       <div class="crumbs"><span class="here">Command Center</span></div>
       <div class="page-head">
         <div>
           <h1 class="page-title">Licenses &amp; Registrations</h1>
-          <p class="page-sub">${c.total} active license${c.total!==1?'s':''} across all brands. Pick a view, or explore freely.</p>
+          <p class="page-sub">A live view of every license and registration Elite holds. ${s.total} on record across ${s.states} states.</p>
+        </div>
+        ${canEdit()?`<button class="btn btn-primary" onclick="location.hash='#/explore/'">+ Add / Manage</button>`:`<span class="viewonly-note">🔒 View only</span>`}
+      </div>
+
+      <div class="stats-band">
+        ${stat(s.active,'Active Licenses')}
+        ${stat(s.expired,'Expired','red')}
+        ${stat(s.expiring,'Expiring ≤30d','amber')}
+        ${stat(s.cedue,'CE Due','blue')}
+        ${stat(s.states,'States Covered')}
+        ${stat(s.quals,'Qualifiers')}
+      </div>
+
+      <div class="dash-cols">
+        <div class="panel">
+          <div class="panel-h">⚠️ Needs Attention <span class="more" onclick="location.hash='#/explore/expiring'">View all →</span></div>
+          <div class="panel-b">${attHtml}</div>
+        </div>
+        <div class="panel">
+          <div class="panel-h">🏢 Coverage by Brand</div>
+          <div class="panel-b">
+            ${brands.map(([b,n])=>`<div class="bar-row" onclick="location.hash='#/explore/bybrand'"><span class="bar-label" title="${esc(b)}">${esc(b.split(',')[0])}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.round(n/maxBrand*100)}%;"></span></span><span class="bar-num">${n}</span></div>`).join('')}
+          </div>
         </div>
       </div>
-      <div class="alert-strip">
-        ${c.expired?`<span class="alert-pill ap-red" onclick="location.hash='#/explore/expiring'"><span class="n">${c.expired}</span> expired</span>`:''}
-        ${c.expiring?`<span class="alert-pill ap-amber" onclick="location.hash='#/explore/expiring'"><span class="n">${c.expiring}</span> expiring ≤30 days</span>`:''}
-        ${c.cedue?`<span class="alert-pill ap-blue" onclick="location.hash='#/explore/expiring'"><span class="n">${c.cedue}</span> CE due</span>`:''}
-        ${(!c.expired&&!c.expiring&&!c.cedue)?`<span class="alert-pill ap-green"><span class="n">✓</span> Nothing needs attention</span>`:''}
+
+      <div class="dash-cols">
+        <div class="panel">
+          <div class="panel-h">🗺️ Top States by Coverage <span class="more" onclick="location.hash='#/explore/bystate'">By state →</span></div>
+          <div class="panel-b">
+            ${states.map(([st,n])=>`<div class="bar-row" onclick="location.hash='#/explore/bystate'"><span class="bar-label">${esc(st)}</span><span class="bar-track"><span class="bar-fill" style="width:${Math.round(n/maxState*100)}%;background:linear-gradient(90deg,var(--gold),#a8842f);"></span></span><span class="bar-num">${n}</span></div>`).join('')}
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-h">🔨 Trade Capability <span class="more" onclick="location.hash='#/trades'">Explore →</span></div>
+          <div class="panel-b" style="font-size:12.5px;color:var(--muted);line-height:1.7;">
+            See where each brand is set up to produce <b style="color:var(--navy);">Roofing</b>, <b style="color:var(--navy);">Siding</b>, <b style="color:var(--navy);">Windows</b>, and <b style="color:var(--navy);">Gutters</b> — by state.
+            <div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" onclick="location.hash='#/trades'">Open Trade Capability →</button></div>
+          </div>
+        </div>
       </div>
+
+      <div class="section-label">Explore</div>
       <div class="lens-grid">
         ${lenses.map(l=>`
           <div class="lens" onclick="location.hash='#/explore/${l.key}'">
-            <div class="lens-accent"></div>
-            <div class="lens-go">→</div>
+            <div class="lens-accent"></div><div class="lens-go">→</div>
             <div class="lens-icon">${l.icon}</div>
             <div class="lens-name">${l.name}</div>
             <div class="lens-desc">${l.desc}</div>
           </div>`).join('')}
+        <div class="lens" onclick="location.hash='#/trades'" style="border-color:#d8c9a0;">
+          <div class="lens-accent" style="background:var(--gold);"></div><div class="lens-go">→</div>
+          <div class="lens-icon">🔨</div>
+          <div class="lens-name">Trade Capability</div>
+          <div class="lens-desc">Roofing, siding, windows &amp; gutters by state.</div>
+        </div>
       </div>`;
+  }
+
+  // ── TRADES (Producibility) ──
+  let tradeFilters={ brand:'', state:'', trade:'' };
+  async function renderTrades(){
+    try{ await loadProducibility(); }
+    catch(e){ $('#app').innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-t">Couldn’t load trade data</div><div>'+esc(e.message)+'</div></div>'; return; }
+    const TRADES=[['residential','Residential'],['commercial','Commercial'],['roofing','Roofing'],['siding','Siding'],['windows','Windows'],['gutters','Gutters']];
+    $('#app').innerHTML=`
+      <div class="crumbs"><a href="#/">Command Center</a><span class="sep">›</span><span class="here">Trade Capability</span></div>
+      <div class="page-head">
+        <div>
+          <h1 class="page-title">Trade Capability</h1>
+          <p class="page-sub" id="tr-sub"></p>
+        </div>
+        <span class="viewonly-note">Where each brand is set up to produce work, by state.</span>
+      </div>
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <select class="f" id="tr-brand" onchange="LIC.trSet('brand',this.value)"><option value="">All Brands</option>${BRANDS.map(b=>`<option ${tradeFilters.brand===b?'selected':''}>${esc(b)}</option>`).join('')}</select>
+          <select class="f" id="tr-state" onchange="LIC.trSet('state',this.value)"><option value="">All States</option>${US_STATES.map(s=>`<option ${tradeFilters.state===s?'selected':''}>${s}</option>`).join('')}</select>
+          <select class="f" id="tr-trade" onchange="LIC.trSet('trade',this.value)"><option value="">Any Trade</option>${TRADES.map(([k,l])=>`<option value="${k}" ${tradeFilters.trade===k?'selected':''}>Can do ${l}</option>`).join('')}</select>
+          <button class="btn-reset" onclick="LIC.trReset()">↺ Reset</button>
+        </div>
+      </div>
+      <div class="tablecard" id="tr-table"></div>`;
+    renderTradesTable();
+  }
+  function renderTradesTable(){
+    let rows=PRODUCIBILITY.filter(r=>{
+      if(tradeFilters.brand && r.brand!==tradeFilters.brand) return false;
+      if(tradeFilters.state && r.state!==tradeFilters.state) return false;
+      if(tradeFilters.trade && String(r[tradeFilters.trade]||'').toLowerCase()!=='yes') return false;
+      return true;
+    });
+    rows.sort((a,b)=> (a.state+a.brand).localeCompare(b.state+b.brand));
+    const sub=$('#tr-sub'); if(sub){
+      const label=tradeFilters.trade?(' that can do '+tradeFilters.trade):'';
+      sub.textContent=rows.length+' state-brand record'+(rows.length!==1?'s':'')+label;
+    }
+    const wrap=$('#tr-table'); if(!wrap) return;
+    if(!rows.length){ wrap.innerHTML='<div class="empty"><div class="empty-ic">🔨</div><div class="empty-t">No matches</div><div>Try a different brand, state, or trade.</div></div>'; return; }
+    const yn=v=>String(v||'').toLowerCase()==='yes'
+      ? '<span class="pill pill-yes">Yes</span>'
+      : (String(v||'').toLowerCase()==='no'?'<span class="pill pill-no">No</span>':'<span style="color:var(--line2);">—</span>');
+    const thead=`<thead><tr><th>State</th><th>Brand</th><th>Residential</th><th>Commercial</th><th>Roofing</th><th>Siding</th><th>Windows</th><th>Gutters</th><th>Limits / Notes</th></tr></thead>`;
+    const body=rows.map(r=>`<tr>
+      <td style="font-weight:700;white-space:nowrap;">${esc(r.state)}</td>
+      <td style="font-size:11px;">${esc(r.brand)}</td>
+      <td>${yn(r.residential)}</td><td>${yn(r.commercial)}</td><td>${yn(r.roofing)}</td>
+      <td>${yn(r.siding)}</td><td>${yn(r.windows)}</td><td>${yn(r.gutters)}</td>
+      <td style="font-size:11px;color:var(--muted);">${esc(r.limits_notes)}</td>
+    </tr>`).join('');
+    wrap.innerHTML=`<table>${thead}<tbody>${body}</tbody></table>`;
   }
 
   // ── EXPLORE (the generic engine) ──
@@ -545,6 +719,8 @@
     sortBy:(k)=>{ if(sort.key===k){ if(sort.dir==='asc')sort.dir='desc'; else sort={key:'',dir:'asc'}; } else sort={key:k,dir:'asc'}; renderTable(); },
     reset:()=>{ filters={search:'',brand:'',state:'',status:'Active',type:'',qualifier:'',cardAlert:''}; groupBy=''; sort={key:'',dir:'asc'}; _presetApplied='__reset__'; renderExplore(view.preset); },
     openDetail, openAdd, openForm, seg, save, archive, close:closeSheet,
+    trSet:(k,v)=>{ tradeFilters[k]=v; renderTradesTable(); },
+    trReset:()=>{ tradeFilters={brand:'',state:'',trade:''}; renderTrades(); },
   };
 
   window.addEventListener('hashchange',render);
