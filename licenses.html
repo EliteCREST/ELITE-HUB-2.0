@@ -85,6 +85,8 @@
   .btn-ghost{background:var(--surface);color:var(--navy);border-color:var(--line2);}
   .btn-ghost:hover{background:var(--surface-alt);}
   .btn-sm{padding:5px 11px;font-size:12px;}
+  .btn-renew{background:#7C3AED;color:#fff;border-color:#7C3AED;margin-left:6px;}
+  .btn-renew:hover{background:#6b28d6;}
 
   /* Table */
   .tablecard{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);overflow:auto;box-shadow:var(--shadow);}
@@ -614,7 +616,10 @@
     wrap.innerHTML=`<table>${thead}<tbody>${body}</tbody></table>`;
   }
   function rowHtml(r){
-    return `<tr class="${rowClass(r)}" onclick="LIC.openDetail('${esc(r.id)}')">${COLS.map(c=>`<td>${cell(r,c.key)}</td>`).join('')}<td><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();LIC.openDetail('${esc(r.id)}')">View</button></td></tr>`;
+    const renewBtn = canEdit()
+      ? `<button class="btn btn-renew btn-sm" onclick="event.stopPropagation();LIC.renew('${esc(r.id)}')" title="Move back to Open Registrations for renewal">↻ Renew</button>`
+      : '';
+    return `<tr class="${rowClass(r)}" onclick="LIC.openDetail('${esc(r.id)}')">${COLS.map(c=>`<td>${cell(r,c.key)}</td>`).join('')}<td style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();LIC.openDetail('${esc(r.id)}')">View</button>${renewBtn}</td></tr>`;
   }
 
   // ── Detail / Add / Edit ──
@@ -712,13 +717,23 @@
     }catch(e){ toast('Network error: '+e.message,true); }
   }
 
+  async function renew(id){
+    if(!id) return;
+    if(!confirm('Start a renewal? This moves the registration out of Active and back to Open Registrations in Elite Hub for re-processing. Existing research is kept.')) return;
+    try{
+      const res=await api({},'POST',{ action:'markPermitRenewal', permit_id:id });
+      if(res&&res.status==='ok'){ toast('Renewal started — moved back to Open Registrations.'); closeSheet(); LOADED=false; await loadLicenses(); renderTable(); renderWho(); }
+      else toast('Failed: '+((res&&res.error)||'Unknown error'),true);
+    }catch(e){ toast('Network error: '+e.message,true); }
+  }
+
   // ── Public handlers ──
   window.LIC={
     setFilter:(k,v)=>{ filters[k]=v; renderTable(); },
     setGroup:(v)=>{ groupBy=v; renderTable(); },
     sortBy:(k)=>{ if(sort.key===k){ if(sort.dir==='asc')sort.dir='desc'; else sort={key:'',dir:'asc'}; } else sort={key:k,dir:'asc'}; renderTable(); },
     reset:()=>{ filters={search:'',brand:'',state:'',status:'Active',type:'',qualifier:'',cardAlert:''}; groupBy=''; sort={key:'',dir:'asc'}; _presetApplied='__reset__'; renderExplore(view.preset); },
-    openDetail, openAdd, openForm, seg, save, archive, close:closeSheet,
+    openDetail, openAdd, openForm, seg, save, archive, renew, close:closeSheet,
     trSet:(k,v)=>{ tradeFilters[k]=v; renderTradesTable(); },
     trReset:()=>{ tradeFilters={brand:'',state:'',trade:''}; renderTrades(); },
   };
