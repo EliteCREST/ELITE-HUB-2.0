@@ -184,7 +184,7 @@
       <div class="brand-logo">ECS</div>
       <div>
         <div class="brand-title">Licenses &amp; Registrations</div>
-        <div class="brand-sub">Elite Hub · Command Center · V1.1.1</div>
+        <div class="brand-sub">Elite Hub · Command Center · V1.1.2</div>
       </div>
     </div>
     <div class="topbar-right">
@@ -542,7 +542,7 @@
     let rows=LICENSES.filter(r=>{
       const st=String(r.status||'').toLowerCase();
       if(filters.status && st!==filters.status.toLowerCase()) return false;
-      if(filters.cardAlert==='expiring_or_expired'){ const d=daysTo(r.expiration_date); if(!(d!==null && d<=30)) return false; }
+      if(filters.cardAlert==='expiring_or_expired'){ if(st==='archived') return false; const d=daysTo(r.expiration_date); if(!(d!==null && d<=30)) return false; }
       if(filters.brand && r.brand!==filters.brand) return false;
       if(filters.state && r.state!==filters.state) return false;
       if(filters.type && String(r.license_type||'')!==filters.type) return false;
