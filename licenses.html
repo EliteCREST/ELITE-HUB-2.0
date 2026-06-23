@@ -721,11 +721,14 @@
     if(!id) return;
     const rec=LICENSES.find(x=>String(x.id)===String(id));
     const permitId=rec&&rec.source_request_id?rec.source_request_id:'';
-    if(!permitId){ toast('Failed: no source registration linked to this license — cannot renew.',true); return; }
-    if(!confirm('Start a renewal? This moves the registration out of Active and back to Open Registrations in Elite Hub for re-processing. Existing research is kept.')) return;
+    if(!confirm('Start a renewal? This archives the license out of Active and creates a fresh Open Registration in Elite Hub so research starts again.')) return;
     try{
-      const res=await api({},'POST',{ action:'markPermitRenewal', permit_id:permitId });
-      if(res&&res.status==='ok'){ toast('Renewal started — moved back to Open Registrations.'); closeSheet(); LOADED=false; await loadLicenses(); renderTable(); renderWho(); }
+      // If this license came from the pipeline, move that existing request back
+      // to New. Otherwise, create a fresh Open Registration from the license.
+      const res = permitId
+        ? await api({},'POST',{ action:'markPermitRenewal', permit_id:permitId })
+        : await api({},'POST',{ action:'renewLicenseToOpen', license_id:id });
+      if(res&&res.status==='ok'){ toast('Renewal started — moved to Open Registrations.'); closeSheet(); LOADED=false; await loadLicenses(); renderTable(); renderWho(); }
       else toast('Failed: '+((res&&res.error)||'Unknown error'),true);
     }catch(e){ toast('Network error: '+e.message,true); }
   }
